@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -30,6 +30,7 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { useI18n } from "i18n";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -61,15 +62,20 @@ function SettingRow({ label, description, children }) {
 
 // ─── General Settings Tab ─────────────────────────────────────────────────────
 function GeneralSettings() {
+  const { locale, setLocale } = useI18n();
   const [settings, setSettings] = useState({
     companyName: "شركة علال",
-    lang: "ar",
+    lang: locale,
     currency: "DZD",
     dateFormat: "DD/MM/YYYY",
     autoSaveDraft: true,
     realtime: true,
     orderPrefix: "ORD",
   });
+
+  useEffect(() => {
+    setSettings((prev) => ({ ...prev, lang: locale }));
+  }, [locale]);
 
   return (
     <SoftBox>
@@ -86,7 +92,11 @@ function GeneralSettings() {
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth select size="small" label="اللغة" value={settings.lang}
-            onChange={(e) => setSettings(s => ({ ...s, lang: e.target.value }))}>
+            onChange={(e) => {
+              const nextLocale = e.target.value;
+              setSettings(s => ({ ...s, lang: nextLocale }));
+              setLocale(nextLocale);
+            }}>
             <MenuItem value="ar">العربية</MenuItem>
             <MenuItem value="fr">Français</MenuItem>
             <MenuItem value="en">English</MenuItem>

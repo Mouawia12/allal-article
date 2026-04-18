@@ -9,7 +9,6 @@ import LinearProgress from "@mui/material/LinearProgress";
 import IconButton from "@mui/material/IconButton";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
@@ -36,6 +35,9 @@ const mockProduct = {
   unit: "قطعة",
   description: "برغي فولاذي عالي الجودة مقاس M10 طول 50mm، مناسب للإنشاءات والتركيبات الثقيلة.",
   color: "#FF6B6B",
+  price: 650,
+  lastPriceUpdatedAt: "2024-01-22 14:30",
+  lastPriceUpdatedBy: "الإدارة التجارية",
   stock: {
     onHand: 850,
     reserved: 200,
@@ -56,6 +58,40 @@ const mockProduct = {
     { id: "ORD-2024-005", customer: "شركة الأفق للتجارة",    date: "2024-01-18", qty: 150, status: "fulfilled" },
     { id: "ORD-2024-003", customer: "شركة الإنشاءات المتحدة",date: "2024-01-17", qty: 500, status: "under_review" },
   ],
+  priceHistory: [
+    {
+      id: "PRC-2024-004",
+      changedAt: "2024-01-22 14:30",
+      previousPrice: 620,
+      newPrice: 650,
+      changedBy: "الإدارة التجارية",
+      note: "تعديل بعد تحديث سعر التوريد",
+    },
+    {
+      id: "PRC-2024-003",
+      changedAt: "2024-01-16 09:10",
+      previousPrice: 590,
+      newPrice: 620,
+      changedBy: "مدير المبيعات",
+      note: "رفع هامش البيع للصنف السريع",
+    },
+    {
+      id: "PRC-2024-002",
+      changedAt: "2024-01-08 16:45",
+      previousPrice: 560,
+      newPrice: 590,
+      changedBy: "الإدارة التجارية",
+      note: "تحديث حسب لائحة الأسعار الشهرية",
+    },
+    {
+      id: "PRC-2023-019",
+      changedAt: "2023-12-21 11:00",
+      previousPrice: 540,
+      newPrice: 560,
+      changedBy: "المحاسبة",
+      note: "مواءمة مع تكلفة الشحن الجديدة",
+    },
+  ],
 };
 
 const statusColors = {
@@ -75,6 +111,10 @@ const statusLabels = {
   draft:        "مسودة",
   cancelled:    "ملغاة",
 };
+
+function formatPrice(value) {
+  return `${new Intl.NumberFormat("ar-DZ").format(value)} دج`;
+}
 
 // ─── Stock Metric Card ────────────────────────────────────────────────────────
 function StockMetric({ label, value, unit, color, subtext }) {
@@ -160,9 +200,40 @@ function ProductDetail() {
                 كود: {product.code}
               </SoftTypography>
 
+              <SoftBox
+                mb={2}
+                px={1.5}
+                py={1.25}
+                borderRadius={2}
+                sx={{ background: "#f8fbff", border: "1px solid #d7ebff" }}
+              >
+                <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+                  <SoftBox>
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      السعر الحالي
+                    </SoftTypography>
+                    <SoftTypography variant="h5" fontWeight="bold" color="info">
+                      {formatPrice(product.price)}
+                    </SoftTypography>
+                  </SoftBox>
+                  <SoftBox>
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      آخر تعديل سعر
+                    </SoftTypography>
+                    <SoftTypography variant="button" fontWeight="bold" color="text" display="block">
+                      {product.lastPriceUpdatedAt}
+                    </SoftTypography>
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      بواسطة {product.lastPriceUpdatedBy}
+                    </SoftTypography>
+                  </SoftBox>
+                </SoftBox>
+              </SoftBox>
+
               {[
                 { label: "الفئة",    value: product.category },
                 { label: "الوحدة",   value: product.unit },
+                { label: "آخر تعديل سعر", value: product.lastPriceUpdatedAt },
                 { label: "آخر تحديث", value: product.lastUpdated },
               ].map((row) => (
                 <SoftBox key={row.label} display="flex" justifyContent="space-between" mb={1}>
@@ -234,9 +305,33 @@ function ProductDetail() {
             <Card>
               <SoftBox px={2} pt={2} borderBottom="1px solid #eee">
                 <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="inherit"
+                  variant="scrollable"
+                  allowScrollButtonsMobile
                   TabIndicatorProps={{ style: { background: "#17c1e8" } }}>
-                  <Tab label={<SoftTypography variant="caption" fontWeight="medium">سجل الحركات</SoftTypography>} />
-                  <Tab label={<SoftTypography variant="caption" fontWeight="medium">الطلبيات المرتبطة</SoftTypography>} />
+                  <Tab
+                    label={(
+                      <SoftBox display="flex" alignItems="center" gap={0.75}>
+                        <HistoryIcon sx={{ fontSize: 16 }} />
+                        <SoftTypography variant="caption" fontWeight="medium">سجل الحركات</SoftTypography>
+                      </SoftBox>
+                    )}
+                  />
+                  <Tab
+                    label={(
+                      <SoftBox display="flex" alignItems="center" gap={0.75}>
+                        <ShoppingCartIcon sx={{ fontSize: 16 }} />
+                        <SoftTypography variant="caption" fontWeight="medium">الطلبيات المرتبطة</SoftTypography>
+                      </SoftBox>
+                    )}
+                  />
+                  <Tab
+                    label={(
+                      <SoftBox display="flex" alignItems="center" gap={0.75}>
+                        <TrendingUpIcon sx={{ fontSize: 16 }} />
+                        <SoftTypography variant="caption" fontWeight="medium">سجل الأسعار</SoftTypography>
+                      </SoftBox>
+                    )}
+                  />
                 </Tabs>
               </SoftBox>
 
@@ -323,6 +418,70 @@ function ProductDetail() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </SoftBox>
+              )}
+
+              {/* Price History Tab */}
+              {tab === 2 && (
+                <SoftBox p={3}>
+                  <SoftBox
+                    mb={2}
+                    px={1.5}
+                    py={1.25}
+                    borderRadius={2}
+                    sx={{ background: "#f8fbff", border: "1px solid #d7ebff" }}
+                  >
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      هذا السجل مخصص للبائعين والإدارة لمراجعة آخر تغيرات سعر الصنف ومصدرها.
+                    </SoftTypography>
+                  </SoftBox>
+
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8f9fa" }}>
+                        {["التاريخ", "السعر السابق", "السعر الجديد", "الفرق", "بواسطة", "ملاحظة"].map((h) => (
+                          <th key={h} style={{ padding: "8px 12px", textAlign: "right" }}>
+                            <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.priceHistory.map((entry) => {
+                        const diff = entry.newPrice - entry.previousPrice;
+
+                        return (
+                          <tr key={entry.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography variant="caption" fontWeight="bold">{entry.changedAt}</SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography variant="caption" color="secondary">{formatPrice(entry.previousPrice)}</SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography variant="caption" fontWeight="bold" color="info">{formatPrice(entry.newPrice)}</SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography
+                                variant="caption"
+                                fontWeight="bold"
+                                color={diff >= 0 ? "success" : "error"}
+                              >
+                                {diff >= 0 ? "+" : ""}
+                                {formatPrice(diff)}
+                              </SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography variant="caption">{entry.changedBy}</SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <SoftTypography variant="caption" color="secondary">{entry.note}</SoftTypography>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </SoftBox>

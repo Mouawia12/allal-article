@@ -23,6 +23,7 @@ import SoftInputRoot from "components/SoftInput/SoftInputRoot";
 import SoftInputWithIconRoot from "components/SoftInput/SoftInputWithIconRoot";
 import SoftInputIconBoxRoot from "components/SoftInput/SoftInputIconBoxRoot";
 import SoftInputIconRoot from "components/SoftInput/SoftInputIconRoot";
+import { localizeValue, useI18n } from "i18n";
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController } from "context";
@@ -30,8 +31,13 @@ import { useSoftUIController } from "context";
 const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest }, ref) => {
   let template;
   const [controller] = useSoftUIController();
+  const { t } = useI18n();
   const { direction } = controller;
   const iconDirection = icon.direction;
+  const localizedRest = {
+    ...rest,
+    placeholder: localizeValue(rest.placeholder, t),
+  };
 
   if (icon.component && icon.direction === "left") {
     template = (
@@ -42,7 +48,7 @@ const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest },
           </SoftInputIconRoot>
         </SoftInputIconBoxRoot>
         <SoftInputRoot
-          {...rest}
+          {...localizedRest}
           ownerState={{ size, error, success, iconDirection, direction, disabled }}
         />
       </SoftInputWithIconRoot>
@@ -51,7 +57,7 @@ const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest },
     template = (
       <SoftInputWithIconRoot ref={ref} ownerState={{ error, success, disabled }}>
         <SoftInputRoot
-          {...rest}
+          {...localizedRest}
           ownerState={{ size, error, success, iconDirection, direction, disabled }}
         />
         <SoftInputIconBoxRoot ownerState={{ size }}>
@@ -63,7 +69,7 @@ const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest },
     );
   } else {
     template = (
-      <SoftInputRoot {...rest} ref={ref} ownerState={{ size, error, success, disabled }} />
+      <SoftInputRoot {...localizedRest} ref={ref} ownerState={{ size, error, success, disabled }} />
     );
   }
 

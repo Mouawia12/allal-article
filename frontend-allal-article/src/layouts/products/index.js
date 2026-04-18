@@ -19,7 +19,6 @@ import ListIcon from "@mui/icons-material/List";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
-import FilterListIcon from "@mui/icons-material/FilterList";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 
 import SoftBox from "components/SoftBox";
@@ -34,22 +33,22 @@ import Footer from "examples/Footer";
 const categories = ["الكل", "مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
 
 const mockProducts = [
-  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", onHand: 850,  reserved: 200, pending: 100, unit: "قطعة", color: "#FF6B6B" },
-  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", onHand: 1200, reserved: 300, pending: 200, unit: "قطعة", color: "#FF6B6B" },
-  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", onHand: 600,  reserved: 150, pending: 80,  unit: "قطعة", color: "#FF8E53" },
-  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          onHand: 45,   reserved: 10,  pending: 5,   unit: "قطعة", color: "#4ECDC4" },
-  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          onHand: 30,   reserved: 5,   pending: 10,  unit: "قطعة", color: "#4ECDC4" },
-  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          onHand: 0,    reserved: 0,   pending: 5,   unit: "قطعة", color: "#4ECDC4" },
-  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         onHand: 500,  reserved: 100, pending: 200, unit: "متر",  color: "#FFE66D" },
-  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         onHand: 800,  reserved: 150, pending: 100, unit: "متر",  color: "#FFE66D" },
-  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         onHand: 200,  reserved: 30,  pending: 20,  unit: "لفة",  color: "#F7DC6F" },
-  { id: 10, name: "أنبوب PVC 2 بوصة",  code: "ANB-PVC-2",  category: "سباكة",          onHand: 100,  reserved: 40,  pending: 30,  unit: "متر",  color: "#A8E6CF" },
-  { id: 11, name: "أنبوب PVC 1 بوصة",  code: "ANB-PVC-1",  category: "سباكة",          onHand: 150,  reserved: 20,  pending: 10,  unit: "متر",  color: "#A8E6CF" },
-  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          onHand: 25,   reserved: 5,   pending: 3,   unit: "قطعة", color: "#88D8B0" },
-  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         onHand: 80,   reserved: 20,  pending: 10,  unit: "علبة", color: "#DDA0DD" },
-  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         onHand: 60,   reserved: 10,  pending: 5,   unit: "علبة", color: "#DA70D6" },
-  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       onHand: 120,  reserved: 30,  pending: 0,   unit: "لفة",  color: "#B0C4DE" },
-  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          onHand: 200,  reserved: 50,  pending: 20,  unit: "قطعة", color: "#F4A460" },
+  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", onHand: 850,  reserved: 200, pending: 100, unit: "قطعة", color: "#FF6B6B", price: 650,  lastPriceUpdatedAt: "2024-01-22" },
+  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", onHand: 1200, reserved: 300, pending: 200, unit: "قطعة", color: "#FF6B6B", price: 900,  lastPriceUpdatedAt: "2024-01-19" },
+  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", onHand: 600,  reserved: 150, pending: 80,  unit: "قطعة", color: "#FF8E53", price: 450,  lastPriceUpdatedAt: "2024-01-18" },
+  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          onHand: 45,   reserved: 10,  pending: 5,   unit: "قطعة", color: "#4ECDC4", price: 35,   lastPriceUpdatedAt: "2024-01-15" },
+  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          onHand: 30,   reserved: 5,   pending: 10,  unit: "قطعة", color: "#4ECDC4", price: 25,   lastPriceUpdatedAt: "2024-01-14" },
+  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          onHand: 0,    reserved: 0,   pending: 5,   unit: "قطعة", color: "#4ECDC4", price: 0,    lastPriceUpdatedAt: "2024-01-10" },
+  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         onHand: 500,  reserved: 100, pending: 200, unit: "متر",  color: "#FFE66D", price: 400,  lastPriceUpdatedAt: "2024-01-21" },
+  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         onHand: 800,  reserved: 150, pending: 100, unit: "متر",  color: "#FFE66D", price: 650,  lastPriceUpdatedAt: "2024-01-16" },
+  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         onHand: 200,  reserved: 30,  pending: 20,  unit: "لفة",  color: "#F7DC6F", price: 170,  lastPriceUpdatedAt: "2024-01-13" },
+  { id: 10, name: "أنبوب PVC 2 بوصة",  code: "ANB-PVC-2",  category: "سباكة",          onHand: 100,  reserved: 40,  pending: 30,  unit: "متر",  color: "#A8E6CF", price: 60,   lastPriceUpdatedAt: "2024-01-20" },
+  { id: 11, name: "أنبوب PVC 1 بوصة",  code: "ANB-PVC-1",  category: "سباكة",          onHand: 150,  reserved: 20,  pending: 10,  unit: "متر",  color: "#A8E6CF", price: 130,  lastPriceUpdatedAt: "2024-01-12" },
+  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          onHand: 25,   reserved: 5,   pending: 3,   unit: "قطعة", color: "#88D8B0", price: 20,   lastPriceUpdatedAt: "2024-01-11" },
+  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         onHand: 80,   reserved: 20,  pending: 10,  unit: "علبة", color: "#DDA0DD", price: 320,  lastPriceUpdatedAt: "2024-01-17" },
+  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         onHand: 60,   reserved: 10,  pending: 5,   unit: "علبة", color: "#DA70D6", price: 305,  lastPriceUpdatedAt: "2024-01-09" },
+  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       onHand: 120,  reserved: 30,  pending: 0,   unit: "لفة",  color: "#B0C4DE", price: 115,  lastPriceUpdatedAt: "2024-01-08" },
+  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          onHand: 200,  reserved: 50,  pending: 20,  unit: "قطعة", color: "#F4A460", price: 215,  lastPriceUpdatedAt: "2024-01-06" },
 ];
 
 function getStockStatus(product) {
@@ -57,6 +56,10 @@ function getStockStatus(product) {
   if (product.onHand === 0) return { label: "نفذ", color: "error" };
   if (available < 20) return { label: "منخفض", color: "warning" };
   return { label: "متوفر", color: "success" };
+}
+
+function formatPrice(value) {
+  return `${new Intl.NumberFormat("ar-DZ").format(value)} دج`;
 }
 
 // ─── Product Grid Card ────────────────────────────────────────────────────────
@@ -102,6 +105,27 @@ function ProductGridCard({ product, onView, onEdit }) {
       <SoftTypography variant="caption" color="secondary" mb={1}>
         {product.code} · {product.category}
       </SoftTypography>
+
+      <SoftBox
+        mb={1.25}
+        px={1.25}
+        py={1}
+        borderRadius={2}
+        sx={{ background: "#f8fbff", border: "1px solid #d7ebff" }}
+      >
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
+          <SoftTypography variant="caption" color="secondary">السعر الحالي</SoftTypography>
+          <SoftTypography variant="button" fontWeight="bold" color="info">
+            {formatPrice(product.price)}
+          </SoftTypography>
+        </SoftBox>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1} mt={0.5}>
+          <SoftTypography variant="caption" color="secondary">آخر تعديل سعر</SoftTypography>
+          <SoftTypography variant="caption" fontWeight="bold" color="text">
+            {product.lastPriceUpdatedAt}
+          </SoftTypography>
+        </SoftBox>
+      </SoftBox>
 
       {/* Stock Progress */}
       <SoftBox mb={1}>
@@ -167,6 +191,9 @@ function ProductListRow({ product, index, onView, onEdit }) {
           <SoftBox>
             <SoftTypography variant="button" fontWeight="medium">{product.name}</SoftTypography>
             <SoftTypography variant="caption" color="secondary" display="block">{product.code}</SoftTypography>
+            <SoftTypography variant="caption" color="text" display="block">
+              {formatPrice(product.price)} · آخر تعديل سعر: {product.lastPriceUpdatedAt}
+            </SoftTypography>
           </SoftBox>
         </SoftBox>
       </td>

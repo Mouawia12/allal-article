@@ -44,6 +44,7 @@ import routes from "routes";
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
+import { useI18n } from "i18n";
 
 // Images
 import brand from "assets/images/logo-ct.png";
@@ -51,6 +52,7 @@ import brand from "assets/images/logo-ct.png";
 export default function App() {
   const [controller, dispatch] = useSoftUIController();
   const { miniSidenav, direction, layout, openConfigurator, sidenavColor } = controller;
+  const { t } = useI18n();
   const [onMouseEnter, setOnMouseEnter] = useState(false);
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
@@ -141,7 +143,7 @@ export default function App() {
             <Sidenav
               color={sidenavColor}
               brand={brand}
-              brandName="Soft UI Dashboard"
+              brandName={t("app.name")}
               routes={routes}
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
@@ -162,13 +164,13 @@ export default function App() {
       <CssBaseline />
       {layout === "dashboard" && (
         <>
-          <Sidenav
-            color={sidenavColor}
-            brand={brand}
-            brandName="Soft UI Dashboard"
-            routes={routes}
-            onMouseEnter={handleOnMouseEnter}
-            onMouseLeave={handleOnMouseLeave}
+            <Sidenav
+              color={sidenavColor}
+              brand={brand}
+              brandName={t("app.name")}
+              routes={routes}
+              onMouseEnter={handleOnMouseEnter}
+              onMouseLeave={handleOnMouseLeave}
           />
           <Configurator />
           {configsButton}

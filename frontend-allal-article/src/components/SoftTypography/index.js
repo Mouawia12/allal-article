@@ -20,20 +20,25 @@ import PropTypes from "prop-types";
 
 // Custom styles for SoftTypography
 import SoftTypographyRoot from "components/SoftTypography/SoftTypographyRoot";
+import { localizeNode, useI18n } from "i18n";
 
 const SoftTypography = forwardRef(
   (
     { color, fontWeight, textTransform, verticalAlign, textGradient, opacity, children, ...rest },
     ref
-  ) => (
-    <SoftTypographyRoot
-      {...rest}
-      ref={ref}
-      ownerState={{ color, textTransform, verticalAlign, fontWeight, opacity, textGradient }}
-    >
-      {children}
-    </SoftTypographyRoot>
-  )
+  ) => {
+    const { t } = useI18n();
+
+    return (
+      <SoftTypographyRoot
+        {...rest}
+        ref={ref}
+        ownerState={{ color, textTransform, verticalAlign, fontWeight, opacity, textGradient }}
+      >
+        {localizeNode(children, t)}
+      </SoftTypographyRoot>
+    );
+  }
 );
 
 // Setting default values for the props of SoftTypography

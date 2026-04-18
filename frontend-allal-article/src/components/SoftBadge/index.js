@@ -20,18 +20,24 @@ import PropTypes from "prop-types";
 
 // Custom styles for the SoftBadge
 import SoftBadgeRoot from "components/SoftBadge/SoftBadgeRoot";
+import { localizeNode, localizeValue, useI18n } from "i18n";
 
 const SoftBadge = forwardRef(
-  ({ color, variant, size, circular, indicator, border, container, children, ...rest }, ref) => (
-    <SoftBadgeRoot
-      {...rest}
-      ownerState={{ color, variant, size, circular, indicator, border, container, children }}
-      ref={ref}
-      color="default"
-    >
-      {children}
-    </SoftBadgeRoot>
-  )
+  ({ color, variant, size, circular, indicator, border, container, children, ...rest }, ref) => {
+    const { t } = useI18n();
+
+    return (
+      <SoftBadgeRoot
+        {...rest}
+        badgeContent={localizeValue(rest.badgeContent, t)}
+        ownerState={{ color, variant, size, circular, indicator, border, container, children }}
+        ref={ref}
+        color="default"
+      >
+        {localizeNode(children, t)}
+      </SoftBadgeRoot>
+    );
+  }
 );
 
 // Setting default values for the props of SoftBadge

@@ -20,15 +20,22 @@ import PropTypes from "prop-types";
 
 // Custom styles for SoftBox
 import SoftBoxRoot from "components/SoftBox/SoftBoxRoot";
+import { localizeNode, useI18n } from "i18n";
 
 const SoftBox = forwardRef(
-  ({ variant, bgColor, color, opacity, borderRadius, shadow, ...rest }, ref) => (
-    <SoftBoxRoot
-      {...rest}
-      ref={ref}
-      ownerState={{ variant, bgColor, color, opacity, borderRadius, shadow }}
-    />
-  )
+  ({ variant, bgColor, color, opacity, borderRadius, shadow, children, ...rest }, ref) => {
+    const { t } = useI18n();
+
+    return (
+      <SoftBoxRoot
+        {...rest}
+        ref={ref}
+        ownerState={{ variant, bgColor, color, opacity, borderRadius, shadow }}
+      >
+        {localizeNode(children, t)}
+      </SoftBoxRoot>
+    );
+  }
 );
 
 // Setting default values for the props of SoftBox
@@ -49,6 +56,7 @@ SoftBox.propTypes = {
   opacity: PropTypes.number,
   borderRadius: PropTypes.string,
   shadow: PropTypes.string,
+  children: PropTypes.node,
 };
 
 export default SoftBox;

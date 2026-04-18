@@ -78,7 +78,7 @@
 | الواجهة الحالية | البيانات المطلوبة | الجداول الدنيا المطلوبة |
 |---|---|---|
 | Dashboard | KPIs، آخر الطلبيات، مؤشرات مخزون، نشاط حديث | `orders`, `order_items`, `product_stocks`, `audit_logs`, `users` |
-| Tables | قائمة طلبيات + قائمة أصناف/عملاء | `orders`, `customers`, `products`, `categories` |
+| Tables | قائمة طلبيات + قائمة أصناف/عملاء | `orders`, `customers`, `products`, `categories`, `product_price_histories` |
 | Billing | فواتير، وسائل دفع، حركات، كشف عميل | `orders`, `customers`, `payments` أو `transactions`, `order_items` |
 | Virtual Reality | إنشاء طلبية سريعة وسلة وبحث | `products`, `categories`, `orders(draft)` أو `carts`, `customers` |
 | Profile | بيانات المستخدم وصلاحياته ونشاطه | `users`, `roles`, `permissions`, `audit_logs` |
@@ -92,7 +92,7 @@
 | 1 | users, user_profiles | أساس النظام |
 | 2 | roles, permissions, role_permissions, user_permissions | الصلاحيات مبكرًا |
 | 3 | customers, categories | master data مبكرًا |
-| 4 | products, product_images | الأصناف قبل المخزون والطلبات |
+| 4 | products, product_images, product_price_histories | الأصناف قبل المخزون والطلبات |
 | 5 | warehouses | حتى لو كان هناك مخزن واحد حاليًا |
 | 6 | product_stocks, stock_movements, stock_reservations | تثبيت منطق المخزون |
 | 7 | orders | الكيان الرئيسي للطلبات |
@@ -353,6 +353,10 @@
 - `description`
 - `unit_name`
 - `barcode`
+- `current_price_amount`
+- `price_currency`
+- `last_price_updated_at`
+- `last_price_updated_by`
 - `status` (`active`, `inactive`, `archived`)
 - `default_image_id` (nullable)
 - `ai_generated_metadata_json`
@@ -371,6 +375,8 @@
 التوافق مع الواجهة:
 - صفحة إضافة الطلبية
 - صفحة الصنف
+- كرت الصنف مع إظهار آخر تعديل سعر
+- تبويب `سجل الأسعار` داخل صفحة الصنف
 - dashboard widgets
 
 ## 10) product_images
@@ -391,6 +397,35 @@
 
 ملاحظات:
 - دعم الصورة الأصلية والمعالجة مهم جدًا لوحدة الـ AI.
+
+### product_price_histories
+
+الغرض:
+- تتبع كل تعديل سعر على مستوى الصنف بحيث يعرف البائع والإدارة متى تغير السعر ومن قام بذلك
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `product_id`
+- `previous_price_amount`
+- `new_price_amount`
+- `price_currency`
+- `changed_by`
+- `change_reason`
+- `source_type`
+- `source_id`
+- `effective_at`
+- `created_at`
+
+فهارس:
+- index على `product_id, effective_at`
+- index على `changed_by`
+- index على `source_type, source_id`
+
+ملاحظات:
+- عند كل تعديل سعر، يتم تحديث snapshot داخل `products` ثم إضافة row جديد هنا.
+- هذا الجدول هو مصدر tab `سجل الأسعار` في صفحة الصنف.
+- يمكن لاحقًا استخدامه في تقارير التسعير أو تنبيهات تغيّر السعر.
 
 ## 11) warehouses
 
@@ -794,6 +829,7 @@
 - `available_qty = on_hand_qty - reserved_qty`
 - `projected_qty = on_hand_qty - reserved_qty - pending_qty`
 - السطر الملغى أو المحذوف إداريًا يبقى موجودًا.
+- أي تعديل سعر يجب أن يحدّث `products.current_price_amount` ويكتب سطرًا في `product_price_histories`.
 - أي تغيير مهم على الطلب أو السطر يجب أن يكتب event + audit log.
 - تحديث المخزون لا يتم من الواجهة مباشرة؛ يتم عبر service domain واحدة.
 
@@ -813,6 +849,7 @@
 - `categories`
 - `products`
 - `product_images`
+- `product_price_histories`
 - `warehouses`
 - `product_stocks`
 - `stock_movements`

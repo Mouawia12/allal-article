@@ -26,6 +26,7 @@ import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
@@ -53,6 +54,7 @@ import {
   setMiniSidenav,
   setOpenConfigurator,
 } from "context";
+import { useI18n } from "i18n";
 
 // Images
 import team2 from "assets/images/team-2.jpg";
@@ -63,6 +65,8 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const [controller, dispatch] = useSoftUIController();
   const { miniSidenav, transparentNavbar, fixedNavbar, openConfigurator } = controller;
   const [openMenu, setOpenMenu] = useState(false);
+  const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
+  const { locale, languages, setLocale, t } = useI18n();
   const route = useLocation().pathname.split("/").slice(1);
 
   useEffect(() => {
@@ -95,6 +99,8 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, !openConfigurator);
   const handleOpenMenu = (event) => setOpenMenu(event.currentTarget);
   const handleCloseMenu = () => setOpenMenu(false);
+  const handleOpenLanguageMenu = (event) => setLanguageMenuAnchor(event.currentTarget);
+  const handleCloseLanguageMenu = () => setLanguageMenuAnchor(null);
 
   // Render the notifications menu
   const renderMenu = () => (
@@ -132,6 +138,39 @@ function DashboardNavbar({ absolute, light, isMini }) {
         date="2 days"
         onClick={handleCloseMenu}
       />
+    </Menu>
+  );
+
+  const renderLanguageMenu = () => (
+    <Menu
+      anchorEl={languageMenuAnchor}
+      anchorOrigin={{
+        vertical: "bottom",
+        horizontal: "left",
+      }}
+      open={Boolean(languageMenuAnchor)}
+      onClose={handleCloseLanguageMenu}
+      sx={{ mt: 2 }}
+    >
+      <MenuItem disabled>
+        <SoftTypography variant="caption" color="secondary">
+          {t("language.current")}
+        </SoftTypography>
+      </MenuItem>
+      {languages.map((language) => (
+        <MenuItem
+          key={language.code}
+          selected={locale === language.code}
+          onClick={() => {
+            setLocale(language.code);
+            handleCloseLanguageMenu();
+          }}
+        >
+          <SoftTypography variant="button" fontWeight={locale === language.code ? "bold" : "regular"}>
+            {language.label}
+          </SoftTypography>
+        </MenuItem>
+      ))}
     </Menu>
   );
 
@@ -194,6 +233,15 @@ function DashboardNavbar({ absolute, light, isMini }) {
                 size="small"
                 color="inherit"
                 sx={navbarIconButton}
+                aria-label={t("language.switcher")}
+                onClick={handleOpenLanguageMenu}
+              >
+                <Icon>translate</Icon>
+              </IconButton>
+              <IconButton
+                size="small"
+                color="inherit"
+                sx={navbarIconButton}
                 aria-controls="notification-menu"
                 aria-haspopup="true"
                 variant="contained"
@@ -201,6 +249,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
               >
                 <Icon className={light ? "text-white" : "text-dark"}>notifications</Icon>
               </IconButton>
+              {renderLanguageMenu()}
               {renderMenu()}
             </SoftBox>
           </SoftBox>

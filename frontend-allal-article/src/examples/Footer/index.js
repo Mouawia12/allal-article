@@ -23,6 +23,7 @@ import Icon from "components/AppIcon";
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+import { useI18n } from "i18n";
 
 // Soft UI Dashboard React base styles
 import typography from "assets/theme/base/typography";
@@ -30,13 +31,14 @@ import typography from "assets/theme/base/typography";
 function Footer({ company, links }) {
   const { href, name } = company;
   const { size } = typography;
+  const { t } = useI18n();
 
   const renderLinks = () =>
     links.map((link) => (
       <SoftBox key={link.name} component="li" px={2} lineHeight={1}>
         <Link href={link.href} target="_blank">
           <SoftTypography variant="button" fontWeight="regular" color="text">
-            {link.name}
+            {t(link.name)}
           </SoftTypography>
         </Link>
       </SoftBox>
@@ -60,25 +62,25 @@ function Footer({ company, links }) {
         fontSize={size.sm}
         px={1.5}
       >
-        &copy; {new Date().getFullYear()}, made with
+        &copy; {new Date().getFullYear()}, {t("made with")}
         <SoftBox fontSize={size.md} color="text" mb={-0.5} mx={0.25}>
           <Icon color="inherit" fontSize="inherit">
             favorite
           </Icon>
         </SoftBox>
-        by
+        {t("by")}
         <Link href={href} target="_blank">
           <SoftTypography variant="button" fontWeight="medium">
             &nbsp;{name}&nbsp;
           </SoftTypography>
         </Link>
-        , distributed by{" "}
+        , {t("distributed by")}{" "}
         <Link href="https://themewagon.com/" target="_blank">
           <SoftTypography variant="button" fontWeight="medium">
             &nbsp;ThemeWagon&nbsp;
           </SoftTypography>
         </Link>
-        for a better web.
+        {t("for a better web.")}
       </SoftBox>
       <SoftBox
         component="ul"

@@ -131,9 +131,12 @@
   - category
   - unit
   - active flag
+  - current price
+  - last price updated timestamp
   - searchable fields
   منجز عندما:
   - صفحة الصنف يمكنها عرض بياناته الأساسية بدون حقول مؤقتة.
+  - كرت الصنف يستطيع إظهار آخر تعديل سعر مباشرة للبائع.
 
 - [ ] 2.4 بناء product media pipeline.
   المطلوب:
@@ -144,6 +147,17 @@
   - حالة المعالجة الذكية
   منجز عندما:
   - المنتج يستطيع عرض الصور الأصلية والمعالجة إن وجدت.
+
+- [ ] 2.5 بناء tracking رسمي لأسعار الأصناف.
+  المطلوب:
+  - current price snapshot على مستوى `products`
+  - `last_price_updated_at` و `last_price_updated_by`
+  - price history log لا يفقد أي تعديل
+  - product cards تعرض آخر تعديل سعر
+  - product detail يحتوي tab مستقل باسم `سجل الأسعار`
+  منجز عندما:
+  - البائع يرى آخر تعديل سعر من قائمة الأصناف.
+  - صفحة الصنف تعرض timeline واضح لتغيرات السعر بدون منطق mock مخفي.
 
 ## Phase 3 — Inventory Core
 
@@ -184,6 +198,7 @@
   - stock summary
   - recent movements
   - orders containing product
+  - price history timeline
   - last updated
   - quick KPIs
   منجز عندما:
