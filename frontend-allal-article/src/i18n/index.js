@@ -1,5 +1,4 @@
 import {
-  Children,
   cloneElement,
   createContext,
   isValidElement,
@@ -99,6 +98,14 @@ function isPlainObject(value) {
   return Object.prototype.toString.call(value) === "[object Object]";
 }
 
+function localizeChildren(children, t) {
+  if (Array.isArray(children)) {
+    return children.map((child) => localizeNode(child, t));
+  }
+
+  return localizeNode(children, t);
+}
+
 export function localizeValue(value, t) {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -151,7 +158,7 @@ export function localizeNode(node, t) {
 
   Object.entries(node.props ?? {}).forEach(([key, value]) => {
     if (key === "children") {
-      nextProps.children = Children.map(value, (child) => localizeNode(child, t));
+      nextProps.children = localizeChildren(value, t);
       return;
     }
 

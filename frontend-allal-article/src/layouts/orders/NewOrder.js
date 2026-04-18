@@ -210,7 +210,7 @@ function NewOrder() {
     return normalized;
   };
 
-  const parsedQty = Math.max(1, Number(qtyInput || "1"));
+  const parsedQty = Math.max(1, Number(normalizeQty(qtyInput)));
 
   const keypadButtons = [
     ["7", "8", "9"],
@@ -240,12 +240,15 @@ function NewOrder() {
     setReplaceQtyOnNextDigit(true);
   };
 
-  const confirmQty = () => {
+  const confirmQty = (rawQty = qtyInput) => {
     if (!qtyDialog) return;
+    const nextQty = Math.max(1, Number(normalizeQty(rawQty)));
+
     setCart((prev) => ({
       ...prev,
-      [qtyDialog.product.id]: { product: qtyDialog.product, qty: parsedQty, willShip: true },
+      [qtyDialog.product.id]: { product: qtyDialog.product, qty: nextQty, willShip: true },
     }));
+    setQtyInput(String(nextQty));
     setQtyDialog(null);
     setReplaceQtyOnNextDigit(true);
   };
@@ -258,6 +261,24 @@ function NewOrder() {
 
   const handleQtyBlur = () => {
     setQtyInput(normalizeQty(qtyInput));
+  };
+
+  const handleQtyKeyDown = (event) => {
+    if (/^\d$/.test(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (replaceQtyOnNextDigit) {
+        event.preventDefault();
+        setQtyInput(event.key);
+        setReplaceQtyOnNextDigit(false);
+      }
+      return;
+    }
+
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+    confirmQty(event.currentTarget.value);
   };
 
   const handleKeypadPress = (key) => {
@@ -643,6 +664,7 @@ function NewOrder() {
                   value={qtyInput}
                   onChange={(e) => handleQtyChange(e.target.value)}
                   onBlur={handleQtyBlur}
+                  onKeyDown={handleQtyKeyDown}
                   autoFocus
                   variant="outlined"
                   inputProps={{
