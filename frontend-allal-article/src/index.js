@@ -21,9 +21,12 @@ import App from "App";
 // Soft UI Dashboard React Context Provider
 import { SoftUIControllerProvider } from "context";
 
+const rawBasename = process.env.PUBLIC_URL || "";
+const basename = rawBasename === "." ? "/" : rawBasename;
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <BrowserRouter basename="soft-ui-dashboard-react">
+  <BrowserRouter basename={basename}>
     <SoftUIControllerProvider>
       <App />
     </SoftUIControllerProvider>
