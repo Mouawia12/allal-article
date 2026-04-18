@@ -14,7 +14,7 @@ Coded by www.creative-tim.com
 */
 
 // @mui material components
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 import { styled } from "@mui/material/styles";
 
 export default styled(Icon)(({ theme, ownerState }) => {

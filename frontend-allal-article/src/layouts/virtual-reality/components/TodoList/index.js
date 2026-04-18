@@ -16,7 +16,7 @@ Coded by www.creative-tim.com
 // @mui material components
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 import Tooltip from "@mui/material/Tooltip";
 
 // Soft UI Dashboard React components

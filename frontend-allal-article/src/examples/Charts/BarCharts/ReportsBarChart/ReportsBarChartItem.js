@@ -17,7 +17,7 @@ Coded by www.creative-tim.com
 import PropTypes from "prop-types";
 
 // @mui material components
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React base styles
 import typography from "assets/theme/base/typography";

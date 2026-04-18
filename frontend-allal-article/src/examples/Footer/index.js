@@ -18,7 +18,7 @@ import PropTypes from "prop-types";
 
 // @mui material components
 import Link from "@mui/material/Link";
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";

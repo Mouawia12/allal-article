@@ -16,7 +16,7 @@ Coded by www.creative-tim.com
 // @mui material components
 import Grid from "@mui/material/Grid";
 import Tooltip from "@mui/material/Tooltip";
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";

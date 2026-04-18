@@ -21,7 +21,7 @@ import Collapse from "@mui/material/Collapse";
 import ListItem from "@mui/material/ListItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";

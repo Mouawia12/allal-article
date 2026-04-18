@@ -26,7 +26,7 @@ import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
-import Icon from "@mui/material/Icon";
+import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
