@@ -34,12 +34,10 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
-import PersonIcon from "@mui/icons-material/Person";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloseIcon from "@mui/icons-material/Close";
 import PhoneIcon from "@mui/icons-material/Phone";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
-import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import PaymentIcon from "@mui/icons-material/Payment";
 import PrintIcon from "@mui/icons-material/Print";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
@@ -91,7 +89,7 @@ function calcPackages(qty, product) {
   return Math.ceil(qty / product.unitsPerPackage);
 }
 
-const mockCustomers = [
+export const mockCustomers = [
   {
     id: 1,
     name: "شركة الرياض للمقاولات",
@@ -218,7 +216,7 @@ const paymentTypeLabel = { cash: "نقدي", bank: "تحويل بنكي", cheque
 const orderStatusColors = { paid: "#66BB6A", partial: "#fb8c00", unpaid: "#ea0606" };
 const orderStatusLabels = { paid: "مدفوعة", partial: "مدفوعة جزئياً", unpaid: "غير مدفوعة" };
 
-const emptyNewCustomerForm = {
+export const emptyNewCustomerForm = {
   name: "",
   phone: "",
   phone2: "",
@@ -393,7 +391,7 @@ function AddPaymentDialog({ open, onClose, customer, onSave }) {
   );
 }
 
-function CustomerInfoDialog({ customer, onClose }) {
+export function CustomerInfoDialog({ customer, onClose }) {
   const [tab, setTab] = useState(0);
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [recordedPayments, setRecordedPayments] = useState([]);
@@ -1864,13 +1862,96 @@ function NewOrder() {
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             <Grid item xs={12}>
-              <TextField fullWidth label="اسم الزبون *" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} size="small" />
+              <TextField
+                fullWidth
+                autoFocus
+                label="اسم الزبون / الشركة *"
+                value={newCustomerForm.name}
+                onChange={(event) => updateNewCustomerField("name", event.target.value)}
+                size="small"
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="رقم الهاتف" size="small" />
+              <TextField
+                fullWidth
+                label="رقم الهاتف *"
+                value={newCustomerForm.phone}
+                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
+                size="small"
+              />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="العنوان" size="small" />
+              <TextField
+                fullWidth
+                label="الهاتف الثاني"
+                value={newCustomerForm.phone2}
+                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>الولاية *</InputLabel>
+                <Select
+                  value={newCustomerForm.wilaya}
+                  label="الولاية *"
+                  onChange={(event) => updateNewCustomerField("wilaya", event.target.value)}
+                >
+                  {WILAYAS.map((wilaya) => (
+                    <MenuItem key={wilaya.code} value={wilaya.name}>
+                      {wilaya.code} - {wilaya.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="العنوان التفصيلي"
+                value={newCustomerForm.address}
+                onChange={(event) => updateNewCustomerField("address", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="مسار الشحن"
+                placeholder="مثال: وهران - الساحل"
+                value={newCustomerForm.shippingRoute}
+                onChange={(event) => updateNewCustomerField("shippingRoute", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="البريد الإلكتروني"
+                value={newCustomerForm.email}
+                onChange={(event) => updateNewCustomerField("email", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="الرصيد الافتتاحي (دج)"
+                type="number"
+                value={newCustomerForm.openingBalance}
+                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
+                helperText="رصيد سابق قبل بدء التسجيل في البرنامج"
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="البائع المسؤول"
+                value={newCustomerForm.salesperson}
+                onChange={(event) => updateNewCustomerField("salesperson", event.target.value)}
+                size="small"
+              />
             </Grid>
           </Grid>
         </DialogContent>
@@ -1878,7 +1959,13 @@ function NewOrder() {
           <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setNewCustomerDialog(false)}>
             إلغاء
           </SoftButton>
-          <SoftButton variant="gradient" color="info" size="small" onClick={addNewCustomer}>
+          <SoftButton
+            variant="gradient"
+            color="info"
+            size="small"
+            disabled={!newCustomerForm.name.trim() || !newCustomerForm.phone.trim() || !newCustomerForm.wilaya.trim()}
+            onClick={addNewCustomer}
+          >
             إضافة وتحديد
           </SoftButton>
         </DialogActions>

@@ -5,7 +5,16 @@ import { useNavigate } from "react-router-dom";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControl from "@mui/material/FormControl";
+import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -17,7 +26,9 @@ import Tooltip from "@mui/material/Tooltip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import SaveIcon from "@mui/icons-material/Save";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
@@ -25,6 +36,12 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { WILAYAS } from "data/wilayas";
+import {
+  CustomerInfoDialog,
+  emptyNewCustomerForm,
+  mockCustomers as baseCustomers,
+} from "./NewOrder";
 
 // ─── Mock Data (same source-of-truth as NewOrder.js) ──────────────────────────
 const mockProducts = [
@@ -46,14 +63,6 @@ const mockProducts = [
   { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة",  price: 750 },
 ];
 
-const mockCustomers = [
-  { id: 1, name: "شركة الرياض للمقاولات",  phone: "0555-123456", wilaya: "وهران",    balance: 2520000 },
-  { id: 2, name: "مؤسسة البناء الحديث",     phone: "0561-789012", wilaya: "الجزائر", balance: 0 },
-  { id: 3, name: "شركة الإنشاءات المتحدة", phone: "0536-345678", wilaya: "سطيف",    balance: 15000000 },
-  { id: 4, name: "مجموعة الخليج للتطوير",  phone: "0502-901234", wilaya: "قسنطينة", balance: 0 },
-  { id: 5, name: "شركة الأفق للتجارة",     phone: "0518-567890", wilaya: "وهران",   balance: 4860000 },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function newRow(id) {
   return { id, product: null, qty: "", inputValue: "" };
@@ -67,6 +76,12 @@ function calcWeight(product, qty) {
 function calcPackages(product, qty) {
   if (!product || !qty || !product.unitsPerPackage) return null;
   return Math.ceil(Number(qty) / product.unitsPerPackage);
+}
+
+function getCustomerDebt(customer) {
+  if (!customer) return 0;
+  if (typeof customer.balance === "number") return customer.balance;
+  return Math.max(0, (customer.totalAmount || 0) - (customer.paidAmount || 0) - (customer.openingBalance || 0));
 }
 
 // ─── Row Component ────────────────────────────────────────────────────────────
@@ -230,10 +245,15 @@ function OrderRow({ row, rowIndex, totalRows, onChange, onDelete, onProductConfi
 export default function AdminNewOrder() {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
+  const [customers, setCustomers] = useState(baseCustomers);
+  const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+  const [newCustomerDialog, setNewCustomerDialog] = useState(false);
+  const [newCustomerForm, setNewCustomerForm] = useState({ ...emptyNewCustomerForm });
   const [notes, setNotes] = useState("");
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
   const qtyRefs = useRef({});
+  const customerDebt = getCustomerDebt(customer);
 
   // Auto-focus qty after product selected
   const handleProductConfirmed = useCallback((rowId) => {
@@ -304,6 +324,46 @@ export default function AdminNewOrder() {
     navigate("/orders");
   };
 
+  const updateNewCustomerField = (field, value) => {
+    setNewCustomerForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const addNewCustomer = () => {
+    const name = newCustomerForm.name.trim();
+    const phone = newCustomerForm.phone.trim();
+    const wilaya = newCustomerForm.wilaya.trim();
+
+    if (!name || !phone || !wilaya) return;
+
+    const openingBalance = Math.max(0, Number(newCustomerForm.openingBalance) || 0);
+    const newCustomer = {
+      id: Math.max(...customers.map((item) => item.id), 0) + 1,
+      name,
+      phone,
+      phone2: newCustomerForm.phone2.trim(),
+      email: newCustomerForm.email.trim(),
+      wilaya,
+      address: newCustomerForm.address.trim(),
+      salesperson: newCustomerForm.salesperson.trim() || "غير محدد",
+      ordersCount: 0,
+      lastOrder: "—",
+      totalAmount: 0,
+      paidAmount: 0,
+      openingBalance,
+      balance: openingBalance,
+      status: "active",
+      shippingRoute: newCustomerForm.shippingRoute.trim() || `${wilaya} - عام`,
+      orders: [],
+      payments: [],
+    };
+
+    setCustomers((current) => [...current, newCustomer]);
+    setCustomer(newCustomer);
+    setCustomerInfoOpen(false);
+    setNewCustomerForm({ ...emptyNewCustomerForm });
+    setNewCustomerDialog(false);
+  };
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -341,46 +401,71 @@ export default function AdminNewOrder() {
               <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
                 الزبون *
               </SoftTypography>
-              <Autocomplete
-                options={mockCustomers}
-                value={customer}
-                onChange={(_, v) => setCustomer(v)}
-                getOptionLabel={(o) => o.name}
-                filterOptions={(opts, { inputValue }) => {
-                  const q = inputValue.toLowerCase();
-                  return opts.filter((o) => o.name.includes(q) || o.phone.includes(q) || o.wilaya.includes(q));
-                }}
-                renderOption={(props, option) => (
-                  <li {...props} key={option.id}>
-                    <SoftBox>
-                      <SoftTypography variant="button" fontWeight="medium" display="block" lineHeight={1.3}>
-                        {option.name}
-                      </SoftTypography>
-                      <SoftTypography variant="caption" color="secondary">
-                        {option.wilaya} · {option.phone}
-                        {option.balance > 0 && (
-                          <span style={{ color: "#ea0606", marginRight: 6 }}>
-                            · رصيد: {option.balance.toLocaleString()} دج
-                          </span>
-                        )}
-                      </SoftTypography>
-                    </SoftBox>
-                  </li>
-                )}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    placeholder="ابحث باسم الزبون، الهاتف، أو الولاية..."
-                    variant="outlined"
+              <SoftBox display="flex" gap={1}>
+                <Autocomplete
+                  options={customers}
+                  value={customer}
+                  onChange={(_, v) => {
+                    setCustomer(v);
+                    setCustomerInfoOpen(false);
+                  }}
+                  getOptionLabel={(o) => o.name}
+                  filterOptions={(opts, { inputValue }) => {
+                    const q = inputValue.toLowerCase();
+                    return opts.filter((o) => o.name.includes(q) || o.phone.includes(q) || o.wilaya.includes(q));
+                  }}
+                  renderOption={(props, option) => {
+                    const debt = getCustomerDebt(option);
+
+                    return (
+                      <li {...props} key={option.id}>
+                        <SoftBox>
+                          <SoftTypography variant="button" fontWeight="medium" display="block" lineHeight={1.3}>
+                            {option.name}
+                          </SoftTypography>
+                          <SoftTypography variant="caption" color="secondary">
+                            {option.wilaya} · {option.phone}
+                            {debt > 0 && (
+                              <span style={{ color: "#ea0606", marginRight: 6 }}>
+                                · رصيد: {debt.toLocaleString()} دج
+                              </span>
+                            )}
+                          </SoftTypography>
+                        </SoftBox>
+                      </li>
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder="ابحث باسم الزبون، الهاتف، أو الولاية..."
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        "& .MuiOutlinedInput-root": { borderRadius: 1.5 },
+                        "& .MuiOutlinedInput-notchedOutline": { borderColor: "#e0e0e0" },
+                      }}
+                    />
+                  )}
+                  noOptionsText="لا توجد نتائج"
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
+                <Tooltip title={customer ? "عرض بطاقة الزبون" : "إضافة زبون جديد"}>
+                  <IconButton
                     size="small"
+                    onClick={() => customer ? setCustomerInfoOpen(true) : setNewCustomerDialog(true)}
                     sx={{
-                      "& .MuiOutlinedInput-root": { borderRadius: 1.5 },
-                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "#e0e0e0" },
+                      width: 40,
+                      border: `1px solid ${customer ? "#17c1e8" : "#e9ecef"}`,
+                      borderRadius: 1,
+                      color: customer ? "#17c1e8" : "#344767",
                     }}
-                  />
-                )}
-                noOptionsText="لا توجد نتائج"
-              />
+                  >
+                    {customer ? <VisibilityIcon fontSize="small" /> : <PersonAddIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+              </SoftBox>
               {customer && (
                 <SoftBox mt={1} display="flex" gap={1} flexWrap="wrap">
                   <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
@@ -389,12 +474,12 @@ export default function AdminNewOrder() {
                   <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
                     {customer.phone}
                   </SoftTypography>
-                  {customer.balance > 0 && (
+                  {customerDebt > 0 && (
                     <SoftTypography
                       variant="caption"
                       sx={{ background: "#fff0f0", color: "#ea0606", px: 1, py: 0.3, borderRadius: 1, fontWeight: 600 }}
                     >
-                      رصيد: {customer.balance.toLocaleString()} دج
+                      رصيد: {customerDebt.toLocaleString()} دج
                     </SoftTypography>
                   )}
                 </SoftBox>
@@ -525,6 +610,125 @@ export default function AdminNewOrder() {
           </SoftButton>
         </SoftBox>
       </SoftBox>
+
+      <Dialog open={newCustomerDialog} onClose={() => setNewCustomerDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>إضافة زبون جديد</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                autoFocus
+                label="اسم الزبون / الشركة *"
+                value={newCustomerForm.name}
+                onChange={(event) => updateNewCustomerField("name", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="رقم الهاتف *"
+                value={newCustomerForm.phone}
+                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="الهاتف الثاني"
+                value={newCustomerForm.phone2}
+                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>الولاية *</InputLabel>
+                <Select
+                  value={newCustomerForm.wilaya}
+                  label="الولاية *"
+                  onChange={(event) => updateNewCustomerField("wilaya", event.target.value)}
+                >
+                  {WILAYAS.map((wilaya) => (
+                    <MenuItem key={wilaya.code} value={wilaya.name}>
+                      {wilaya.code} - {wilaya.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="العنوان التفصيلي"
+                value={newCustomerForm.address}
+                onChange={(event) => updateNewCustomerField("address", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="مسار الشحن"
+                placeholder="مثال: وهران - الساحل"
+                value={newCustomerForm.shippingRoute}
+                onChange={(event) => updateNewCustomerField("shippingRoute", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="البريد الإلكتروني"
+                value={newCustomerForm.email}
+                onChange={(event) => updateNewCustomerField("email", event.target.value)}
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="الرصيد الافتتاحي (دج)"
+                type="number"
+                value={newCustomerForm.openingBalance}
+                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
+                helperText="رصيد سابق قبل بدء التسجيل في البرنامج"
+                size="small"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="البائع المسؤول"
+                value={newCustomerForm.salesperson}
+                onChange={(event) => updateNewCustomerField("salesperson", event.target.value)}
+                size="small"
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setNewCustomerDialog(false)}>
+            إلغاء
+          </SoftButton>
+          <SoftButton
+            variant="gradient"
+            color="info"
+            size="small"
+            disabled={!newCustomerForm.name.trim() || !newCustomerForm.phone.trim() || !newCustomerForm.wilaya.trim()}
+            onClick={addNewCustomer}
+          >
+            إضافة وتحديد
+          </SoftButton>
+        </DialogActions>
+      </Dialog>
+
+      <CustomerInfoDialog
+        customer={customerInfoOpen ? customer : null}
+        onClose={() => setCustomerInfoOpen(false)}
+      />
 
       <Footer />
     </DashboardLayout>
