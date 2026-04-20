@@ -221,3 +221,17 @@
 - **التشغيل:** `PORT=3003 npm start` من مجلد `frontend-allal-article`
 - **ESLint:** `"react/prop-types": "off"` في `.eslintrc.json`
 - **الولايات:** `src/data/wilayas.js` — قابلة للتحديث يدوياً أو بالذكاء الاصطناعي
+- **قرار الباك إند المستقبلي:** Spring Boot 3.x بنمط Modular Monolith
+- **لغة الباك إند:** Java 21
+- **قاعدة البيانات الرسمية:** PostgreSQL
+- **الميغريشن:** Flyway، مع منع الاعتماد على `ddl-auto=update` في مشروع جدي
+- **مرجع دراسة الباك إند:** [BACKEND_SPRING_BOOT_ARCHITECTURE.md](/Users/mw/Downloads/allal-article/BACKEND_SPRING_BOOT_ARCHITECTURE.md:1)
+- **مبدأ التنفيذ:** الباك إند يُضاف لاحقًا كملف/مشروع مستقل داخل الريبو، ويجب على Claude Code اتباع دراسة Spring Boot قبل إنشاء الجداول أو الخدمات.
+
+### قرار الباك إند طويل المدى
+
+تم اعتماد Spring Boot كخيار معماري مستقبلي لأن النظام ليس CRUD بسيطًا، بل منصة تشغيل داخلية فيها طلبيات، مخزون، مدفوعات، فواتير طريق، صلاحيات، وسجلات تدقيق. الأولوية هنا هي القوة، الأمان، قابلية الصيانة، ودقة المعاملات على المدى الطويل، وليس سرعة بناء MVP.
+
+النمط المعتمد هو `Modular Monolith`: مشروع باك إند واحد منظم داخليًا إلى وحدات مثل `orders`, `inventory`, `customers`, `payments`, `roadinvoices`, `audit`, `settings`. لا يتم البدء بـ microservices حتى لا يزيد التعقيد قبل الحاجة الفعلية.
+
+PostgreSQL هو الخيار الرسمي للبيانات بسبب قوة العلاقات، القيود، الفهارس، و transactions. كل تعديل في قاعدة البيانات يجب أن يتم عبر Flyway migration واضح ومؤرشف.

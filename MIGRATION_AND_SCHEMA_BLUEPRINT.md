@@ -11,17 +11,34 @@
 - جعل Claude Code قادرًا على التنفيذ بدون تخمينات كثيرة.
 - ضمان أن الباك إند الناتج يمكن وصله بالواجهات الحالية بدل إعادة بنائها من الصفر.
 
-## افتراضات تقنية موصى بها
+## افتراضات تقنية معتمدة
 
-- قاعدة البيانات: MySQL 8+ أو MariaDB حديثة أو PostgreSQL.
-- الترميز: `utf8mb4`.
-- المفاتيح الرئيسية: `bigint` أو `ulid`; إن لم تكن هناك حاجة صريحة لـ ULID فـ `bigint` أبسط في أول مرحلة.
+- الباك إند المستقبلي: `Spring Boot 3.x`.
+- لغة الباك إند: `Java 21`.
+- قاعدة البيانات الرسمية: `PostgreSQL`.
+- أداة الميغريشن الرسمية: `Flyway`.
+- لا يستخدم المشروع `spring.jpa.hibernate.ddl-auto=update` لإدارة قاعدة البيانات.
+- في الإنتاج يجب ضبط Hibernate على `validate` أو تعطيل توليد schema التلقائي.
+- مرجع قرار الباك إند: [BACKEND_SPRING_BOOT_ARCHITECTURE.md](/Users/mw/Downloads/allal-article/BACKEND_SPRING_BOOT_ARCHITECTURE.md:1).
+- المفاتيح الرئيسية: `bigint` أو `uuid`; إن لم تكن هناك حاجة صريحة لـ UUID فـ `bigint` أبسط في أول مرحلة.
 - المعرّف التجاري الخارجي: يفضل `public_id` أو `order_number` مستقل عن `id`.
 - جميع الكميات: `decimal(14,3)`.
 - جميع مبالغ المال: `decimal(14,2)`.
 - جميع الجداول المهمة: `created_at`, `updated_at`.
 - الجداول التشغيلية الحساسة: `created_by`, `updated_by` حيث يفيد ذلك.
 - الحذف: `soft deletes` للجداول التي قد تحتاج أرشفة أو أثر تاريخي.
+
+## قواعد Flyway الإلزامية
+
+- كل تغيير في schema يكون داخل ملف جديد:
+  `src/main/resources/db/migration/V{number}__description.sql`
+- لا يتم تعديل migration قديم بعد تطبيقه على أي بيئة مشتركة.
+- أسماء migrations تكون واضحة مثل:
+  `V1__create_users_and_roles.sql`
+  `V2__create_customers.sql`
+  `V3__create_products.sql`
+- migrations الكبيرة في الإنتاج تحتاج backup قبل التطبيق.
+- seed الأساسي للأدوار والصلاحيات والولايات يمكن أن يكون عبر migrations منفصلة أو data seed منظم.
 
 ## تحسينات موصى بها قبل كتابة الميغريشن
 

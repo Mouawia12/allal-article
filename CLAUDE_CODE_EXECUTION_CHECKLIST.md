@@ -6,11 +6,32 @@
 ## قواعد العمل الإلزامية
 
 - لا يتم تحويل أي بند من `[ ]` إلى `[x]` إلا بعد اكتمال: الكود + الميغريشن + الربط + التوثيق المختصر + التحقق الأساسي.
+- الباك إند المعتمد مستقبلًا هو Spring Boot 3.x + Java 21 + PostgreSQL + Flyway كما هو موثق في [BACKEND_SPRING_BOOT_ARCHITECTURE.md](/Users/mw/Downloads/allal-article/BACKEND_SPRING_BOOT_ARCHITECTURE.md:1).
+- لا يتم استعمال `spring.jpa.hibernate.ddl-auto=update` كآلية migrations. كل تعديل قاعدة بيانات يجب أن يكون Flyway migration.
 - لا يبدأ العمل على `Realtime` أو `AI` قبل تثبيت النواة: الحالات + المخزون + الطلبيات + السطور + الصلاحيات.
 - أي قرار بنيوي يخالف [README.md](/Users/mw/Downloads/allal-article/README.md:1) يجب توثيقه صراحة داخل commit أو داخل ملاحظة تحت نفس البند.
 - لا يتم حذف `order_items` أو فقدان أثر تعديلها نهائيًا. التغيير يجب أن يبقى قابلًا للتتبع.
 - الواجهات الحالية لا يعاد بناؤها من الصفر في أول مرحلة؛ بل يعاد توظيفها وربطها تدريجيًا مع الدومين الفعلي.
 - العربية وواجهة `RTL` ليست مشروعًا منفصلًا؛ هي نفس النظام مع ترجمة وتهيئة عرض مختلفة.
+
+## قرار الباك إند
+
+| البند | القرار |
+|---|---|
+| Framework | Spring Boot 3.x |
+| Language | Java 21 |
+| Architecture | Modular Monolith |
+| Database | PostgreSQL |
+| Migrations | Flyway |
+| Security | Spring Security |
+| API Docs | OpenAPI / Swagger |
+| Deployment مبدئي | Docker Compose |
+
+مبدأ التنفيذ:
+- لا تبدأ بـ microservices.
+- لا تبني CRUD عشوائي قبل تثبيت الحالات والـ transactions.
+- أي عملية مخزون أو مدفوعات أو تأكيد طلبية يجب أن تمر عبر Service داخل `@Transactional`.
+- لا تعرض JPA Entities مباشرة للفرونت؛ استخدم DTOs و Resources.
 
 ## خريطة توافق الواجهات الحالية
 
@@ -26,6 +47,25 @@
 | `/rtl` | واجهة عربية/RTL | نفس بيانات `/dashboard` مع نفس العقود API |
 
 ## Phase 0 — Freeze Domain and Contracts
+
+- [ ] 0.0 إنشاء أو استلام مشروع Spring Boot الأساسي.
+  المطلوب:
+  - Java 21
+  - Spring Boot 3.x
+  - PostgreSQL Driver
+  - Flyway
+  - Spring Web
+  - Spring Data JPA
+  - Spring Security
+  - Validation
+  - Actuator
+  - OpenAPI
+  منجز عندما:
+  - يعمل تطبيق الباك إند محليًا.
+  - يتصل بـ PostgreSQL.
+  - يطبق أول Flyway migration.
+  - `ddl-auto=update` غير مستخدم.
+  - بنية modular monolith واضحة.
 
 - [ ] 0.1 مراجعة `README.md` واستخراج glossary نهائي للمصطلحات.
   المطلوب:
