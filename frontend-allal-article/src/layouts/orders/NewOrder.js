@@ -1022,7 +1022,7 @@ function NewOrder() {
   const [customer, setCustomer] = useState(null);
   const [notes, setNotes] = useState("");
   const [newCustomerDialog, setNewCustomerDialog] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerForm, setNewCustomerForm] = useState(emptyNewCustomerForm);
   const [customers, setCustomers] = useState(mockCustomers);
   const [successDialog, setSuccessDialog] = useState(false);
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
@@ -1195,12 +1195,42 @@ function NewOrder() {
     setSuccessDialog(isDraft ? "draft" : "submitted");
   };
 
+  const updateNewCustomerField = (field, value) => {
+    setNewCustomerForm((current) => ({ ...current, [field]: value }));
+  };
+
   const addNewCustomer = () => {
-    if (!newCustomerName.trim()) return;
-    const newCust = { id: customers.length + 1, name: newCustomerName.trim() };
+    const name = newCustomerForm.name.trim();
+    const phone = newCustomerForm.phone.trim();
+    const wilaya = newCustomerForm.wilaya.trim();
+
+    if (!name || !phone || !wilaya) return;
+
+    const openingBalance = Math.max(0, Number(newCustomerForm.openingBalance) || 0);
+    const newCust = {
+      id: Math.max(...customers.map((item) => item.id), 0) + 1,
+      name,
+      phone,
+      phone2: newCustomerForm.phone2.trim(),
+      email: newCustomerForm.email.trim(),
+      wilaya,
+      address: newCustomerForm.address.trim(),
+      salesperson: newCustomerForm.salesperson.trim() || "غير محدد",
+      ordersCount: 0,
+      lastOrder: "—",
+      totalAmount: 0,
+      paidAmount: 0,
+      openingBalance,
+      balance: openingBalance,
+      status: "active",
+      shippingRoute: newCustomerForm.shippingRoute.trim() || `${wilaya} - عام`,
+      orders: [],
+      payments: [],
+    };
+
     setCustomers((prev) => [...prev, newCust]);
     setCustomer(newCust);
-    setNewCustomerName("");
+    setNewCustomerForm(emptyNewCustomerForm);
     setNewCustomerDialog(false);
   };
 
