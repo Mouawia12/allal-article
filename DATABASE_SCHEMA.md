@@ -368,6 +368,197 @@ users ─── customer_payments (received_by, 1:N)
 
 ---
 
+---
+
+## جداول المحاسبة
+
+> **ملاحظة:** المحاسبة ستُطبَّق في الباك إند (Spring Boot). الجداول التالية نهائية ومعتمدة.
+
+### `fiscal_years` — السنوات المالية
+```sql
+id              SERIAL PRIMARY KEY
+name            VARCHAR(100) NOT NULL           -- "السنة المالية 2025"
+start_date      DATE NOT NULL
+end_date        DATE NOT NULL
+is_closed       BOOLEAN DEFAULT false
+closed_at       TIMESTAMP
+closed_by       INT REFERENCES users(id)
+close_reason    TEXT
+created_by      INT REFERENCES users(id)
+created_at      TIMESTAMP DEFAULT NOW()
+```
+
+### `accounting_periods` — الفترات الشهرية
+```sql
+id              SERIAL PRIMARY KEY
+fiscal_year_id  INT REFERENCES fiscal_years(id) NOT NULL
+period_number   SMALLINT NOT NULL               -- 1..12
+start_date      DATE NOT NULL
+end_date        DATE NOT NULL
+is_closed       BOOLEAN DEFAULT false
+closed_at       TIMESTAMP
+closed_by       INT REFERENCES users(id)
+```
+
+### `accounts` — شجرة الحسابات
+```sql
+id              SERIAL PRIMARY KEY
+code            VARCHAR(20) UNIQUE NOT NULL
+name_ar         VARCHAR(200) NOT NULL
+name_en         VARCHAR(200)
+parent_id       INT REFERENCES accounts(id)
+level           SMALLINT NOT NULL DEFAULT 1
+path            VARCHAR(500)                    -- materialized path: "1/10/100"
+classification  VARCHAR(20) NOT NULL            -- asset|liability|equity|revenue|expense
+normal_balance  VARCHAR(10) NOT NULL            -- debit|credit
+is_postable     BOOLEAN DEFAULT true            -- false = حساب أب فقط
+is_control      BOOLEAN DEFAULT false           -- true = يتطلب sub-ledger
+is_active       BOOLEAN DEFAULT true
+sort_order      INT DEFAULT 0
+created_by      INT REFERENCES users(id)
+created_at      TIMESTAMP DEFAULT NOW()
+updated_at      TIMESTAMP DEFAULT NOW()
+```
+
+### `journals` — رؤوس القيود
+```sql
+id              SERIAL PRIMARY KEY
+journal_number  VARCHAR(50) UNIQUE NOT NULL     -- JRN-2025-001
+fiscal_year_id  INT REFERENCES fiscal_years(id) NOT NULL
+period_id       INT REFERENCES accounting_periods(id)
+journal_date    DATE NOT NULL
+type            VARCHAR(20) NOT NULL            -- manual|auto|opening|closing
+source          VARCHAR(30)                     -- sale|purchase|payment|return|opening|manual
+source_ref_type VARCHAR(50)                     -- 'order'|'customer_payment'|'purchase_order'
+source_ref_id   INT
+status          VARCHAR(20) DEFAULT 'draft'     -- draft|posted|reversed|void
+description     TEXT
+total_debit     DECIMAL(18,4) DEFAULT 0
+total_credit    DECIMAL(18,4) DEFAULT 0
+reversed_by_id  INT REFERENCES journals(id)     -- إذا كان هذا عكس قيد آخر
+created_by      INT REFERENCES users(id)
+posted_at       TIMESTAMP
+posted_by       INT REFERENCES users(id)
+created_at      TIMESTAMP DEFAULT NOW()
+updated_at      TIMESTAMP DEFAULT NOW()
+
+-- INDEX: (fiscal_year_id, journal_date)
+-- INDEX: (source_ref_type, source_ref_id)
+-- INDEX: (status)
+```
+
+### `journal_lines` — أسطر القيود
+```sql
+id              SERIAL PRIMARY KEY
+journal_id      INT REFERENCES journals(id) NOT NULL
+account_id      INT REFERENCES accounts(id) NOT NULL
+debit           DECIMAL(18,4) DEFAULT 0
+credit          DECIMAL(18,4) DEFAULT 0
+description     TEXT
+sub_ledger_type VARCHAR(30)                     -- 'customer'|'supplier'|null
+sub_ledger_id   INT                             -- customer_id أو supplier_id
+sort_order      SMALLINT DEFAULT 0
+
+-- CONSTRAINT: CHECK (debit = 0 OR credit = 0)   -- لا يجمع مدين ودائن في نفس السطر
+-- CONSTRAINT: CHECK (debit >= 0 AND credit >= 0)
+-- INDEX: (journal_id)
+-- INDEX: (account_id, journal_id)
+-- INDEX: (sub_ledger_type, sub_ledger_id)
+```
+
+### `opening_balances` — الأرصدة الافتتاحية
+```sql
+id              SERIAL PRIMARY KEY
+fiscal_year_id  INT REFERENCES fiscal_years(id) NOT NULL
+account_id      INT REFERENCES accounts(id) NOT NULL
+debit_balance   DECIMAL(18,4) DEFAULT 0
+credit_balance  DECIMAL(18,4) DEFAULT 0
+notes           TEXT
+created_by      INT REFERENCES users(id)
+created_at      TIMESTAMP DEFAULT NOW()
+updated_at      TIMESTAMP DEFAULT NOW()
+
+UNIQUE (fiscal_year_id, account_id)
+```
+
+### `accounting_settings` — ربط الحسابات التلقائي
+```sql
+key             VARCHAR(100) PRIMARY KEY        -- sales_revenue|cogs|inventory|cash|bank...
+account_id      INT REFERENCES accounts(id)
+label           VARCHAR(200)
+updated_by      INT REFERENCES users(id)
+updated_at      TIMESTAMP DEFAULT NOW()
+```
+
+*مفاتيح الإعدادات:*
+- `sales_revenue` → حساب إيرادات المبيعات
+- `sales_returns` → مردودات المبيعات
+- `cogs` → تكلفة البضاعة المباعة
+- `inventory` → حساب المخزون
+- `customers_control` → ذمم العملاء (رقابي)
+- `suppliers_control` → ذمم الموردين (رقابي)
+- `cash` → الصندوق
+- `bank` → الحساب البنكي
+- `tax_payable` → ضرائب ورسوم
+- `retained_earnings` → الأرباح المرحلة
+- `current_year_profit` → أرباح السنة الحالية
+- `discount_given` → خصم ممنوح
+
+### `year_close_runs` — سجل عمليات إغلاق السنة
+```sql
+id              SERIAL PRIMARY KEY
+fiscal_year_id  INT REFERENCES fiscal_years(id) NOT NULL
+run_at          TIMESTAMP DEFAULT NOW()
+run_by          INT REFERENCES users(id)
+status          VARCHAR(20)                     -- success|failed|partial
+closing_journal_id   INT REFERENCES journals(id)   -- قيد الإقفال المولّد
+opening_journal_id   INT REFERENCES journals(id)   -- قيد الأرصدة الافتتاحية المولّد
+notes           TEXT
+```
+
+### `fiscal_year_audit_log` — سجل تدقيق السنوات المالية
+```sql
+id              SERIAL PRIMARY KEY
+fiscal_year_id  INT REFERENCES fiscal_years(id) NOT NULL
+action          VARCHAR(50) NOT NULL            -- closed|reopened|period_closed
+user_id         INT REFERENCES users(id)
+reason          TEXT
+performed_at    TIMESTAMP DEFAULT NOW()
+ip_address      VARCHAR(50)
+```
+
+---
+
+## العلاقات المحاسبية الرئيسية
+```
+fiscal_years ─── accounting_periods (1:N)
+fiscal_years ─── journals (1:N)
+fiscal_years ─── opening_balances (1:N)
+accounts ─── accounts (parent_id, self-ref tree)
+accounts ─── journal_lines (1:N)
+accounts ─── opening_balances (1:N)
+journals ─── journal_lines (1:N)
+journals ─── year_close_runs (closing/opening journal)
+orders ─── journals (source_ref_type='order', 1:1 auto)
+customer_payments ─── journals (source_ref_type='customer_payment', 1:1 auto)
+purchase_orders ─── journals (source_ref_type='purchase_order', 1:1 auto)
+```
+
+---
+
+## قواعد التصميم المحاسبي
+
+1. **الترحيل على الحسابات** — فقط على حسابات `is_postable=true`؛ الحسابات الأب لا تُرحَّل مباشرة
+2. **الحسابات الرقابية** — `is_control=true` لحسابات العملاء والموردين؛ كل سطر يرتبط بـ `sub_ledger_id`
+3. **القيود المتوازنة** — `SUM(debit) = SUM(credit)` إلزامي قبل أي ترحيل (تُطبَّق في backend)
+4. **السنة المغلقة** — لا يُسمح بأي CRUD على القيود داخل سنة `is_closed=true` (constraint في الباك إند)
+5. **عكس القيد** — بدلاً من الحذف: ينشئ قيداً جديداً عكسياً مع ربط `reversed_by_id`
+6. **الترقيم التلقائي** — `journal_number` يُولَّد تلقائياً بدالة أو sequence (JRN-YYYY-NNNN)
+7. **DECIMAL(18,4)** — لكل الأرصدة والمبالغ المالية؛ لا float أو double
+8. **materialized_path** — `path` يُسهّل استعلامات subtree دون recursion (مثال: "1/10/100")
+
+---
+
 ## ملاحظات التصميم
 
 1. **السطور لا تُحذف فعلياً** — حقل `deleted_at` فقط، يبقى السطر مرئياً دائماً

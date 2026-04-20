@@ -24,8 +24,21 @@ import Reports from "layouts/reports";
 import Users from "layouts/users";
 import Settings from "layouts/settings";
 import Purchases from "layouts/purchases";
+import PurchaseDetail from "layouts/purchases/PurchaseDetail";
+import PurchaseForm from "layouts/purchases/PurchaseForm";
 import RoadInvoices from "layouts/road-invoices";
 import RoadInvoiceForm from "layouts/road-invoices/RoadInvoiceForm";
+import AccountsTree from "layouts/accounting/AccountsTree";
+import Journals from "layouts/accounting/Journals";
+import ManualJournalForm from "layouts/accounting/ManualJournalForm";
+import FiscalYears from "layouts/accounting/FiscalYears";
+import OpeningBalances from "layouts/accounting/OpeningBalances";
+import AccountingSettings from "layouts/accounting/AccountingSettings";
+import TrialBalance from "layouts/accounting/reports/TrialBalance";
+import AccountMovement from "layouts/accounting/reports/AccountMovement";
+import CompanyProfile from "layouts/company-profile";
+import Partnerships from "layouts/partnerships";
+import LinkedInventory from "layouts/partnerships/LinkedInventory";
 
 // Soft UI Dashboard React icons
 import Shop from "examples/Icons/Shop";
@@ -156,6 +169,24 @@ const routes = [
   },
   {
     type: "collapse",
+    name: "معلومات الشركة",
+    key: "company-profile",
+    route: "/company-profile",
+    icon: <Office size="12px" />,
+    component: <CompanyProfile />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "شبكة الشركاء",
+    key: "partnerships",
+    route: "/partnerships",
+    icon: <Office size="12px" />,
+    component: <Partnerships />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
     name: "تسجيل الدخول",
     key: "sign-in",
     route: "/authentication/sign-in",
@@ -172,6 +203,33 @@ const routes = [
     component: <SignUp />,
     noCollapse: true,
   },
+
+  // ─── Accounting module ──────────────────────────────────
+  {
+    type: "title", title: "المحاسبة", key: "accounting-title",
+  },
+  {
+    type: "collapse", name: "شجرة الحسابات", key: "accounts-tree",
+    route: "/accounting/accounts-tree", icon: <Document size="12px" />,
+    component: <AccountsTree />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "دفتر اليومية", key: "journals",
+    route: "/accounting/journals", icon: <Document size="12px" />,
+    component: <Journals />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "السنوات المالية", key: "fiscal-years",
+    route: "/accounting/fiscal-years", icon: <Document size="12px" />,
+    component: <FiscalYears />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "ميزان المراجعة", key: "trial-balance",
+    route: "/accounting/reports/trial-balance", icon: <Document size="12px" />,
+    component: <TrialBalance />, noCollapse: true,
+  },
+
+  { type: "divider", key: "divider-2" },
 
   // ─── Hidden routes (no sidebar) ─────────────────────────
   {
@@ -194,6 +252,26 @@ const routes = [
     route: "/orders/:id",
     component: <OrderDetail />,
   },
+  {
+    key: "purchase-new",
+    route: "/purchases/new",
+    component: <PurchaseForm />,
+  },
+  {
+    key: "purchase-edit",
+    route: "/purchases/:id/edit",
+    component: <PurchaseForm />,
+  },
+  {
+    key: "purchase-detail",
+    route: "/purchases/:id",
+    component: <PurchaseDetail />,
+  },
+  // Accounting hidden routes
+  { key: "journal-new",         route: "/accounting/journals/new",              component: <ManualJournalForm /> },
+  { key: "opening-balances",    route: "/accounting/opening-balances",          component: <OpeningBalances /> },
+  { key: "accounting-settings", route: "/accounting/settings",                  component: <AccountingSettings /> },
+  { key: "account-movement",    route: "/accounting/reports/account-movement",  component: <AccountMovement /> },
   {
     key: "new-order",
     route: "/orders/new",
@@ -224,6 +302,9 @@ const routes = [
     route: "/products/:id/edit",
     component: <ProductForm />,
   },
+
+  // ─── Partnership hidden routes ───────────────────────────
+  { key: "linked-inventory", route: "/partnerships/inventory/:partnerId", component: <LinkedInventory /> },
 
   // ─── Legacy (keep for compatibility) ────────────────────
   {

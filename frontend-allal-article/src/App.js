@@ -45,6 +45,12 @@ import createCache from "@emotion/cache";
 // Soft UI Dashboard React routes
 import routes from "routes";
 
+// Owner dashboard shell
+import OwnerDashboard from "layouts/owner/dashboard";
+import OwnerTenants  from "layouts/owner/tenants";
+import OwnerPlans    from "layouts/owner/plans";
+import OwnerRevenue  from "layouts/owner/revenue";
+
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
 import { useI18n } from "i18n";
@@ -98,6 +104,19 @@ const [rtlCache, setRtlCache] = useState(null);
 
       return null;
     });
+
+  // Owner dashboard: standalone shell — render outside the tenant Sidenav/theme wrappers
+  if (pathname.startsWith("/owner")) {
+    return (
+      <Routes>
+        <Route path="/owner/dashboard" element={<OwnerDashboard />} />
+        <Route path="/owner/tenants"   element={<OwnerTenants />} />
+        <Route path="/owner/plans"     element={<OwnerPlans />} />
+        <Route path="/owner/revenue"   element={<OwnerRevenue />} />
+        <Route path="/owner/*"         element={<Navigate to="/owner/dashboard" />} />
+      </Routes>
+    );
+  }
 
   const configsButton = (
     <SoftBox

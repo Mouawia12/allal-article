@@ -13,7 +13,7 @@ Coded by www.creative-tim.com
 * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 // react-router-dom components
 import { useLocation, NavLink } from "react-router-dom";
@@ -25,7 +25,11 @@ import PropTypes from "prop-types";
 import List from "@mui/material/List";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Icon from "components/AppIcon";
+import TranslateIcon from "@mui/icons-material/Translate";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
@@ -42,15 +46,20 @@ import sidenavLogoLabel from "examples/Sidenav/styles/sidenav";
 
 // Soft UI Dashboard React context
 import { useSoftUIController, setMiniSidenav } from "context";
+import { useI18n } from "i18n";
 
 function Sidenav({ color, brand, brandName, routes, ...rest }) {
   const [controller, dispatch] = useSoftUIController();
   const { miniSidenav, transparentSidenav } = controller;
+  const { locale, languages, setLocale, t } = useI18n();
+  const [languageAnchor, setLanguageAnchor] = useState(null);
   const location = useLocation();
   const { pathname } = location;
   const collapseName = pathname.split("/").slice(1)[0];
 
   const closeSidenav = () => setMiniSidenav(dispatch, true);
+  const openLanguageMenu = (event) => setLanguageAnchor(event.currentTarget);
+  const closeLanguageMenu = () => setLanguageAnchor(null);
 
   useEffect(() => {
     // Only auto-close on small screens — never auto-open (respect user's choice)
@@ -156,6 +165,45 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
       <Divider />
       <List>{renderRoutes}</List>
       <SoftBox pt={2} my={2} mx={2} mt="auto">
+        {!miniSidenav && (
+          <SoftBox mb={2} display="flex" justifyContent="center">
+            <IconButton
+              size="small"
+              aria-label={t("language.switcher")}
+              onClick={openLanguageMenu}
+              sx={{
+                width: 38,
+                height: 38,
+                background: "#fff",
+                border: "1px solid #e9ecef",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                "&:hover": { background: "#f8f9fa" },
+              }}
+            >
+              <TranslateIcon sx={{ fontSize: 18, color: "#8392ab" }} />
+            </IconButton>
+            <Menu
+              anchorEl={languageAnchor}
+              open={Boolean(languageAnchor)}
+              onClose={closeLanguageMenu}
+              anchorOrigin={{ vertical: "top", horizontal: "center" }}
+              transformOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+              {languages.map((language) => (
+                <MenuItem
+                  key={language.code}
+                  selected={locale === language.code}
+                  onClick={() => {
+                    setLocale(language.code);
+                    closeLanguageMenu();
+                  }}
+                >
+                  {language.label}
+                </MenuItem>
+              ))}
+            </Menu>
+          </SoftBox>
+        )}
         <SidenavCard />
         <SoftBox mt={2}>
           <SoftButton

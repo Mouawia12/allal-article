@@ -6,6 +6,9 @@ import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
+import FormControl from "@mui/material/FormControl";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Chip from "@mui/material/Chip";
@@ -28,52 +31,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const mockPurchases = [
-  {
-    id: "PUR-2024-001", supplier: "مصنع الصلب الجزائري", date: "2024-01-22",
-    expectedDate: "2024-01-30", totalAmount: "2,450,000", itemsCount: 5,
-    status: "pending", paymentStatus: "unpaid", receivedBy: null,
-  },
-  {
-    id: "PUR-2024-002", supplier: "شركة المعدن والأدوات", date: "2024-01-20",
-    expectedDate: "2024-01-28", totalAmount: "850,000", itemsCount: 3,
-    status: "confirmed", paymentStatus: "partial", receivedBy: "أحمد محمد",
-  },
-  {
-    id: "PUR-2024-003", supplier: "موردون الكهرباء الوطنية", date: "2024-01-18",
-    expectedDate: "2024-01-25", totalAmount: "1,120,000", itemsCount: 7,
-    status: "received", paymentStatus: "paid", receivedBy: "خالد عمر",
-  },
-  {
-    id: "PUR-2024-004", supplier: "شركة السباكة والري", date: "2024-01-15",
-    expectedDate: "2024-01-22", totalAmount: "340,000", itemsCount: 4,
-    status: "received", paymentStatus: "unpaid", receivedBy: "يوسف علي",
-  },
-  {
-    id: "PUR-2024-005", supplier: "مصنع الصلب الجزائري", date: "2024-01-10",
-    expectedDate: "2024-01-17", totalAmount: "3,200,000", itemsCount: 9,
-    status: "cancelled", paymentStatus: "unpaid", receivedBy: null,
-  },
-  {
-    id: "PUR-2024-006", supplier: "مستلزمات الدهانات الفاخرة", date: "2024-01-08",
-    expectedDate: "2024-01-15", totalAmount: "560,000", itemsCount: 2,
-    status: "confirmed", paymentStatus: "paid", receivedBy: null,
-  },
-];
-
-const statusConfig = {
-  pending:   { label: "في الانتظار", color: "warning" },
-  confirmed: { label: "مؤكد",        color: "info" },
-  received:  { label: "مستلم",       color: "success" },
-  cancelled: { label: "ملغى",        color: "error" },
-};
-
-const paymentConfig = {
-  paid:    { label: "مدفوع",      color: "success" },
-  partial: { label: "جزئي",       color: "warning" },
-  unpaid:  { label: "غير مدفوع", color: "error" },
-};
+import { formatDZD, mockPurchases, paymentConfig, statusConfig, supplierOptions } from "./mockData";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color, icon: Icon }) {
@@ -104,15 +62,20 @@ function Purchases() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [supplierFilter, setSupplierFilter] = useState("all");
 
   const tabStatus = ["all", "pending", "confirmed", "received", "cancelled"][tab];
 
   const filtered = mockPurchases.filter((p) => {
     const matchStatus = tabStatus === "all" || p.status === tabStatus;
+    const matchPayment = paymentFilter === "all" || p.paymentStatus === paymentFilter;
+    const matchSupplier = supplierFilter === "all" || p.supplier === supplierFilter;
     const matchSearch =
       p.id.toLowerCase().includes(search.toLowerCase()) ||
       p.supplier.includes(search);
-    return matchStatus && matchSearch;
+    return matchStatus && matchPayment && matchSupplier && matchSearch;
   });
 
   const pendingCount   = mockPurchases.filter(p => p.status === "pending").length;
@@ -120,7 +83,7 @@ function Purchases() {
   const receivedCount  = mockPurchases.filter(p => p.status === "received").length;
   const unpaidAmount   = mockPurchases
     .filter(p => p.paymentStatus !== "paid")
-    .reduce((s, p) => s + Number(p.totalAmount.replace(/,/g, "")), 0);
+    .reduce((s, p) => s + p.totalAmount, 0);
 
   return (
     <DashboardLayout>
@@ -194,10 +157,40 @@ function Purchases() {
                 }}
                 sx={{ width: 300 }}
               />
-              <SoftButton variant="outlined" color="secondary" size="small" startIcon={<FilterListIcon />}>
+              <SoftButton
+                variant={showFilters ? "gradient" : "outlined"}
+                color={showFilters ? "info" : "secondary"}
+                size="small"
+                startIcon={<FilterListIcon />}
+                onClick={() => setShowFilters((value) => !value)}
+              >
                 فلتر
               </SoftButton>
             </SoftBox>
+
+            {showFilters && (
+              <SoftBox display="flex" gap={1.5} flexWrap="wrap" mb={2}>
+                <FormControl size="small" sx={{ minWidth: 190 }}>
+                  <Select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+                    <MenuItem value="all">كل الموردين</MenuItem>
+                    {supplierOptions.map((supplier) => (
+                      <MenuItem key={supplier} value={supplier}>{supplier}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <Select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
+                    <MenuItem value="all">كل حالات الدفع</MenuItem>
+                    {Object.entries(paymentConfig).map(([key, cfg]) => (
+                      <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <SoftTypography variant="caption" color="text" sx={{ alignSelf: "center", mr: "auto" }}>
+                  {filtered.length} نتيجة
+                </SoftTypography>
+              </SoftBox>
+            )}
 
             <SoftBox sx={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -211,11 +204,29 @@ function Purchases() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((p, i) => {
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: 40 }}>
+                        <SoftTypography variant="body2" color="text">
+                          لا توجد أوامر شراء مطابقة
+                        </SoftTypography>
+                      </td>
+                    </tr>
+                  ) : filtered.map((p, i) => {
                     const sc = statusConfig[p.status];
                     const pc = paymentConfig[p.paymentStatus];
                     return (
-                      <tr key={p.id} style={{ borderBottom: "1px solid #f0f2f5", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
+                      <tr
+                        key={p.id}
+                        style={{
+                          borderBottom: "1px solid #f0f2f5",
+                          background: i % 2 === 0 ? "#fff" : "#fafbfc",
+                          cursor: "pointer",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f7ff")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc")}
+                        onClick={() => navigate(`/purchases/${p.id}`)}
+                      >
                         <td style={{ padding: "10px 12px" }}>
                           <SoftTypography variant="caption" fontWeight="bold" color="info"
                             sx={{ cursor: "pointer" }} onClick={() => navigate(`/purchases/${p.id}`)}>
@@ -235,7 +246,7 @@ function Purchases() {
                           <SoftTypography variant="caption" fontWeight="bold">{p.itemsCount}</SoftTypography>
                         </td>
                         <td style={{ padding: "10px 12px" }}>
-                          <SoftTypography variant="caption" fontWeight="bold">{p.totalAmount}</SoftTypography>
+                          <SoftTypography variant="caption" fontWeight="bold">{formatDZD(p.totalAmount)}</SoftTypography>
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           <SoftBadge variant="gradient" color={sc.color} size="xs" badgeContent={sc.label} container />
@@ -248,7 +259,11 @@ function Purchases() {
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           <Tooltip title="عرض التفاصيل">
-                            <IconButton size="small" onClick={() => navigate(`/purchases/${p.id}`)}>
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/purchases/${p.id}`); }}
+                            >
                               <VisibilityIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>

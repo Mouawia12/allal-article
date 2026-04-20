@@ -1,0 +1,202 @@
+/* eslint-disable */
+// ─── Owner Dashboard Mock Data ────────────────────────────────────────────────
+// Feature gate convention: plans that include "ai" can access AI settings and AI-powered workflows.
+// Basic intentionally does not include "ai"; Professional and Enterprise do.
+
+export const mockPlans = [
+  {
+    id: 1, code: "trial", nameAr: "تجريبي", nameEn: "Trial",
+    priceMonthly: 0, durationDays: 30, maxUsers: 3, maxOrders: 500, maxProducts: 100,
+    color: "#8392ab",
+    features: ["orders", "products", "customers", "inventory"],
+    featuresAr: ["الطلبيات", "الأصناف", "الزبائن", "المخزون"],
+    isActive: true,
+  },
+  {
+    id: 2, code: "basic", nameAr: "أساسي", nameEn: "Basic",
+    priceMonthly: 2990, durationDays: 365, maxUsers: 10, maxOrders: 5000, maxProducts: 1000,
+    color: "#17c1e8",
+    features: ["orders", "products", "customers", "inventory", "purchases", "reports", "road_invoices", "users"],
+    featuresAr: ["الطلبيات", "الأصناف", "الزبائن", "المخزون", "المشتريات", "التقارير", "فواتير الطريق", "المستخدمون"],
+    isActive: true,
+  },
+  {
+    id: 3, code: "professional", nameAr: "احترافي", nameEn: "Professional",
+    priceMonthly: 7990, durationDays: 365, maxUsers: 50, maxOrders: null, maxProducts: null,
+    color: "#82d616",
+    features: ["orders", "products", "customers", "inventory", "purchases", "reports", "road_invoices", "users", "accounting", "audit_logs", "ai"],
+    featuresAr: ["الطلبيات", "الأصناف", "الزبائن", "المخزون", "المشتريات", "التقارير", "فواتير الطريق", "المستخدمون", "المحاسبة", "سجل العمليات", "الذكاء الاصطناعي"],
+    isActive: true,
+  },
+  {
+    id: 4, code: "enterprise", nameAr: "مؤسسي", nameEn: "Enterprise",
+    priceMonthly: null, durationDays: 365, maxUsers: null, maxOrders: null, maxProducts: null,
+    color: "#7928ca",
+    features: ["all", "ai", "dedicated_support", "custom_integrations", "sla"],
+    featuresAr: ["جميع الميزات", "الذكاء الاصطناعي", "دعم مخصص", "تكاملات مخصصة", "اتفاقية مستوى الخدمة"],
+    isActive: true,
+  },
+];
+
+export const mockTenants = [
+  {
+    id: 1, uuid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    schemaName: "tenant_a1b2c3d4",
+    name: "شركة التوزيع الشمالي",
+    contactEmail: "admin@north-dist.dz",
+    contactPhone: "023-12-34-56",
+    wilaya: "الجزائر",
+    status: "active", planId: 3,
+    trialEndsAt: null,
+    subscriptionStartedAt: "2025-01-01",
+    subscriptionRenewsAt: "2026-01-01",
+    usersCount: 8, maxUsers: 50,
+    ordersThisMonth: 234, totalOrders: 1842,
+    storageUsedMB: 2340,
+    createdAt: "2024-11-15",
+    lastActivityAt: "2026-04-19",
+  },
+  {
+    id: 2, uuid: "d4e5f6a7-b8c9-0123-def0-123456789abc",
+    schemaName: "tenant_d4e5f6a7",
+    name: "مؤسسة الخير للتجارة",
+    contactEmail: "owner@alkhayr.dz",
+    contactPhone: "041-23-45-67",
+    wilaya: "وهران",
+    status: "trial", planId: 1,
+    trialEndsAt: "2026-05-20",
+    subscriptionStartedAt: "2026-04-20",
+    subscriptionRenewsAt: null,
+    usersCount: 2, maxUsers: 3,
+    ordersThisMonth: 12, totalOrders: 12,
+    storageUsedMB: 98,
+    createdAt: "2026-04-20",
+    lastActivityAt: "2026-04-20",
+  },
+  {
+    id: 3, uuid: "c7d8e9f0-a1b2-c3d4-e5f6-789012345678",
+    schemaName: "tenant_c7d8e9f0",
+    name: "شركة البيان للإلكترونيات",
+    contactEmail: "contact@albayan.dz",
+    contactPhone: "031-45-67-89",
+    wilaya: "عنابة",
+    status: "active", planId: 2,
+    trialEndsAt: null,
+    subscriptionStartedAt: "2025-06-01",
+    subscriptionRenewsAt: "2026-06-01",
+    usersCount: 6, maxUsers: 10,
+    ordersThisMonth: 87, totalOrders: 523,
+    storageUsedMB: 780,
+    createdAt: "2025-05-15",
+    lastActivityAt: "2026-04-18",
+  },
+  {
+    id: 4, uuid: "f0a1b2c3-d4e5-f6a7-b8c9-012345678def",
+    schemaName: "tenant_f0a1b2c3",
+    name: "مجمع النخيل التجاري",
+    contactEmail: "info@nakhil-group.dz",
+    contactPhone: "049-78-90-12",
+    wilaya: "ورقلة",
+    status: "active", planId: 4,
+    trialEndsAt: null,
+    subscriptionStartedAt: "2024-07-01",
+    subscriptionRenewsAt: "2025-07-01",
+    usersCount: 34, maxUsers: null,
+    ordersThisMonth: 1102, totalOrders: 11450,
+    storageUsedMB: 12400,
+    createdAt: "2024-06-15",
+    lastActivityAt: "2026-04-20",
+  },
+  {
+    id: 5, uuid: "e9f0a1b2-c3d4-e5f6-a7b8-c9012345678e",
+    schemaName: "tenant_e9f0a1b2",
+    name: "مؤسسة البركة للمواد الغذائية",
+    contactEmail: "admin@baraka-food.dz",
+    contactPhone: "035-23-45-67",
+    wilaya: "بجاية",
+    status: "suspended", planId: 2,
+    trialEndsAt: null,
+    subscriptionStartedAt: "2025-03-01",
+    subscriptionRenewsAt: "2026-03-01",
+    usersCount: 4, maxUsers: 10,
+    ordersThisMonth: 0, totalOrders: 234,
+    storageUsedMB: 320,
+    createdAt: "2025-02-20",
+    lastActivityAt: "2026-03-15",
+    suspendedReason: "تأخر في دفع الاشتراك",
+  },
+  {
+    id: 6, uuid: "b3c4d5e6-f7a8-b9c0-d1e2-f3456789abcd",
+    schemaName: "tenant_b3c4d5e6",
+    name: "شركة سطيف للمقاولات",
+    contactEmail: "setif-contracting@gmail.com",
+    contactPhone: "036-78-90-12",
+    wilaya: "سطيف",
+    status: "cancelled", planId: 2,
+    trialEndsAt: null,
+    subscriptionStartedAt: "2025-01-01",
+    subscriptionRenewsAt: null,
+    cancelledAt: "2025-09-30",
+    usersCount: 0, maxUsers: 10,
+    ordersThisMonth: 0, totalOrders: 312,
+    storageUsedMB: 0,
+    createdAt: "2024-12-20",
+    lastActivityAt: "2025-09-28",
+  },
+];
+
+export const mockOwnerStats = {
+  mrr: 63940,                // Monthly Recurring Revenue (DZD)
+  arr: 767280,               // Annual
+  activeCount: 4,
+  trialCount: 1,
+  suspendedCount: 1,
+  cancelledCount: 1,
+  totalCount: 6,
+  newThisMonth: 1,
+  churnedThisMonth: 0,
+  totalOrders: 14163,
+  ordersThisMonth: 1435,
+  revenueByPlan: [
+    { planId: 1, planName: "تجريبي", count: 1, revenue: 0 },
+    { planId: 2, planName: "أساسي",  count: 2, revenue: 5980 },
+    { planId: 3, planName: "احترافي", count: 1, revenue: 7990 },
+    { planId: 4, planName: "مؤسسي",  count: 1, revenue: 50000 },
+  ],
+  monthlyRevenue: [
+    { month: "نوفمبر 2024", revenue: 10000 },
+    { month: "ديسمبر 2024", revenue: 17990 },
+    { month: "جانفي 2025",  revenue: 25980 },
+    { month: "فيفري 2025",  revenue: 33970 },
+    { month: "مارس 2025",   revenue: 41960 },
+    { month: "أفريل 2025",  revenue: 63940 },
+  ],
+};
+
+export const mockOwnerUser = {
+  id: 0,
+  name: "مالك النظام",
+  email: "owner@allal-saas.dz",
+  role: "owner",
+};
+
+export const mockProvisioningEvents = [
+  { id: 1, tenantName: "مؤسسة الخير للتجارة", event: "tenant_created", performedBy: "owner@allal-saas.dz", details: "تم إنشاء المستأجر والمخطط والحسابات الافتراضية", createdAt: "2026-04-20 10:15" },
+  { id: 2, tenantName: "شركة التوزيع الشمالي", event: "plan_upgraded", performedBy: "owner@allal-saas.dz", details: "ترقية من أساسي إلى احترافي", createdAt: "2026-01-01 09:00" },
+  { id: 3, tenantName: "مؤسسة البركة للمواد الغذائية", event: "tenant_suspended", performedBy: "owner@allal-saas.dz", details: "تأخر في دفع الاشتراك", createdAt: "2026-03-15 14:30" },
+  { id: 4, tenantName: "شركة سطيف للمقاولات", event: "tenant_cancelled", performedBy: "system", details: "إلغاء بطلب من العميل", createdAt: "2025-09-30 17:00" },
+];
+
+export const planColors = {
+  trial: "#8392ab",
+  basic: "#17c1e8",
+  professional: "#82d616",
+  enterprise: "#7928ca",
+};
+
+export const statusConfig = {
+  active:    { labelAr: "نشط",     color: "#82d616", bg: "#f0fde4" },
+  trial:     { labelAr: "تجريبي",  color: "#fb8c00", bg: "#fff3e0" },
+  suspended: { labelAr: "موقوف",   color: "#ea0606", bg: "#ffeaea" },
+  cancelled: { labelAr: "ملغى",    color: "#8392ab", bg: "#f8f9fa" },
+};

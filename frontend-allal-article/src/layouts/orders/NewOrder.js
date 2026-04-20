@@ -18,6 +18,12 @@ import Badge from "@mui/material/Badge";
 import Tooltip from "@mui/material/Tooltip";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
@@ -28,11 +34,17 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import PersonIcon from "@mui/icons-material/Person";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import CloseIcon from "@mui/icons-material/Close";
 import PhoneIcon from "@mui/icons-material/Phone";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import PaymentIcon from "@mui/icons-material/Payment";
+import PrintIcon from "@mui/icons-material/Print";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import Avatar from "@mui/material/Avatar";
 import CheckIcon from "@mui/icons-material/Check";
 import SendIcon from "@mui/icons-material/Send";
@@ -48,6 +60,7 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { WILAYAS } from "data/wilayas";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const categories = ["الكل", "مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
@@ -79,88 +92,649 @@ function calcPackages(qty, product) {
 }
 
 const mockCustomers = [
-  { id: 1, name: "شركة الرياض للمقاولات",   phone: "0555-123456", wilaya: "وهران",    address: "حي السعادة، شارع العلماء",          salesperson: "أحمد محمد",  ordersCount: 12, balance: 2520000, openingBalance: 500000 },
-  { id: 2, name: "مؤسسة البناء الحديث",      phone: "0561-789012", wilaya: "الجزائر", address: "المنطقة الصناعية، قطعة 14",         salesperson: "خالد عمر",   ordersCount: 7,  balance: 0,       openingBalance: 0 },
-  { id: 3, name: "شركة الإنشاءات المتحدة",  phone: "0536-345678", wilaya: "سطيف",    address: "حي النصر، الطريق الوطني 4",         salesperson: "محمد سعيد",  ordersCount: 18, balance: 15000000, openingBalance: 1000000 },
-  { id: 4, name: "مجموعة الخليج للتطوير",   phone: "0502-901234", wilaya: "قسنطينة", address: "شارع الاستقلال رقم 7",             salesperson: "أحمد محمد",  ordersCount: 4,  balance: 0,       openingBalance: 0 },
-  { id: 5, name: "شركة الأفق للتجارة",      phone: "0518-567890", wilaya: "وهران",   address: "حي الشهداء رقم 22",               salesperson: "يوسف علي",   ordersCount: 9,  balance: 4860000, openingBalance: 250000 },
+  {
+    id: 1,
+    name: "شركة الرياض للمقاولات",
+    phone: "0555-123456",
+    phone2: "0555-654321",
+    email: "riyadh@example.com",
+    wilaya: "وهران",
+    address: "حي السعادة، شارع العلماء",
+    salesperson: "أحمد محمد",
+    ordersCount: 12,
+    lastOrder: "2024-01-22",
+    totalAmount: 14520000,
+    paidAmount: 12000000,
+    openingBalance: 500000,
+    status: "active",
+    shippingRoute: "وهران - الساحل",
+    orders: [
+      { id: "ORD-001", date: "2024-01-22", amount: 2500000, paid: 2500000, status: "paid" },
+      { id: "ORD-002", date: "2024-01-15", amount: 4800000, paid: 2400000, status: "partial" },
+      { id: "ORD-003", date: "2024-01-08", amount: 3200000, paid: 0, status: "unpaid" },
+    ],
+    payments: [
+      { id: "PMT-001", date: "2024-01-22", amount: 2500000, type: "cash", direction: "in", receiver: "أحمد محمد", payer: "شركة الرياض" },
+      { id: "PMT-002", date: "2024-01-18", amount: 2400000, type: "bank", direction: "in", receiver: "خالد عمر", payer: "شركة الرياض" },
+      { id: "PMT-003", date: "2024-01-20", amount: 200000, type: "cash", direction: "out", receiver: "شركة الرياض", payer: "الإدارة" },
+    ],
+  },
+  {
+    id: 2,
+    name: "مؤسسة البناء الحديث",
+    phone: "0561-789012",
+    phone2: "",
+    email: "modern@example.com",
+    wilaya: "الجزائر",
+    address: "المنطقة الصناعية، قطعة 14",
+    salesperson: "خالد عمر",
+    ordersCount: 7,
+    lastOrder: "2024-01-16",
+    totalAmount: 8750000,
+    paidAmount: 8750000,
+    openingBalance: 0,
+    status: "active",
+    shippingRoute: "الجزائر - وسط",
+    orders: [
+      { id: "ORD-010", date: "2024-01-16", amount: 3500000, paid: 3500000, status: "paid" },
+      { id: "ORD-011", date: "2024-01-05", amount: 5250000, paid: 5250000, status: "paid" },
+    ],
+    payments: [],
+  },
+  {
+    id: 3,
+    name: "شركة الإنشاءات المتحدة",
+    phone: "0536-345678",
+    phone2: "0536-111222",
+    email: "united@example.com",
+    wilaya: "سطيف",
+    address: "حي النصر، الطريق الوطني 4",
+    salesperson: "محمد سعيد",
+    ordersCount: 18,
+    lastOrder: "2024-01-17",
+    totalAmount: 31200000,
+    paidAmount: 16200000,
+    openingBalance: 1000000,
+    status: "active",
+    shippingRoute: "سطيف - الشرق",
+    orders: [
+      { id: "ORD-020", date: "2024-01-17", amount: 10000000, paid: 0, status: "unpaid" },
+      { id: "ORD-021", date: "2024-01-10", amount: 10000000, paid: 5000000, status: "partial" },
+      { id: "ORD-022", date: "2024-01-03", amount: 11200000, paid: 11200000, status: "paid" },
+    ],
+    payments: [
+      { id: "PMT-010", date: "2024-01-17", amount: 5000000, type: "cheque", direction: "in", receiver: "محمد سعيد", payer: "شركة الإنشاءات" },
+    ],
+  },
+  {
+    id: 4,
+    name: "مجموعة الخليج للتطوير",
+    phone: "0502-901234",
+    phone2: "",
+    email: "gulf@example.com",
+    wilaya: "قسنطينة",
+    address: "شارع الاستقلال رقم 7",
+    salesperson: "أحمد محمد",
+    ordersCount: 4,
+    lastOrder: "2024-01-18",
+    totalAmount: 4280000,
+    paidAmount: 4280000,
+    openingBalance: 0,
+    status: "active",
+    shippingRoute: "قسنطينة - الشرق",
+    orders: [
+      { id: "ORD-030", date: "2024-01-18", amount: 4280000, paid: 4280000, status: "paid" },
+    ],
+    payments: [],
+  },
+  {
+    id: 5,
+    name: "شركة الأفق للتجارة",
+    phone: "0518-567890",
+    phone2: "",
+    email: "horizon@example.com",
+    wilaya: "وهران",
+    address: "حي الشهداء رقم 22",
+    salesperson: "يوسف علي",
+    ordersCount: 9,
+    lastOrder: "2024-01-18",
+    totalAmount: 9860000,
+    paidAmount: 5000000,
+    openingBalance: 250000,
+    status: "active",
+    shippingRoute: "وهران - الغرب",
+    orders: [
+      { id: "ORD-040", date: "2024-01-18", amount: 4860000, paid: 0, status: "unpaid" },
+      { id: "ORD-041", date: "2024-01-11", amount: 5000000, paid: 5000000, status: "paid" },
+    ],
+    payments: [
+      { id: "PMT-020", date: "2024-01-12", amount: 5000000, type: "bank", direction: "in", receiver: "يوسف علي", payer: "شركة الأفق" },
+    ],
+  },
 ];
 
-const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca"];
+const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
+const paymentTypeLabel = { cash: "نقدي", bank: "تحويل بنكي", cheque: "شيك" };
+const orderStatusColors = { paid: "#66BB6A", partial: "#fb8c00", unpaid: "#ea0606" };
+const orderStatusLabels = { paid: "مدفوعة", partial: "مدفوعة جزئياً", unpaid: "غير مدفوعة" };
 
-function CustomerInfoDialog({ customer, onClose }) {
-  if (!customer) return null;
-  const colorIdx = (customer.id - 1) % avatarColors.length;
-  const initials = customer.name.split(" ").slice(0, 2).map((w) => w[0]).join("");
-  const hasDebt = customer.balance > 0;
+const emptyNewCustomerForm = {
+  name: "",
+  phone: "",
+  phone2: "",
+  wilaya: "",
+  address: "",
+  email: "",
+  shippingRoute: "",
+  openingBalance: "",
+  salesperson: "",
+};
+
+function getInitials(name = "") {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("") || "ز";
+}
+
+function getCustomerBalance(customer, paidDelta = 0) {
+  if (!customer) return 0;
+
+  if (typeof customer.balance === "number") {
+    return Math.max(0, customer.balance - paidDelta);
+  }
+
+  return Math.max(
+    0,
+    (customer.totalAmount || 0) - ((customer.paidAmount || 0) + paidDelta) - (customer.openingBalance || 0)
+  );
+}
+
+function formatMillionAmount(amount) {
+  return `${((amount || 0) / 1000000).toFixed(2)}م دج`;
+}
+
+function AddPaymentDialog({ open, onClose, customer, onSave }) {
+  const [direction, setDirection] = useState("in");
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState("cash");
+  const [receiver, setReceiver] = useState("");
+  const [payer, setPayer] = useState(customer?.name || "");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+
+    setDirection("in");
+    setAmount("");
+    setType("cash");
+    setReceiver("");
+    setPayer(customer?.name || "");
+    setNotes("");
+  }, [customer, open]);
+
+  const handleSave = () => {
+    const numericAmount = Number(amount);
+
+    if (!numericAmount || numericAmount <= 0) return;
+
+    onSave({
+      id: `PMT-${Date.now()}`,
+      date: new Date().toISOString().slice(0, 10),
+      amount: numericAmount,
+      type,
+      direction,
+      receiver: receiver.trim() || (direction === "in" ? "البائع الحالي" : customer?.name || "الزبون"),
+      payer: payer.trim() || (direction === "in" ? customer?.name || "الزبون" : "الإدارة"),
+      notes: notes.trim(),
+    });
+    onClose();
+  };
 
   return (
-    <Dialog open={!!customer} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ pb: 1 }}>
-        <SoftBox display="flex" alignItems="center" justifyContent="space-between">
-          <SoftBox display="flex" alignItems="center" gap={1.5}>
-            <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 40, height: 40, fontWeight: "bold", fontSize: 14 }}>
-              {initials}
-            </Avatar>
-            <SoftBox>
-              <SoftTypography variant="button" fontWeight="bold" lineHeight={1.2} display="block">
-                {customer.name}
-              </SoftTypography>
-              <SoftTypography variant="caption" color="secondary">{customer.wilaya}</SoftTypography>
-            </SoftBox>
-          </SoftBox>
-          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+          <SoftTypography variant="h6" fontWeight="bold">تسجيل دفعة</SoftTypography>
+          <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
         </SoftBox>
       </DialogTitle>
       <DialogContent dividers>
-        {[
-          { icon: PhoneIcon,                value: customer.phone,       label: "الهاتف" },
-          { icon: LocationOnIcon,           value: customer.address,     label: "العنوان" },
-          { icon: PersonAddIcon,            value: customer.salesperson, label: "البائع" },
-          { icon: ShoppingCartIcon,         value: `${customer.ordersCount} طلبية`, label: "الطلبيات" },
-        ].map(({ icon: Icon, value, label }) => (
-          <SoftBox key={label} display="flex" alignItems="flex-start" gap={1.5} mb={1.5}>
-            <Icon fontSize="small" sx={{ color: "#8392ab", mt: 0.2, flexShrink: 0 }} />
-            <SoftBox>
-              <SoftTypography variant="caption" color="secondary">{label}</SoftTypography>
-              <SoftTypography variant="body2" fontWeight="medium" display="block">{value}</SoftTypography>
-            </SoftBox>
-          </SoftBox>
-        ))}
+        <SoftBox display="flex" gap={1} mb={2}>
+          <SoftButton
+            variant={direction === "in" ? "gradient" : "outlined"}
+            color="success"
+            size="small"
+            fullWidth
+            startIcon={<ArrowDownwardIcon />}
+            onClick={() => setDirection("in")}
+          >
+            استلام دفعة من الزبون
+          </SoftButton>
+          <SoftButton
+            variant={direction === "out" ? "gradient" : "outlined"}
+            color="error"
+            size="small"
+            fullWidth
+            startIcon={<ArrowUpwardIcon />}
+            onClick={() => setDirection("out")}
+          >
+            إرجاع مبلغ للزبون
+          </SoftButton>
+        </SoftBox>
 
-        {/* Balance */}
-        <SoftBox
-          p={1.5}
-          mt={1}
-          sx={{
-            background: hasDebt ? "#fff5f5" : "#f0fff4",
-            border: `1px solid ${hasDebt ? "#ea060633" : "#66BB6A33"}`,
-            borderRadius: 2,
-          }}
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              size="small"
+              label="المبلغ (دج)"
+              type="number"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>طريقة الدفع</InputLabel>
+              <Select value={type} label="طريقة الدفع" onChange={(event) => setType(event.target.value)}>
+                <MenuItem value="cash">نقدي</MenuItem>
+                <MenuItem value="bank">تحويل بنكي</MenuItem>
+                <MenuItem value="cheque">شيك</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              size="small"
+              label={direction === "in" ? "استلم بواسطة" : "دفع بواسطة (الإدارة)"}
+              value={receiver}
+              onChange={(event) => setReceiver(event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              size="small"
+              label={direction === "in" ? "من الزبون" : "استلمها الزبون"}
+              value={payer}
+              onChange={(event) => setPayer(event.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size="small"
+              label="ملاحظات"
+              multiline
+              rows={2}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+            />
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
+        <SoftButton
+          variant="gradient"
+          color={direction === "in" ? "success" : "error"}
+          size="small"
+          disabled={!Number(amount)}
+          onClick={handleSave}
         >
-          <SoftBox display="flex" alignItems="center" gap={1} mb={0.5}>
-            <AccountBalanceWalletIcon fontSize="small" sx={{ color: hasDebt ? "#ea0606" : "#66BB6A" }} />
-            <SoftTypography variant="caption" fontWeight="bold" color="secondary">الرصيد</SoftTypography>
-          </SoftBox>
-          {customer.openingBalance > 0 && (
-            <SoftBox display="flex" justifyContent="space-between">
-              <SoftTypography variant="caption" color="secondary">رصيد افتتاحي:</SoftTypography>
-              <SoftTypography variant="caption" fontWeight="bold">
-                {customer.openingBalance.toLocaleString()} دج
-              </SoftTypography>
+          {direction === "in" ? "تسجيل الاستلام" : "تسجيل الإرجاع"}
+        </SoftButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function CustomerInfoDialog({ customer, onClose }) {
+  const [tab, setTab] = useState(0);
+  const [paymentDialog, setPaymentDialog] = useState(false);
+  const [recordedPayments, setRecordedPayments] = useState([]);
+
+  useEffect(() => {
+    setTab(0);
+    setPaymentDialog(false);
+    setRecordedPayments([]);
+  }, [customer?.id]);
+
+  if (!customer) return null;
+
+  const colorIdx = customer.id % avatarColors.length;
+  const payments = [...(customer.payments || []), ...recordedPayments];
+  const paidDelta = recordedPayments.reduce(
+    (sum, payment) => sum + (payment.direction === "in" ? payment.amount : -payment.amount),
+    0
+  );
+  const totalAmount = customer.totalAmount || 0;
+  const paidAmount = (customer.paidAmount || 0) + paidDelta;
+  const openingBalance = customer.openingBalance || 0;
+  const balance = getCustomerBalance(customer, paidDelta);
+  const orders = customer.orders || [];
+
+  return (
+    <Dialog open={!!customer} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <SoftBox display="flex" alignItems="center" justifyContent="space-between">
+          <SoftBox display="flex" alignItems="center" gap={2}>
+            <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 48, height: 48, fontWeight: "bold" }}>
+              {getInitials(customer.name)}
+            </Avatar>
+            <SoftBox>
+              <SoftTypography variant="h6" fontWeight="bold">{customer.name}</SoftTypography>
+              <SoftBox display="flex" gap={0.5} alignItems="center">
+                <SoftBadge
+                  variant="gradient"
+                  color={customer.status === "active" ? "success" : "secondary"}
+                  size="xs"
+                  badgeContent={customer.status === "active" ? "نشط" : "غير نشط"}
+                  container
+                />
+                <SoftTypography variant="caption" color="secondary">| {customer.wilaya || "بدون ولاية"}</SoftTypography>
+              </SoftBox>
             </SoftBox>
-          )}
-          <SoftBox display="flex" justifyContent="space-between" mt={0.3}>
-            <SoftTypography variant="caption" color="secondary">الرصيد الحالي:</SoftTypography>
-            <SoftTypography variant="button" fontWeight="bold" sx={{ color: hasDebt ? "#ea0606" : "#66BB6A" }}>
-              {hasDebt ? `${customer.balance.toLocaleString()} دج` : "لا يوجد رصيد"}
+          </SoftBox>
+          <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
+        </SoftBox>
+      </DialogTitle>
+
+      <SoftBox
+        sx={{ px: 3, py: 1.5, background: balance > 0 ? "#fff5f5" : "#f0fff4", borderBottom: "1px solid #eee" }}
+        display="flex"
+        gap={4}
+        flexWrap="wrap"
+      >
+        {[
+          { label: "إجمالي الطلبيات", value: formatMillionAmount(totalAmount), color: "#344767" },
+          { label: "إجمالي المدفوع", value: formatMillionAmount(paidAmount), color: "#66BB6A" },
+          { label: "الرصيد الافتتاحي", value: formatMillionAmount(openingBalance), color: "#17c1e8" },
+          { label: "الرصيد المتبقي", value: formatMillionAmount(balance), color: balance > 0 ? "#ea0606" : "#66BB6A" },
+        ].map((item) => (
+          <SoftBox key={item.label} textAlign="center">
+            <SoftTypography variant="caption" color="secondary">{item.label}</SoftTypography>
+            <SoftTypography variant="button" fontWeight="bold" display="block" sx={{ color: item.color }}>
+              {item.value}
             </SoftTypography>
           </SoftBox>
-        </SoftBox>
+        ))}
+      </SoftBox>
+
+      <SoftBox px={2} borderBottom="1px solid #eee">
+        <Tabs
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          textColor="inherit"
+          TabIndicatorProps={{ style: { background: "#17c1e8" } }}
+        >
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">البيانات</SoftTypography>} />
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">سجل الطلبيات</SoftTypography>} />
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">سجل الدفعات</SoftTypography>} />
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">الشحن</SoftTypography>} />
+        </Tabs>
+      </SoftBox>
+
+      <DialogContent sx={{ p: 2, minHeight: 300 }}>
+        {tab === 0 && (
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              {[
+                { label: "الهاتف الرئيسي", value: customer.phone || "—" },
+                { label: "الهاتف الثاني", value: customer.phone2 || "—" },
+                { label: "الولاية", value: customer.wilaya || "—" },
+                { label: "العنوان", value: customer.address || "—" },
+                { label: "البريد الإلكتروني", value: customer.email || "—" },
+              ].map((row) => (
+                <SoftBox key={row.label} mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">{row.label}</SoftTypography>
+                  <SoftTypography variant="body2" color="text">{row.value}</SoftTypography>
+                </SoftBox>
+              ))}
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              {[
+                { label: "البائع المسؤول", value: customer.salesperson || "—" },
+                { label: "مسار الشحن", value: customer.shippingRoute || "—" },
+                { label: "عدد الطلبيات", value: `${customer.ordersCount || 0} طلبية` },
+                { label: "آخر طلبية", value: customer.lastOrder || "—" },
+                { label: "الرصيد الافتتاحي", value: `${openingBalance.toLocaleString()} دج` },
+              ].map((row) => (
+                <SoftBox key={row.label} mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">{row.label}</SoftTypography>
+                  <SoftTypography variant="body2" fontWeight="bold" color="text">{row.value}</SoftTypography>
+                </SoftBox>
+              ))}
+            </Grid>
+          </Grid>
+        )}
+
+        {tab === 1 && (
+          <SoftBox>
+            <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <SoftTypography variant="caption" color="text">{orders.length} طلبية</SoftTypography>
+              <SoftBox display="flex" gap={1}>
+                <SoftButton variant="outlined" color="secondary" size="small" startIcon={<PrintIcon />}>
+                  طباعة كشف الحساب
+                </SoftButton>
+                <SoftButton
+                  variant="outlined"
+                  color="success"
+                  size="small"
+                  startIcon={<WhatsAppIcon />}
+                  sx={{ color: "#25D366", borderColor: "#25D366" }}
+                >
+                  واتساب PDF
+                </SoftButton>
+              </SoftBox>
+            </SoftBox>
+            {orders.length === 0 && (
+              <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
+                لا توجد طلبيات مسجلة
+              </SoftTypography>
+            )}
+            {orders.map((order) => {
+              const remaining = order.amount - order.paid;
+
+              return (
+                <SoftBox
+                  key={order.id}
+                  mb={1.5}
+                  p={1.5}
+                  sx={{
+                    border: `2px solid ${orderStatusColors[order.status]}33`,
+                    borderRight: `4px solid ${orderStatusColors[order.status]}`,
+                    borderRadius: 1.5,
+                    background:
+                      order.status === "unpaid" ? "#fff5f5" : order.status === "partial" ? "#fffbeb" : "#f0fff4",
+                  }}
+                >
+                  <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                    <SoftBox>
+                      <SoftTypography variant="caption" fontWeight="bold">{order.id}</SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block">{order.date}</SoftTypography>
+                    </SoftBox>
+                    <SoftBox textAlign="right">
+                      <SoftTypography variant="caption" fontWeight="bold">
+                        {order.amount.toLocaleString()} دج
+                      </SoftTypography>
+                      {remaining > 0 && (
+                        <SoftTypography variant="caption" color="error" display="block">
+                          متبقي: {remaining.toLocaleString()} دج
+                        </SoftTypography>
+                      )}
+                    </SoftBox>
+                    <SoftBadge
+                      variant="gradient"
+                      color={order.status === "paid" ? "success" : order.status === "partial" ? "warning" : "error"}
+                      size="xs"
+                      badgeContent={orderStatusLabels[order.status]}
+                      container
+                    />
+                  </SoftBox>
+                </SoftBox>
+              );
+            })}
+          </SoftBox>
+        )}
+
+        {tab === 2 && (
+          <SoftBox>
+            <SoftBox display="flex" justifyContent="space-between" mb={2}>
+              <SoftTypography variant="caption" color="text">{payments.length} دفعة مسجلة</SoftTypography>
+              <SoftButton
+                variant="gradient"
+                color="info"
+                size="small"
+                startIcon={<PaymentIcon />}
+                onClick={() => setPaymentDialog(true)}
+              >
+                تسجيل دفعة
+              </SoftButton>
+            </SoftBox>
+            {payments.length === 0 && (
+              <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
+                لا توجد دفعات مسجلة
+              </SoftTypography>
+            )}
+            {payments.map((payment) => (
+              <SoftBox
+                key={payment.id}
+                mb={1.5}
+                p={1.5}
+                sx={{
+                  border: `1px solid ${payment.direction === "in" ? "#66BB6A44" : "#ea060644"}`,
+                  borderRight: `4px solid ${payment.direction === "in" ? "#66BB6A" : "#ea0606"}`,
+                  borderRadius: 1.5,
+                  background: payment.direction === "in" ? "#f0fff4" : "#fff5f5",
+                }}
+              >
+                <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                  <SoftBox>
+                    <SoftBox display="flex" alignItems="center" gap={0.5}>
+                      {payment.direction === "in" ? (
+                        <ArrowDownwardIcon fontSize="small" sx={{ color: "#66BB6A" }} />
+                      ) : (
+                        <ArrowUpwardIcon fontSize="small" sx={{ color: "#ea0606" }} />
+                      )}
+                      <SoftTypography variant="caption" fontWeight="bold">
+                        {payment.direction === "in" ? "استلام" : "إرجاع"} - {paymentTypeLabel[payment.type]}
+                      </SoftTypography>
+                    </SoftBox>
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      {payment.date} | استلم: {payment.receiver} | من: {payment.payer}
+                    </SoftTypography>
+                    {payment.notes && (
+                      <SoftTypography variant="caption" color="secondary" display="block">
+                        {payment.notes}
+                      </SoftTypography>
+                    )}
+                  </SoftBox>
+                  <SoftTypography
+                    variant="button"
+                    fontWeight="bold"
+                    sx={{ color: payment.direction === "in" ? "#66BB6A" : "#ea0606" }}
+                  >
+                    {payment.direction === "in" ? "+" : "-"}{payment.amount.toLocaleString()} دج
+                  </SoftTypography>
+                </SoftBox>
+              </SoftBox>
+            ))}
+          </SoftBox>
+        )}
+
+        {tab === 3 && (
+          <SoftBox>
+            <Grid container spacing={2} mb={2}>
+              <Grid item xs={12} sm={6}>
+                <SoftBox mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">مسار الشحن</SoftTypography>
+                  <SoftTypography variant="body2" color="text">{customer.shippingRoute || "—"}</SoftTypography>
+                </SoftBox>
+                <SoftBox mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">الولاية</SoftTypography>
+                  <SoftTypography variant="body2" color="text">{customer.wilaya || "—"}</SoftTypography>
+                </SoftBox>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <SoftBox mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">زبون الفواتير (تلقائي)</SoftTypography>
+                  <SoftTypography variant="body2" color="text">
+                    {customer.wilaya ? `موزع ${customer.wilaya} الرئيسي` : "—"}
+                  </SoftTypography>
+                </SoftBox>
+                <SoftBox mb={1.5}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">العنوان</SoftTypography>
+                  <SoftTypography variant="body2" color="text">{customer.address || "—"}</SoftTypography>
+                </SoftBox>
+              </Grid>
+            </Grid>
+            <Divider />
+            <SoftBox mt={2}>
+              <SoftTypography variant="caption" color="secondary" fontWeight="bold" display="block" mb={1}>
+                سجل الشحنات
+              </SoftTypography>
+              {orders.slice(0, 2).map((order, index) => (
+                <SoftBox
+                  key={`${order.id}-shipping`}
+                  mb={1}
+                  p={1.5}
+                  sx={{ background: "#f8f9fa", borderRadius: 1.5, border: "1px solid #e9ecef" }}
+                >
+                  <SoftBox display="flex" justifyContent="space-between">
+                    <SoftBox>
+                      <SoftTypography variant="caption" fontWeight="bold">{`FTR-${order.id}`}</SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block">
+                        {order.date} | السائق: {index === 0 ? "حمزة بلقاسم" : "كريم بوزيد"}
+                      </SoftTypography>
+                    </SoftBox>
+                    <SoftBadge
+                      variant="gradient"
+                      color={index === 0 ? "info" : "success"}
+                      size="xs"
+                      badgeContent={index === 0 ? "في الطريق" : "مسلّمة"}
+                      container
+                    />
+                  </SoftBox>
+                </SoftBox>
+              ))}
+              {orders.length === 0 && (
+                <SoftTypography variant="body2" color="secondary" textAlign="center" py={3}>
+                  لا توجد شحنات مرتبطة بهذا الزبون
+                </SoftTypography>
+              )}
+            </SoftBox>
+          </SoftBox>
+        )}
       </DialogContent>
-      <DialogActions sx={{ p: 1.5 }}>
+
+      <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إغلاق</SoftButton>
+        <SoftButton variant="outlined" color="info" size="small" startIcon={<EditIcon />}>تعديل</SoftButton>
+        <SoftButton
+          variant="outlined"
+          color="success"
+          size="small"
+          startIcon={<PaymentIcon />}
+          onClick={() => setPaymentDialog(true)}
+        >
+          دفعة
+        </SoftButton>
+        <SoftButton variant="gradient" color="info" size="small" startIcon={<ShoppingCartIcon />} onClick={onClose}>
+          طلبية جديدة
+        </SoftButton>
       </DialogActions>
+
+      <AddPaymentDialog
+        open={paymentDialog}
+        onClose={() => setPaymentDialog(false)}
+        customer={customer}
+        onSave={(payment) => setRecordedPayments((current) => [...current, payment])}
+      />
     </Dialog>
   );
 }
