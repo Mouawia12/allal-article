@@ -12,6 +12,8 @@ import SignUp from "layouts/authentication/sign-up";
 import Orders from "layouts/orders";
 import OrderDetail from "layouts/orders/OrderDetail";
 import NewOrder from "layouts/orders/NewOrder";
+import AdminNewOrder from "layouts/orders/AdminNewOrder";
+import NewOrderRouter from "layouts/orders/NewOrderRouter";
 import Products from "layouts/products";
 import ProductDetail from "layouts/products/ProductDetail";
 import ProductForm from "layouts/products/ProductForm";
@@ -21,6 +23,9 @@ import AuditLogs from "layouts/audit-logs";
 import Reports from "layouts/reports";
 import Users from "layouts/users";
 import Settings from "layouts/settings";
+import Purchases from "layouts/purchases";
+import RoadInvoices from "layouts/road-invoices";
+import RoadInvoiceForm from "layouts/road-invoices/RoadInvoiceForm";
 
 // Soft UI Dashboard React icons
 import Shop from "examples/Icons/Shop";
@@ -79,6 +84,24 @@ const routes = [
     route: "/inventory",
     icon: <Office size="12px" />,
     component: <Inventory />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "المشتريات",
+    key: "purchases",
+    route: "/purchases",
+    icon: <CreditCard size="12px" />,
+    component: <Purchases />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "فواتير الطريق",
+    key: "road-invoices",
+    route: "/road-invoices",
+    icon: <Document size="12px" />,
+    component: <RoadInvoices />,
     noCollapse: true,
   },
   {
@@ -152,6 +175,21 @@ const routes = [
 
   // ─── Hidden routes (no sidebar) ─────────────────────────
   {
+    key: "road-invoice-new",
+    route: "/road-invoices/new",
+    component: <RoadInvoiceForm />,
+  },
+  {
+    key: "road-invoice-from-orders",
+    route: "/road-invoices/from-orders",
+    component: <RoadInvoiceForm />,
+  },
+  {
+    key: "road-invoice-detail",
+    route: "/road-invoices/:id",
+    component: <RoadInvoiceForm />,
+  },
+  {
     key: "order-detail",
     route: "/orders/:id",
     component: <OrderDetail />,
@@ -159,7 +197,17 @@ const routes = [
   {
     key: "new-order",
     route: "/orders/new",
+    component: <NewOrderRouter />,
+  },
+  {
+    key: "new-order-seller",
+    route: "/orders/seller/new",
     component: <NewOrder />,
+  },
+  {
+    key: "new-order-admin",
+    route: "/orders/admin/new",
+    component: <AdminNewOrder />,
   },
   {
     key: "product-detail",

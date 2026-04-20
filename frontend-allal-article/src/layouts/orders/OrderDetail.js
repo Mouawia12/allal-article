@@ -22,6 +22,12 @@ import PersonIcon from "@mui/icons-material/Person";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 import HistoryIcon from "@mui/icons-material/History";
+import DescriptionIcon from "@mui/icons-material/Description";
+import AssignmentReturnIcon from "@mui/icons-material/AssignmentReturn";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -126,6 +132,7 @@ function OrderDetail() {
   const [confirmDialog, setConfirmDialog] = useState(null); // null | "approve" | "reject"
   const [adminNote, setAdminNote] = useState("");
   const [orderStatus, setOrderStatus] = useState(order.status);
+  const [returnDialog, setReturnDialog] = useState(false);
 
   const sc = statusConfig[orderStatus] || { label: orderStatus, color: "secondary" };
 
@@ -164,20 +171,30 @@ function OrderDetail() {
           </SoftBox>
           {/* Action Buttons */}
           {orderStatus === "under_review" && (
-            <SoftBox display="flex" gap={1}>
+            <SoftBox display="flex" gap={1} flexWrap="wrap">
               <SoftButton
-                variant="gradient"
-                color="success"
-                size="small"
+                variant="gradient" color="success" size="small"
                 startIcon={<CheckCircleIcon />}
                 onClick={() => setConfirmDialog("approve")}
               >
                 تأكيد الطلبية
               </SoftButton>
               <SoftButton
-                variant="outlined"
-                color="error"
-                size="small"
+                variant="outlined" color="info" size="small"
+                startIcon={<DescriptionIcon />}
+                onClick={() => navigate("/road-invoices/new")}
+              >
+                تحويل إلى فاتورة طريق
+              </SoftButton>
+              <SoftButton
+                variant="outlined" color="warning" size="small"
+                startIcon={<AssignmentReturnIcon />}
+                onClick={() => setReturnDialog(true)}
+              >
+                إنشاء مرتجع
+              </SoftButton>
+              <SoftButton
+                variant="outlined" color="error" size="small"
                 startIcon={<CancelIcon />}
                 onClick={() => setConfirmDialog("reject")}
               >
@@ -189,14 +206,25 @@ function OrderDetail() {
             </SoftBox>
           )}
           {orderStatus === "confirmed" && (
-            <SoftButton
-              variant="gradient"
-              color="info"
-              size="small"
-              startIcon={<LocalShippingIcon />}
-            >
-              تسجيل الشحن
-            </SoftButton>
+            <SoftBox display="flex" gap={1} flexWrap="wrap">
+              <SoftButton variant="gradient" color="info" size="small" startIcon={<LocalShippingIcon />}>
+                تسجيل الشحن
+              </SoftButton>
+              <SoftButton
+                variant="outlined" color="info" size="small"
+                startIcon={<DescriptionIcon />}
+                onClick={() => navigate("/road-invoices/new")}
+              >
+                تحويل إلى فاتورة طريق
+              </SoftButton>
+              <SoftButton
+                variant="outlined" color="warning" size="small"
+                startIcon={<AssignmentReturnIcon />}
+                onClick={() => setReturnDialog(true)}
+              >
+                إنشاء مرتجع
+              </SoftButton>
+            </SoftBox>
           )}
         </SoftBox>
 
@@ -401,6 +429,85 @@ function OrderDetail() {
           </Grid>
         </Grid>
       </SoftBox>
+
+      {/* ── Return Dialog ── */}
+      <Dialog open={returnDialog} onClose={() => setReturnDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+            <SoftTypography variant="h6" fontWeight="bold">إنشاء مرتجع — {order.id}</SoftTypography>
+          </SoftBox>
+        </DialogTitle>
+        <DialogContent dividers>
+          <SoftTypography variant="body2" color="text" mb={2}>
+            حدد كميات المرتجع لكل صنف. لا يمكن إدخال كمية أكبر من الكمية المشحونة.
+          </SoftTypography>
+          <SoftBox sx={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#f8f9fa" }}>
+                  {["الصنف", "الكمية المشحونة", "كمية المرتجع"].map((h) => (
+                    <th key={h} style={{ padding: "8px 12px", textAlign: "right" }}>
+                      <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {order.lines.filter(l => l.shippedQty > 0 || l.approvedQty > 0).map((line) => (
+                  <tr key={line.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                    <td style={{ padding: "8px 12px" }}>
+                      <SoftTypography variant="caption" fontWeight="bold">{line.product}</SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block">{line.code}</SoftTypography>
+                    </td>
+                    <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                      <SoftTypography variant="caption" fontWeight="bold">{line.approvedQty}</SoftTypography>
+                    </td>
+                    <td style={{ padding: "8px 12px" }}>
+                      <TextField
+                        type="number" size="small"
+                        defaultValue={0}
+                        inputProps={{ min: 0, max: line.approvedQty, style: { padding: "4px 8px", width: 80 } }}
+                        helperText={`الحد الأقصى: ${line.approvedQty}`}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </SoftBox>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>السائق الذي شحن المرتجع</InputLabel>
+                <Select defaultValue="" label="السائق الذي شحن المرتجع">
+                  {["حمزة بلقاسم", "كريم بوزيد", "يوسف منصوري", "عمر زياني"].map((d) => (
+                    <MenuItem key={d} value={d}>{d}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>من استلمه في الإدارة</InputLabel>
+                <Select defaultValue="" label="من استلمه في الإدارة">
+                  {["أحمد محمد", "خالد عمر", "محمد سعيد", "يوسف علي"].map((e) => (
+                    <MenuItem key={e} value={e}>{e}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" label="ملاحظات المرتجع" multiline rows={2} />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setReturnDialog(false)}>إلغاء</SoftButton>
+          <SoftButton variant="gradient" color="warning" size="small" onClick={() => setReturnDialog(false)}>
+            تسجيل المرتجع
+          </SoftButton>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Confirm Dialog ── */}
       <Dialog open={!!confirmDialog} onClose={() => setConfirmDialog(null)} maxWidth="sm" fullWidth>

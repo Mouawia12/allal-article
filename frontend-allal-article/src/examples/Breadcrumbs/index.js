@@ -27,9 +27,31 @@ import Icon from "components/AppIcon";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 
+function normalizeBreadcrumbLabel(value) {
+  if (typeof value === "string") {
+    return value.replace(/-/g, " ");
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeBreadcrumbLabel(item)).filter(Boolean).join(" ");
+  }
+
+  return "";
+}
+
 function Breadcrumbs({ icon, title, route, light }) {
-  const routes = route.slice(0, -1);
-  const normalizedTitle = title.replace(/-/g, " ");
+  const routeSegments = Array.isArray(route)
+    ? route.filter((segment) => typeof segment === "string" || typeof segment === "number")
+    : typeof route === "string"
+      ? route.split("/").filter(Boolean)
+      : [];
+  const routes = routeSegments.slice(0, -1);
+  const fallbackTitle = routeSegments.length > 0 ? routeSegments[routeSegments.length - 1] : "";
+  const normalizedTitle = normalizeBreadcrumbLabel(title) || normalizeBreadcrumbLabel(fallbackTitle);
 
   return (
     <SoftBox mr={{ xs: 0, xl: 8 }}>
@@ -62,7 +84,7 @@ function Breadcrumbs({ icon, title, route, light }) {
               opacity={light ? 0.8 : 0.5}
               sx={{ lineHeight: 0 }}
             >
-              {el}
+              {normalizeBreadcrumbLabel(el)}
             </SoftTypography>
           </Link>
         ))}

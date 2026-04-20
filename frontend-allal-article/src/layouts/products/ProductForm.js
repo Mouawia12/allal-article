@@ -218,12 +218,15 @@ function ProductForm() {
   const isEdit = !!id;
 
   const [form, setForm] = useState({
-    name: isEdit ? "برغي M10 × 50mm" : "",
-    code: isEdit ? "BRG-010-50" : "",
-    category: isEdit ? "مسامير وبراغي" : "",
-    unit: isEdit ? "قطعة" : "",
-    description: isEdit ? "برغي فولاذي عالي الجودة مقاس M10 طول 50mm." : "",
-    initialStock: isEdit ? "850" : "0",
+    name:            isEdit ? "برغي M10 × 50mm" : "",
+    code:            isEdit ? "BRG-010-50" : "",
+    category:        isEdit ? "مسامير وبراغي" : "",
+    unit:            isEdit ? "قطعة" : "",
+    description:     isEdit ? "برغي فولاذي عالي الجودة مقاس M10 طول 50mm." : "",
+    initialStock:    isEdit ? "850" : "0",
+    weightPerUnit:   isEdit ? "0.05" : "",    // وزن القطعة الواحدة (كغ)
+    unitsPerPackage: isEdit ? "100" : "",     // عدد القطع في الكرطون/العلبة
+    packageUnit:     isEdit ? "كرطون" : "كرطون", // اسم وحدة التعليب
   });
 
   const [images, setImages] = useState(
@@ -336,6 +339,78 @@ function ProductForm() {
                   />
                 </Grid>
               </Grid>
+            </Card>
+
+            {/* Weight & Packaging */}
+            <Card sx={{ p: 3, mb: 3 }}>
+              <SoftTypography variant="h6" fontWeight="bold" mb={0.5}>
+                الوزن والتعليب
+              </SoftTypography>
+              <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
+                هذه البيانات تُستخدم لحساب وزن الطلبية وعدد الكراطين/العلب تلقائياً في السلة وفواتير الطريق
+              </SoftTypography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="وزن القطعة الواحدة (كغ)"
+                    value={form.weightPerUnit}
+                    onChange={handleChange("weightPerUnit")}
+                    size="small"
+                    inputProps={{ min: 0, step: 0.001 }}
+                    placeholder="مثال: 0.05"
+                    helperText="وزن وحدة قياس واحدة بالكيلوغرام"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="عدد القطع في الكرطون / العلبة"
+                    value={form.unitsPerPackage}
+                    onChange={handleChange("unitsPerPackage")}
+                    size="small"
+                    inputProps={{ min: 1, step: 1 }}
+                    placeholder="مثال: 100"
+                    helperText="كم قطعة في كل وحدة تعليب"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    select
+                    label="اسم وحدة التعليب"
+                    value={form.packageUnit}
+                    onChange={handleChange("packageUnit")}
+                    size="small"
+                    helperText="العلبة، الكرطون، الساشيه..."
+                  >
+                    {["كرطون", "علبة", "ساشيه", "كيس", "رزمة", "طرد"].map((p) => (
+                      <MenuItem key={p} value={p}>{p}</MenuItem>
+                    ))}
+                  </TextField>
+                </Grid>
+              </Grid>
+
+              {/* Live preview */}
+              {form.weightPerUnit && form.unitsPerPackage && Number(form.weightPerUnit) > 0 && Number(form.unitsPerPackage) > 0 && (
+                <SoftBox mt={2} p={1.5} sx={{ background: "#f0f7ff", borderRadius: 2, border: "1px solid #17c1e822" }}>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold" display="block" mb={0.5}>
+                    مثال حي:
+                  </SoftTypography>
+                  <SoftTypography variant="caption" color="text">
+                    ▸ طلب <strong>200 {form.unit || "قطعة"}</strong> يعني{" "}
+                    <strong style={{ color: "#17c1e8" }}>
+                      {Math.ceil(200 / Number(form.unitsPerPackage))} {form.packageUnit}
+                    </strong>{" "}
+                    و وزن إجمالي{" "}
+                    <strong style={{ color: "#fb8c00" }}>
+                      {(200 * Number(form.weightPerUnit)).toFixed(2)} كغ
+                    </strong>
+                  </SoftTypography>
+                </SoftBox>
+              )}
             </Card>
 
             {/* Stock */}

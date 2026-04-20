@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -16,6 +16,8 @@ import Autocomplete from "@mui/material/Autocomplete";
 import Divider from "@mui/material/Divider";
 import Badge from "@mui/material/Badge";
 import Tooltip from "@mui/material/Tooltip";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
@@ -26,10 +28,18 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import CloseIcon from "@mui/icons-material/Close";
+import PhoneIcon from "@mui/icons-material/Phone";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import Avatar from "@mui/material/Avatar";
 import CheckIcon from "@mui/icons-material/Check";
 import SendIcon from "@mui/icons-material/Send";
 import SaveIcon from "@mui/icons-material/Save";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
+import GridViewIcon from "@mui/icons-material/GridView";
+import ListIcon from "@mui/icons-material/List";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -42,47 +52,181 @@ import Footer from "examples/Footer";
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const categories = ["الكل", "مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
 
+// weightPerUnit: وزن وحدة قياس واحدة (كغ) | unitsPerPackage: عدد القطع في كرطون/علبة | packageUnit: اسم وحدة التعليب
 const mockProducts = [
-  { id: 1, name: "برغي M10 × 50mm",       code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", color: "#FF6B6B" },
-  { id: 2, name: "برغي M8 × 30mm",        code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", color: "#FF6B6B" },
-  { id: 3, name: "صامولة M10",             code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", color: "#FF6B6B" },
-  { id: 4, name: "مفتاح ربط 17mm",        code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", color: "#4ECDC4" },
-  { id: 5, name: "مفتاح ربط 22mm",        code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", color: "#4ECDC4" },
-  { id: 6, name: "كماشة عالمية",           code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", color: "#4ECDC4" },
-  { id: 7, name: "كابل كهربائي 2.5mm",    code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  color: "#FFE66D" },
-  { id: 8, name: "كابل كهربائي 1.5mm",    code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  color: "#FFE66D" },
-  { id: 9, name: "شريط عازل كهربائي",     code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  color: "#FFE66D" },
-  { id: 10, name: "أنبوب PVC 2 بوصة",    code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF" },
-  { id: 11, name: "أنبوب PVC 1 بوصة",    code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF" },
-  { id: 12, name: "صنبور مياه",            code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", color: "#A8E6CF" },
-  { id: 13, name: "دهان أبيض 4L",         code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", color: "#DDA0DD" },
-  { id: 14, name: "دهان رمادي 4L",        code: "DHN-GRY-4",  category: "دهانات",         stock: 60,   unit: "علبة", color: "#DDA0DD" },
-  { id: 15, name: "شريط عازل حراري",      code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  color: "#B0C4DE" },
-  { id: 16, name: "لوح خشبي 2×4",        code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", color: "#F4A460" },
+  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.05,  unitsPerPackage: 100, packageUnit: "كرطون" },
+  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.03,  unitsPerPackage: 200, packageUnit: "كرطون" },
+  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.02,  unitsPerPackage: 500, packageUnit: "كيس"   },
+  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.35,  unitsPerPackage: 12,  packageUnit: "علبة"  },
+  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.5,   unitsPerPackage: 12,  packageUnit: "علبة"  },
+  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.4,   unitsPerPackage: 6,   packageUnit: "علبة"  },
+  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.3,   unitsPerPackage: 100, packageUnit: "رزمة"  },
+  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.2,   unitsPerPackage: 100, packageUnit: "رزمة"  },
+  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  color: "#FFE66D", weightPerUnit: 0.1,   unitsPerPackage: 20,  packageUnit: "كرطون" },
+  { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد"   },
+  { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد"   },
+  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", color: "#A8E6CF", weightPerUnit: 0.45,  unitsPerPackage: 10,  packageUnit: "علبة"  },
+  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون" },
+  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         stock: 60,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون" },
+  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  color: "#B0C4DE", weightPerUnit: 0.15,  unitsPerPackage: 24,  packageUnit: "كرطون" },
+  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", color: "#F4A460", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة"  },
 ];
+
+// حساب عدد الكراطين/العلب من الكمية
+function calcPackages(qty, product) {
+  if (!product.unitsPerPackage || product.unitsPerPackage <= 0) return null;
+  return Math.ceil(qty / product.unitsPerPackage);
+}
 
 const mockCustomers = [
-  { id: 1, name: "شركة الرياض للمقاولات" },
-  { id: 2, name: "مؤسسة البناء الحديث" },
-  { id: 3, name: "شركة الإنشاءات المتحدة" },
-  { id: 4, name: "مجموعة الخليج للتطوير" },
-  { id: 5, name: "شركة الأفق للتجارة" },
+  { id: 1, name: "شركة الرياض للمقاولات",   phone: "0555-123456", wilaya: "وهران",    address: "حي السعادة، شارع العلماء",          salesperson: "أحمد محمد",  ordersCount: 12, balance: 2520000, openingBalance: 500000 },
+  { id: 2, name: "مؤسسة البناء الحديث",      phone: "0561-789012", wilaya: "الجزائر", address: "المنطقة الصناعية، قطعة 14",         salesperson: "خالد عمر",   ordersCount: 7,  balance: 0,       openingBalance: 0 },
+  { id: 3, name: "شركة الإنشاءات المتحدة",  phone: "0536-345678", wilaya: "سطيف",    address: "حي النصر، الطريق الوطني 4",         salesperson: "محمد سعيد",  ordersCount: 18, balance: 15000000, openingBalance: 1000000 },
+  { id: 4, name: "مجموعة الخليج للتطوير",   phone: "0502-901234", wilaya: "قسنطينة", address: "شارع الاستقلال رقم 7",             salesperson: "أحمد محمد",  ordersCount: 4,  balance: 0,       openingBalance: 0 },
+  { id: 5, name: "شركة الأفق للتجارة",      phone: "0518-567890", wilaya: "وهران",   address: "حي الشهداء رقم 22",               salesperson: "يوسف علي",   ordersCount: 9,  balance: 4860000, openingBalance: 250000 },
 ];
 
+const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca"];
+
+function CustomerInfoDialog({ customer, onClose }) {
+  if (!customer) return null;
+  const colorIdx = (customer.id - 1) % avatarColors.length;
+  const initials = customer.name.split(" ").slice(0, 2).map((w) => w[0]).join("");
+  const hasDebt = customer.balance > 0;
+
+  return (
+    <Dialog open={!!customer} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ pb: 1 }}>
+        <SoftBox display="flex" alignItems="center" justifyContent="space-between">
+          <SoftBox display="flex" alignItems="center" gap={1.5}>
+            <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 40, height: 40, fontWeight: "bold", fontSize: 14 }}>
+              {initials}
+            </Avatar>
+            <SoftBox>
+              <SoftTypography variant="button" fontWeight="bold" lineHeight={1.2} display="block">
+                {customer.name}
+              </SoftTypography>
+              <SoftTypography variant="caption" color="secondary">{customer.wilaya}</SoftTypography>
+            </SoftBox>
+          </SoftBox>
+          <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        </SoftBox>
+      </DialogTitle>
+      <DialogContent dividers>
+        {[
+          { icon: PhoneIcon,                value: customer.phone,       label: "الهاتف" },
+          { icon: LocationOnIcon,           value: customer.address,     label: "العنوان" },
+          { icon: PersonAddIcon,            value: customer.salesperson, label: "البائع" },
+          { icon: ShoppingCartIcon,         value: `${customer.ordersCount} طلبية`, label: "الطلبيات" },
+        ].map(({ icon: Icon, value, label }) => (
+          <SoftBox key={label} display="flex" alignItems="flex-start" gap={1.5} mb={1.5}>
+            <Icon fontSize="small" sx={{ color: "#8392ab", mt: 0.2, flexShrink: 0 }} />
+            <SoftBox>
+              <SoftTypography variant="caption" color="secondary">{label}</SoftTypography>
+              <SoftTypography variant="body2" fontWeight="medium" display="block">{value}</SoftTypography>
+            </SoftBox>
+          </SoftBox>
+        ))}
+
+        {/* Balance */}
+        <SoftBox
+          p={1.5}
+          mt={1}
+          sx={{
+            background: hasDebt ? "#fff5f5" : "#f0fff4",
+            border: `1px solid ${hasDebt ? "#ea060633" : "#66BB6A33"}`,
+            borderRadius: 2,
+          }}
+        >
+          <SoftBox display="flex" alignItems="center" gap={1} mb={0.5}>
+            <AccountBalanceWalletIcon fontSize="small" sx={{ color: hasDebt ? "#ea0606" : "#66BB6A" }} />
+            <SoftTypography variant="caption" fontWeight="bold" color="secondary">الرصيد</SoftTypography>
+          </SoftBox>
+          {customer.openingBalance > 0 && (
+            <SoftBox display="flex" justifyContent="space-between">
+              <SoftTypography variant="caption" color="secondary">رصيد افتتاحي:</SoftTypography>
+              <SoftTypography variant="caption" fontWeight="bold">
+                {customer.openingBalance.toLocaleString()} دج
+              </SoftTypography>
+            </SoftBox>
+          )}
+          <SoftBox display="flex" justifyContent="space-between" mt={0.3}>
+            <SoftTypography variant="caption" color="secondary">الرصيد الحالي:</SoftTypography>
+            <SoftTypography variant="button" fontWeight="bold" sx={{ color: hasDebt ? "#ea0606" : "#66BB6A" }}>
+              {hasDebt ? `${customer.balance.toLocaleString()} دج` : "لا يوجد رصيد"}
+            </SoftTypography>
+          </SoftBox>
+        </SoftBox>
+      </DialogContent>
+      <DialogActions sx={{ p: 1.5 }}>
+        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إغلاق</SoftButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function getProductGridColumns() {
+  if (typeof window === "undefined") {
+    return 4;
+  }
+
+  if (window.innerWidth < 600) {
+    return 2;
+  }
+
+  if (window.innerWidth < 900) {
+    return 3;
+  }
+
+  return 4;
+}
+
+function isTypingContext(target) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      "input, textarea, select, button, a, [contenteditable='true'], [role='button'], [role='textbox'], [role='combobox'], [role='listbox']"
+    )
+  );
+}
+
+function getOrderProductStatus(product) {
+  if (product.stock === 0) {
+    return { label: "نفذ المخزون", color: "error" };
+  }
+
+  if (product.stock < 50) {
+    return { label: "مخزون منخفض", color: "warning" };
+  }
+
+  return { label: "متوفر", color: "success" };
+}
+
 // ─── Product Card ─────────────────────────────────────────────────────────────
-function ProductCard({ product, cartItem, onAdd, onEdit, onRemove }) {
+function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onSelect, cardRef }) {
   const inCart = !!cartItem;
   const outOfStock = product.stock === 0;
   const lowStock = product.stock > 0 && product.stock < 50;
 
   return (
     <Card
+      ref={cardRef}
+      onClick={onSelect}
       sx={{
         p: 2,
         height: "100%",
         display: "flex",
         flexDirection: "column",
         border: inCart ? "2px solid #17c1e8" : "1px solid #e9ecef",
+        outline: selected ? "3px solid rgba(23, 193, 232, 0.25)" : "none",
+        outlineOffset: 0,
+        boxShadow: selected
+          ? "0 0 0 1px #17c1e8, 0 12px 28px rgba(23, 193, 232, 0.18)"
+          : "none",
+        transform: selected ? "translateY(-2px)" : "none",
         transition: "all 0.2s",
         "&:hover": { boxShadow: "0 4px 20px rgba(0,0,0,0.1)", transform: "translateY(-2px)" },
       }}
@@ -183,13 +327,121 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove }) {
   );
 }
 
+function ProductListRow({ product, cartItem, selected, rowRef, onSelect, onAdd, onEdit, onRemove }) {
+  const inCart = !!cartItem;
+  const outOfStock = product.stock === 0;
+  const status = getOrderProductStatus(product);
+
+  return (
+    <tr
+      ref={rowRef}
+      style={{
+        borderBottom: "1px solid #eef2f7",
+        background: selected ? "#eef9ff" : "#fff",
+        cursor: "pointer",
+        outline: selected ? "2px solid rgba(23, 193, 232, 0.35)" : "none",
+        outlineOffset: -2,
+      }}
+      onClick={onSelect}
+      onMouseEnter={(event) => {
+        if (!selected) {
+          event.currentTarget.style.background = "#f8fbff";
+        }
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.background = selected ? "#eef9ff" : "#fff";
+      }}
+    >
+      <td style={{ padding: "12px 14px" }}>
+        <SoftBox display="flex" alignItems="center" gap={1.5}>
+          <SoftBox
+            sx={{
+              width: 42,
+              height: 42,
+              borderRadius: 1.5,
+              background: outOfStock
+                ? "#d7dbe3"
+                : `linear-gradient(135deg, ${product.color}88, ${product.color})`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Inventory2Icon sx={{ color: "#fff", fontSize: 18, opacity: 0.9 }} />
+          </SoftBox>
+          <SoftBox>
+            <SoftTypography variant="button" fontWeight="bold">
+              {product.name}
+            </SoftTypography>
+            <SoftTypography variant="caption" color="secondary" display="block">
+              {product.code} · {product.category}
+            </SoftTypography>
+          </SoftBox>
+        </SoftBox>
+      </td>
+      <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
+        <SoftTypography variant="caption" fontWeight="bold" color={outOfStock ? "error" : "success"}>
+          {product.stock}
+        </SoftTypography>
+      </td>
+      <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
+        <SoftTypography variant="caption" color="secondary">
+          {product.unit}
+        </SoftTypography>
+      </td>
+      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+        <SoftBadge variant="gradient" color={status.color} size="xs" badgeContent={status.label} container />
+      </td>
+      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+        {inCart ? (
+          <SoftBox display="flex" gap={1} justifyContent="flex-end">
+            <SoftButton
+              variant="outlined"
+              color="info"
+              size="small"
+              startIcon={<EditIcon />}
+              onClick={() => onEdit(product)}
+            >
+              {cartItem.qty} {product.unit}
+            </SoftButton>
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => onRemove(product.id)}
+              sx={{ border: "1px solid #ea0606", borderRadius: 1 }}
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
+          </SoftBox>
+        ) : (
+          <SoftButton
+            variant="gradient"
+            color={outOfStock ? "secondary" : "info"}
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => !outOfStock && onAdd(product)}
+            disabled={outOfStock}
+          >
+            {outOfStock ? "غير متوفر" : "إضافة"}
+          </SoftButton>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 function NewOrder() {
   const navigate = useNavigate();
+  const productCardRefs = useRef({});
+  const searchInputRef = useRef(null);
 
+  const [view, setView] = useState("grid");
   const [category, setCategory] = useState("الكل");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState({}); // { productId: { product, qty, willShip } }
+  const [selectedProductId, setSelectedProductId] = useState(mockProducts[0]?.id ?? null);
   const [qtyDialog, setQtyDialog] = useState(null); // { product, qty }
   const [qtyInput, setQtyInput] = useState("1");
   const [replaceQtyOnNextDigit, setReplaceQtyOnNextDigit] = useState(true);
@@ -199,6 +451,7 @@ function NewOrder() {
   const [newCustomerName, setNewCustomerName] = useState("");
   const [customers, setCustomers] = useState(mockCustomers);
   const [successDialog, setSuccessDialog] = useState(false);
+  const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
 
   const normalizeQty = (value) => {
     const digitsOnly = String(value ?? "").replace(/[^\d]/g, "");
@@ -227,6 +480,31 @@ function NewOrder() {
 
   const cartItems = Object.values(cart);
   const cartCount = cartItems.length;
+
+  useEffect(() => {
+    if (filteredProducts.length === 0) {
+      setSelectedProductId(null);
+      return;
+    }
+
+    const selectionStillVisible = filteredProducts.some((product) => product.id === selectedProductId);
+
+    if (!selectionStillVisible) {
+      setSelectedProductId(filteredProducts[0].id);
+    }
+  }, [filteredProducts, selectedProductId]);
+
+  useEffect(() => {
+    if (!selectedProductId || qtyDialog || newCustomerDialog || successDialog) {
+      return;
+    }
+
+    productCardRefs.current[selectedProductId]?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [newCustomerDialog, qtyDialog, selectedProductId, successDialog]);
 
   const openAddDialog = (product) => {
     setQtyDialog({ product, isEdit: false });
@@ -352,6 +630,102 @@ function NewOrder() {
     setNewCustomerDialog(false);
   };
 
+  const focusSearchInput = () => {
+    const searchInputElement =
+      searchInputRef.current?.querySelector?.("input") ?? searchInputRef.current;
+
+    searchInputElement?.focus();
+    searchInputElement?.select?.();
+  };
+
+  useEffect(() => {
+    const handleProductGridKeyboard = (event) => {
+      const typingContext = isTypingContext(event.target);
+      const isSlashSearchShortcut =
+        event.code === "Slash" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+      const isSearchShortcut =
+        (event.code === "F2" && (event.ctrlKey || event.metaKey)) ||
+        (event.code === "KeyK" && (event.ctrlKey || event.metaKey)) ||
+        (event.code === "KeyS" && event.altKey && !event.ctrlKey && !event.metaKey) ||
+        (event.code === "KeyF" && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) ||
+        isSlashSearchShortcut;
+
+      if (isSearchShortcut && !typingContext) {
+        event.preventDefault();
+        focusSearchInput();
+        return;
+      }
+
+      if (
+        qtyDialog ||
+        newCustomerDialog ||
+        successDialog ||
+        filteredProducts.length === 0 ||
+        typingContext
+      ) {
+        return;
+      }
+
+      const currentIndex = Math.max(
+        0,
+        filteredProducts.findIndex((product) => product.id === selectedProductId)
+      );
+      const columns = view === "grid" ? getProductGridColumns() : 1;
+      const isRtl = document.documentElement.dir === "rtl";
+      let nextIndex = currentIndex;
+
+      switch (event.key) {
+        case "ArrowLeft":
+          event.preventDefault();
+          nextIndex = isRtl
+            ? Math.min(filteredProducts.length - 1, currentIndex + 1)
+            : Math.max(0, currentIndex - 1);
+          setSelectedProductId(filteredProducts[nextIndex].id);
+          return;
+        case "ArrowRight":
+          event.preventDefault();
+          nextIndex = isRtl
+            ? Math.max(0, currentIndex - 1)
+            : Math.min(filteredProducts.length - 1, currentIndex + 1);
+          setSelectedProductId(filteredProducts[nextIndex].id);
+          return;
+        case "ArrowUp":
+          event.preventDefault();
+          nextIndex = Math.max(0, currentIndex - columns);
+          setSelectedProductId(filteredProducts[nextIndex].id);
+          return;
+        case "ArrowDown":
+          event.preventDefault();
+          nextIndex = Math.min(filteredProducts.length - 1, currentIndex + columns);
+          setSelectedProductId(filteredProducts[nextIndex].id);
+          return;
+        case "Enter": {
+          event.preventDefault();
+          const selectedProduct = filteredProducts[currentIndex];
+
+          if (!selectedProduct || selectedProduct.stock === 0) {
+            return;
+          }
+
+          if (cart[selectedProduct.id]) {
+            openEditDialog(selectedProduct);
+            return;
+          }
+
+          openAddDialog(selectedProduct);
+          return;
+        }
+        default:
+      }
+    };
+
+    document.addEventListener("keydown", handleProductGridKeyboard, true);
+
+    return () => {
+      document.removeEventListener("keydown", handleProductGridKeyboard, true);
+    };
+  }, [cart, filteredProducts, newCustomerDialog, qtyDialog, selectedProductId, successDialog, view]);
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -385,6 +759,7 @@ function NewOrder() {
                 placeholder="بحث سريع عن الصنف باسمه أو كوده..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                inputRef={searchInputRef}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -408,32 +783,131 @@ function NewOrder() {
                   />
                 ))}
               </SoftBox>
+              <SoftBox mt={2} display="flex" justifyContent="space-between" alignItems="center" gap={2} flexWrap="wrap">
+                <SoftTypography variant="caption" color="text">
+                  {filteredProducts.length} صنف
+                </SoftTypography>
+                <ToggleButtonGroup value={view} exclusive onChange={(_, nextView) => nextView && setView(nextView)} size="small">
+                  <ToggleButton value="grid">
+                    <GridViewIcon fontSize="small" />
+                  </ToggleButton>
+                  <ToggleButton value="list">
+                    <ListIcon fontSize="small" />
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </SoftBox>
             </Card>
 
             {/* Product Grid */}
-            <Grid container spacing={2}>
-              {filteredProducts.length === 0 ? (
-                <Grid item xs={12}>
-                  <SoftBox textAlign="center" py={6}>
-                    <SoftTypography variant="body2" color="text">
-                      لا توجد أصناف مطابقة
-                    </SoftTypography>
-                  </SoftBox>
-                </Grid>
-              ) : (
-                filteredProducts.map((product) => (
-                  <Grid item xs={6} sm={4} md={3} key={product.id}>
-                    <ProductCard
-                      product={product}
-                      cartItem={cart[product.id]}
-                      onAdd={openAddDialog}
-                      onEdit={openEditDialog}
-                      onRemove={removeFromCart}
-                    />
-                  </Grid>
-                ))
+            <SoftBox
+              mb={1.5}
+              px={0.5}
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              gap={2}
+            >
+              <SoftTypography variant="caption" color="info" fontWeight="medium">
+                استخدم الأسهم للتنقل بين الأصناف و Enter لفتح إضافة الكمية و / أو Option+Shift+F للبحث
+              </SoftTypography>
+              {selectedProductId && (
+                <SoftTypography variant="caption" color="secondary">
+                  الصنف المحدد: {filteredProducts.find((product) => product.id === selectedProductId)?.name}
+                </SoftTypography>
               )}
-            </Grid>
+            </SoftBox>
+            {view === "grid" ? (
+              <Grid container spacing={2}>
+                {filteredProducts.length === 0 ? (
+                  <Grid item xs={12}>
+                    <SoftBox textAlign="center" py={6}>
+                      <SoftTypography variant="body2" color="text">
+                        لا توجد أصناف مطابقة
+                      </SoftTypography>
+                    </SoftBox>
+                  </Grid>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <Grid item xs={6} sm={4} md={3} key={product.id}>
+                      <ProductCard
+                        product={product}
+                        cartItem={cart[product.id]}
+                        selected={selectedProductId === product.id}
+                        onSelect={() => setSelectedProductId(product.id)}
+                        cardRef={(node) => {
+                          if (node) {
+                            productCardRefs.current[product.id] = node;
+                            return;
+                          }
+
+                          delete productCardRefs.current[product.id];
+                        }}
+                        onAdd={openAddDialog}
+                        onEdit={openEditDialog}
+                        onRemove={removeFromCart}
+                      />
+                    </Grid>
+                  ))
+                )}
+              </Grid>
+            ) : (
+              <Card>
+                <SoftBox sx={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fbff" }}>
+                        {["الصنف", "المخزون", "الوحدة", "الحالة", "الإجراء"].map((header) => (
+                          <th
+                            key={header}
+                            style={{
+                              padding: "12px 14px",
+                              textAlign: header === "الإجراء" ? "left" : "right",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <SoftTypography variant="caption" fontWeight="bold" color="secondary">
+                              {header}
+                            </SoftTypography>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredProducts.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: "center", padding: 32 }}>
+                            <SoftTypography variant="body2" color="text">
+                              لا توجد أصناف مطابقة
+                            </SoftTypography>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredProducts.map((product) => (
+                          <ProductListRow
+                            key={product.id}
+                            product={product}
+                            cartItem={cart[product.id]}
+                            selected={selectedProductId === product.id}
+                            onSelect={() => setSelectedProductId(product.id)}
+                            rowRef={(node) => {
+                              if (node) {
+                                productCardRefs.current[product.id] = node;
+                                return;
+                              }
+
+                              delete productCardRefs.current[product.id];
+                            }}
+                            onAdd={openAddDialog}
+                            onEdit={openEditDialog}
+                            onRemove={removeFromCart}
+                          />
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </SoftBox>
+              </Card>
+            )}
           </Grid>
 
           {/* ──────────────────────────────── RIGHT: Cart Panel ── */}
@@ -471,14 +945,21 @@ function NewOrder() {
                   size="small"
                   sx={{ flex: 1 }}
                 />
-                <Tooltip title="إضافة زبون جديد">
+                <Tooltip title={customer ? "عرض بيانات الزبون" : "إضافة زبون جديد"}>
                   <IconButton
                     size="small"
-                    color="primary"
-                    onClick={() => setNewCustomerDialog(true)}
-                    sx={{ border: "1px solid #e9ecef", borderRadius: 1 }}
+                    onClick={() => customer ? setCustomerInfoOpen(true) : setNewCustomerDialog(true)}
+                    sx={{
+                      border: `1px solid ${customer ? "#17c1e8" : "#e9ecef"}`,
+                      borderRadius: 1,
+                      color: customer ? "#17c1e8" : "inherit",
+                      transition: "all 0.2s",
+                    }}
                   >
-                    <PersonAddIcon fontSize="small" />
+                    {customer
+                      ? <VisibilityIcon fontSize="small" />
+                      : <PersonAddIcon fontSize="small" />
+                    }
                   </IconButton>
                 </Tooltip>
               </SoftBox>
@@ -528,33 +1009,41 @@ function NewOrder() {
 
                         <SoftBox display="flex" alignItems="center" justifyContent="space-between" mt={1}>
                           {/* Qty Controls */}
-                          <SoftBox display="flex" alignItems="center" gap={0.5}>
-                            <IconButton
-                              size="small"
-                              onClick={() => setCart(prev => ({
-                                ...prev,
-                                [product.id]: { ...prev[product.id], qty: Math.max(1, qty - 1) }
-                              }))}
-                              sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
-                            >
-                              <RemoveIcon fontSize="small" />
-                            </IconButton>
-                            <SoftTypography variant="button" fontWeight="bold" minWidth={40} textAlign="center">
-                              {qty}
-                            </SoftTypography>
-                            <IconButton
-                              size="small"
-                              onClick={() => setCart(prev => ({
-                                ...prev,
-                                [product.id]: { ...prev[product.id], qty: qty + 1 }
-                              }))}
-                              sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
-                            >
-                              <AddIcon fontSize="small" />
-                            </IconButton>
-                            <SoftTypography variant="caption" color="secondary" ml={0.5}>
-                              {product.unit}
-                            </SoftTypography>
+                          <SoftBox>
+                            <SoftBox display="flex" alignItems="center" gap={0.5}>
+                              <IconButton
+                                size="small"
+                                onClick={() => setCart(prev => ({
+                                  ...prev,
+                                  [product.id]: { ...prev[product.id], qty: Math.max(1, qty - 1) }
+                                }))}
+                                sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
+                              >
+                                <RemoveIcon fontSize="small" />
+                              </IconButton>
+                              <SoftTypography variant="button" fontWeight="bold" minWidth={40} textAlign="center">
+                                {qty}
+                              </SoftTypography>
+                              <IconButton
+                                size="small"
+                                onClick={() => setCart(prev => ({
+                                  ...prev,
+                                  [product.id]: { ...prev[product.id], qty: qty + 1 }
+                                }))}
+                                sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
+                              >
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                              <SoftTypography variant="caption" color="secondary" ml={0.5}>
+                                {product.unit}
+                              </SoftTypography>
+                            </SoftBox>
+                            {/* Packages count */}
+                            {product.unitsPerPackage > 0 && (
+                              <SoftTypography variant="caption" sx={{ color: "#7928ca", fontWeight: "bold", display: "block", mt: 0.3 }}>
+                                = {calcPackages(qty, product)} {product.packageUnit}
+                              </SoftTypography>
+                            )}
                           </SoftBox>
 
                           {/* Ship Toggle */}
@@ -727,15 +1216,37 @@ function NewOrder() {
                   );
                 })}
               </SoftBox>
-              <SoftTypography variant="caption" color="secondary" textAlign="center" display="block">
-                الوحدة: {qtyDialog.product.unit} | المخزون المتاح: {qtyDialog.product.stock}
-              </SoftTypography>
+              <SoftBox mt={1.5} p={1.5} sx={{ background: "#f8f9fa", borderRadius: 2 }}>
+                <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                  <SoftTypography variant="caption" color="secondary">
+                    الوحدة: <strong>{qtyDialog.product.unit}</strong>
+                  </SoftTypography>
+                  <SoftTypography variant="caption" color="secondary">
+                    المخزون المتاح: <strong>{qtyDialog.product.stock}</strong>
+                  </SoftTypography>
+                </SoftBox>
+                {qtyDialog.product.unitsPerPackage > 0 && (
+                  <SoftBox display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
+                    <SoftTypography variant="caption" color="secondary">
+                      التعليب: <strong>{qtyDialog.product.unitsPerPackage} {qtyDialog.product.unit} / {qtyDialog.product.packageUnit}</strong>
+                    </SoftTypography>
+                    <SoftTypography variant="caption" sx={{ color: "#7928ca", fontWeight: "bold" }}>
+                      {parsedQty > 0 ? `= ${calcPackages(parsedQty, qtyDialog.product)} ${qtyDialog.product.packageUnit}` : ""}
+                    </SoftTypography>
+                  </SoftBox>
+                )}
+                {qtyDialog.product.weightPerUnit > 0 && parsedQty > 0 && (
+                  <SoftTypography variant="caption" sx={{ color: "#fb8c00", fontWeight: "bold", display: "block", mt: 0.5 }}>
+                    الوزن الإجمالي: {(parsedQty * qtyDialog.product.weightPerUnit).toFixed(2)} كغ
+                  </SoftTypography>
+                )}
+              </SoftBox>
             </DialogContent>
             <DialogActions sx={{ p: 2, gap: 1 }}>
               <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setQtyDialog(null)}>
                 إلغاء
               </SoftButton>
-              <SoftButton variant="gradient" color="info" size="small" onClick={confirmQty}>
+              <SoftButton variant="gradient" color="info" size="small" onClick={() => confirmQty()}>
                 {qtyDialog.isEdit ? "تحديث" : "إضافة للسلة"}
               </SoftButton>
             </DialogActions>
@@ -810,6 +1321,10 @@ function NewOrder() {
         </DialogActions>
       </Dialog>
 
+      <CustomerInfoDialog
+        customer={customerInfoOpen ? customer : null}
+        onClose={() => setCustomerInfoOpen(false)}
+      />
       <Footer />
     </DashboardLayout>
   );

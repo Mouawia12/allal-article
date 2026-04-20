@@ -81,7 +81,7 @@ export function translateText(input, locale = DEFAULT_LOCALE, params = {}) {
   const exact = exactTranslations[nextLocale][input];
   const translated = keyed ?? exact ?? input;
 
-  return typeof translated === "string" ? interpolate(translated, params) : translated;
+  return typeof translated === "string" ? interpolate(translated, params) : input;
 }
 
 function preserveWhitespace(original, translated) {

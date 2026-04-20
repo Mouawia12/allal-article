@@ -48,7 +48,7 @@ export default styled(Drawer)(({ theme, ownerState }) => {
     },
   });
 
-  // styles for the sidenav when miniSidenav={true}
+  // styles for the sidenav when miniSidenav={true} — fully hidden on desktop
   const drawerCloseStyles = () => ({
     transform: `translateX(${pxToRem(-320)})`,
     transition: transitions.create("transform", {
@@ -58,13 +58,13 @@ export default styled(Drawer)(({ theme, ownerState }) => {
 
     [breakpoints.up("xl")]: {
       backgroundColor: transparentSidenav ? transparent.main : white.main,
-      boxShadow: transparentSidenav ? "none" : xxl,
+      boxShadow: "none",
       marginBottom: transparentSidenav ? 0 : "inherit",
       left: "0",
-      width: pxToRem(96),
+      width: pxToRem(250),
       overflowX: "hidden",
-      transform: "translateX(0)",
-      transition: transitions.create(["width", "background-color"], {
+      transform: `translateX(${pxToRem(-260)})`,
+      transition: transitions.create(["transform", "background-color"], {
         easing: transitions.easing.sharp,
         duration: transitions.duration.shorter,
       }),

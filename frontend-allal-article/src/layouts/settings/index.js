@@ -23,6 +23,12 @@ import NotificationsIcon from "@mui/icons-material/Notifications";
 import StorageIcon from "@mui/icons-material/Storage";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
@@ -31,6 +37,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useI18n } from "i18n";
+import { WILAYAS } from "data/wilayas";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -420,14 +427,139 @@ function SystemInfo() {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
+// ─── Road Invoice Settings ────────────────────────────────────────────────────
+const mockCustomers = [
+  "موزع وهران الرئيسي", "موزع العاصمة", "موزع الشرق", "موزع سطيف الرئيسي",
+  "موزع قسنطينة", "موزع عنابة", "موزع الجنوب",
+];
+
+function RoadInvoiceSettings() {
+  const [wilayaDefaults, setWilayaDefaults] = useState({
+    "وهران":    "موزع وهران الرئيسي",
+    "الجزائر": "موزع العاصمة",
+    "قسنطينة": "موزع الشرق",
+    "سطيف":    "موزع سطيف الرئيسي",
+  });
+  const [aiUpdating, setAiUpdating] = useState(false);
+  const [editingWilaya, setEditingWilaya] = useState(null);
+
+  const handleAiUpdate = () => {
+    setAiUpdating(true);
+    setTimeout(() => setAiUpdating(false), 2000);
+  };
+
+  return (
+    <SoftBox>
+      <SectionHeader
+        title="إعدادات فواتير الطريق"
+        description="تحديد الزبون التلقائي لكل ولاية عند تحويل الطلبيات إلى فواتير طريق"
+      />
+
+      {/* AI Update Wilayas */}
+      <SoftBox mb={3} p={2} sx={{ background: "#f0f7ff", borderRadius: 2, border: "1px solid #17c1e822" }}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+          <SoftBox>
+            <SoftTypography variant="button" fontWeight="bold">تحديث قائمة الولايات</SoftTypography>
+            <SoftTypography variant="caption" color="secondary" display="block">
+              استخدم الذكاء الاصطناعي لتحديث قائمة الولايات تلقائياً (في حال أي تقسيم إداري جديد)
+              أو قم بتعديلها يدوياً
+            </SoftTypography>
+          </SoftBox>
+          <SoftBox display="flex" gap={1}>
+            <SoftButton variant="outlined" color="secondary" size="small">
+              تعديل يدوي
+            </SoftButton>
+            <SoftButton
+              variant="gradient" color="info" size="small"
+              startIcon={<AutoFixHighIcon />}
+              onClick={handleAiUpdate}
+              disabled={aiUpdating}
+            >
+              {aiUpdating ? "جاري التحديث..." : "تحديث بالذكاء الاصطناعي"}
+            </SoftButton>
+          </SoftBox>
+        </SoftBox>
+        {aiUpdating && <LinearProgress sx={{ mt: 1.5, borderRadius: 1 }} />}
+      </SoftBox>
+
+      {/* Wilaya → Customer mapping */}
+      <SoftTypography variant="button" fontWeight="bold" display="block" mb={1}>
+        الزبون التلقائي لكل ولاية
+      </SoftTypography>
+      <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
+        عند تحويل طلبيات من ولاية معينة إلى فاتورة طريق، سيتم اختيار الزبون التالي تلقائياً.
+        يمكن تغييره يدوياً في كل فاتورة.
+      </SoftTypography>
+
+      <SoftBox sx={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f8f9fa" }}>
+              {["الكود", "الولاية", "الزبون التلقائي", "إجراء"].map((h) => (
+                <th key={h} style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {WILAYAS.map((w) => (
+              <tr key={w.code} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                <td style={{ padding: "8px 12px", width: 60 }}>
+                  <SoftTypography variant="caption" color="secondary">{w.code}</SoftTypography>
+                </td>
+                <td style={{ padding: "8px 12px" }}>
+                  <SoftTypography variant="caption" fontWeight="bold">{w.name}</SoftTypography>
+                </td>
+                <td style={{ padding: "8px 12px", minWidth: 220 }}>
+                  {editingWilaya === w.code ? (
+                    <FormControl size="small" fullWidth>
+                      <Select
+                        value={wilayaDefaults[w.name] || ""}
+                        onChange={(e) => {
+                          setWilayaDefaults(prev => ({ ...prev, [w.name]: e.target.value }));
+                          setEditingWilaya(null);
+                        }}
+                        displayEmpty
+                      >
+                        <MenuItem value="">— بدون زبون تلقائي —</MenuItem>
+                        {mockCustomers.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <SoftTypography variant="caption" color={wilayaDefaults[w.name] ? "text" : "secondary"}>
+                      {wilayaDefaults[w.name] || "—"}
+                    </SoftTypography>
+                  )}
+                </td>
+                <td style={{ padding: "8px 12px" }}>
+                  <SoftButton variant="text" color="info" size="small"
+                    onClick={() => setEditingWilaya(editingWilaya === w.code ? null : w.code)}>
+                    {editingWilaya === w.code ? "إلغاء" : "تعديل"}
+                  </SoftButton>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </SoftBox>
+
+      <SoftBox mt={3} display="flex" justifyContent="flex-end">
+        <SoftButton variant="gradient" color="info" size="small">حفظ الإعدادات</SoftButton>
+      </SoftBox>
+    </SoftBox>
+  );
+}
+
 function Settings() {
   const [tab, setTab] = useState(0);
 
   const tabs = [
-    { label: "عام",           icon: <SettingsIcon fontSize="small" /> },
-    { label: "الذكاء الاصطناعي", icon: <AutoAwesomeIcon fontSize="small" /> },
-    { label: "الإشعارات",    icon: <NotificationsIcon fontSize="small" /> },
-    { label: "معلومات النظام", icon: <StorageIcon fontSize="small" /> },
+    { label: "عام",                 icon: <SettingsIcon fontSize="small" /> },
+    { label: "الذكاء الاصطناعي",   icon: <AutoAwesomeIcon fontSize="small" /> },
+    { label: "فواتير الطريق",       icon: <LocalShippingIcon fontSize="small" /> },
+    { label: "الإشعارات",          icon: <NotificationsIcon fontSize="small" /> },
+    { label: "معلومات النظام",      icon: <StorageIcon fontSize="small" /> },
   ];
 
   return (
@@ -464,8 +596,9 @@ function Settings() {
           <SoftBox p={3}>
             {tab === 0 && <GeneralSettings />}
             {tab === 1 && <AISettings />}
-            {tab === 2 && <NotificationsSettings />}
-            {tab === 3 && <SystemInfo />}
+            {tab === 2 && <RoadInvoiceSettings />}
+            {tab === 3 && <NotificationsSettings />}
+            {tab === 4 && <SystemInfo />}
           </SoftBox>
         </Card>
       </SoftBox>

@@ -21,7 +21,10 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 // @mui material components
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
+import Tooltip from "@mui/material/Tooltip";
 import Icon from "components/AppIcon";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
@@ -53,8 +56,7 @@ export default function App() {
   const [controller, dispatch] = useSoftUIController();
   const { miniSidenav, direction, layout, openConfigurator, sidenavColor } = controller;
   const { t } = useI18n();
-  const [onMouseEnter, setOnMouseEnter] = useState(false);
-  const [rtlCache, setRtlCache] = useState(null);
+const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
 
   // Cache for the rtl
@@ -67,24 +69,11 @@ export default function App() {
     setRtlCache(cacheRtl);
   }, []);
 
-  // Open sidenav when mouse enter on mini sidenav
-  const handleOnMouseEnter = () => {
-    if (miniSidenav && !onMouseEnter) {
-      setMiniSidenav(dispatch, false);
-      setOnMouseEnter(true);
-    }
-  };
-
-  // Close sidenav when mouse leave mini sidenav
-  const handleOnMouseLeave = () => {
-    if (onMouseEnter) {
-      setMiniSidenav(dispatch, true);
-      setOnMouseEnter(false);
-    }
-  };
-
   // Change the openConfigurator state
   const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, !openConfigurator);
+
+  // Toggle sidenav visibility
+  const handleToggleSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
 
   // Setting the dir attribute for the body element
   useEffect(() => {
@@ -134,6 +123,39 @@ export default function App() {
     </SoftBox>
   );
 
+  // Floating sidebar toggle button — only visible on xl screens
+  const sidenavToggleButton = (
+    <Tooltip title={miniSidenav ? "إظهار القائمة" : "إخفاء القائمة"} placement="right">
+      <SoftBox
+        display={{ xs: "none", xl: "flex" }}
+        justifyContent="center"
+        alignItems="center"
+        width="2rem"
+        height="2rem"
+        bgColor="white"
+        shadow="sm"
+        borderRadius="50%"
+        position="fixed"
+        left={miniSidenav ? "0.5rem" : "15.2rem"}
+        top="50%"
+        zIndex={99}
+        color="dark"
+        sx={{
+          cursor: "pointer",
+          transition: "left 300ms ease",
+          border: "1px solid #e9ecef",
+          "&:hover": { bgColor: "#f0f7ff", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" },
+        }}
+        onClick={handleToggleSidenav}
+      >
+        {miniSidenav
+          ? <ChevronRightIcon fontSize="small" />
+          : <ChevronLeftIcon fontSize="small" />
+        }
+      </SoftBox>
+    </Tooltip>
+  );
+
   return direction === "rtl" ? (
     <CacheProvider value={rtlCache}>
       <ThemeProvider theme={themeRTL}>
@@ -145,11 +167,10 @@ export default function App() {
               brand={brand}
               brandName={t("app.name")}
               routes={routes}
-              onMouseEnter={handleOnMouseEnter}
-              onMouseLeave={handleOnMouseLeave}
             />
             <Configurator />
             {configsButton}
+            {sidenavToggleButton}
           </>
         )}
         {layout === "vr" && <Configurator />}
@@ -169,11 +190,10 @@ export default function App() {
               brand={brand}
               brandName={t("app.name")}
               routes={routes}
-              onMouseEnter={handleOnMouseEnter}
-              onMouseLeave={handleOnMouseLeave}
           />
           <Configurator />
           {configsButton}
+          {sidenavToggleButton}
         </>
       )}
       {layout === "vr" && <Configurator />}
