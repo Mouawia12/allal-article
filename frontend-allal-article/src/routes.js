@@ -18,11 +18,16 @@ import Products from "layouts/products";
 import ProductDetail from "layouts/products/ProductDetail";
 import ProductForm from "layouts/products/ProductForm";
 import Customers from "layouts/customers";
+import Suppliers from "layouts/suppliers";
 import Inventory from "layouts/inventory";
+import Manufacturing from "layouts/manufacturing";
 import AuditLogs from "layouts/audit-logs";
 import Reports from "layouts/reports";
 import Users from "layouts/users";
 import Settings from "layouts/settings";
+import NotificationsInbox from "layouts/notifications/Inbox";
+import NotificationPreferences from "layouts/notifications/NotificationPreferences";
+import SupportCenter from "layouts/support";
 import Purchases from "layouts/purchases";
 import PurchaseDetail from "layouts/purchases/PurchaseDetail";
 import PurchaseForm from "layouts/purchases/PurchaseForm";
@@ -50,6 +55,8 @@ import CustomerSupport from "examples/Icons/CustomerSupport";
 import CreditCard from "examples/Icons/CreditCard";
 import Cube from "examples/Icons/Cube";
 import Basket from "examples/Icons/Basket";
+import NotificationsIcon from "@mui/icons-material/Notifications";
+import FactoryIcon from "@mui/icons-material/Factory";
 
 const routes = [
   // ─── Main ───────────────────────────────────────────────
@@ -92,11 +99,29 @@ const routes = [
   },
   {
     type: "collapse",
+    name: "الموردين",
+    key: "suppliers",
+    route: "/suppliers",
+    icon: <CustomerSupport size="12px" />,
+    component: <Suppliers />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
     name: "المخزون",
     key: "inventory",
     route: "/inventory",
     icon: <Office size="12px" />,
     component: <Inventory />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "التصنيع",
+    key: "manufacturing",
+    route: "/manufacturing",
+    icon: <FactoryIcon fontSize="small" />,
+    component: <Manufacturing />,
     noCollapse: true,
   },
   {
@@ -165,6 +190,24 @@ const routes = [
     route: "/settings",
     icon: <SettingsIcon size="12px" />,
     component: <Settings />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "الإشعارات",
+    key: "notifications",
+    route: "/notifications",
+    icon: <NotificationsIcon fontSize="small" />,
+    component: <NotificationsInbox />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "الدعم",
+    key: "support",
+    route: "/support",
+    icon: <CustomerSupport size="12px" />,
+    component: <SupportCenter />,
     noCollapse: true,
   },
   {
@@ -271,6 +314,7 @@ const routes = [
   { key: "journal-new",         route: "/accounting/journals/new",              component: <ManualJournalForm /> },
   { key: "opening-balances",    route: "/accounting/opening-balances",          component: <OpeningBalances /> },
   { key: "accounting-settings", route: "/accounting/settings",                  component: <AccountingSettings /> },
+  { key: "notification-preferences", route: "/notifications/preferences",        component: <NotificationPreferences /> },
   { key: "account-movement",    route: "/accounting/reports/account-movement",  component: <AccountMovement /> },
   {
     key: "new-order",

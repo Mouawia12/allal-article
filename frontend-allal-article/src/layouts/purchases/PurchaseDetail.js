@@ -29,6 +29,8 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import ResourceLockBanner from "components/ResourceLockBanner";
+import { getMockResourceLock } from "data/mock/resourceLocksMock";
 
 import { calcLineTotal, formatDZD, mockPurchases, paymentConfig, statusConfig } from "./mockData";
 
@@ -144,6 +146,7 @@ export default function PurchaseDetail() {
   const statusInfo = statusConfig[status] || { label: status, color: "secondary" };
   const paymentInfo = paymentConfig[paymentStatus] || { label: paymentStatus, color: "secondary" };
   const currentAction = dialog ? actionText[dialog] : null;
+  const editLock = getMockResourceLock("purchase_order", purchase.id);
 
   const appendActivity = (action) => {
     setActivity((items) => [
@@ -218,7 +221,14 @@ export default function PurchaseDetail() {
                     تسجيل دفعة
                   </SoftButton>
                 )}
-                <SoftButton size="small" variant="outlined" color="warning" startIcon={<EditIcon />} onClick={() => navigate(`/purchases/${purchase.id}/edit`)}>
+                <SoftButton
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<EditIcon />}
+                  disabled={Boolean(editLock)}
+                  onClick={() => navigate(`/purchases/${purchase.id}/edit`)}
+                >
                   تعديل
                 </SoftButton>
                 <SoftButton size="small" variant="outlined" color="error" startIcon={<CancelIcon />} onClick={() => setDialog("cancel")}>
@@ -233,6 +243,8 @@ export default function PurchaseDetail() {
             </Tooltip>
           </SoftBox>
         </SoftBox>
+
+        <ResourceLockBanner lock={editLock} resourceLabel="أمر الشراء" />
 
         <Grid container spacing={2} mb={3}>
           <Grid item xs={12} sm={6} md={3}>

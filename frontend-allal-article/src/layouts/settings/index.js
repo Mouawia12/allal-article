@@ -38,6 +38,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useI18n } from "i18n";
 import { WILAYAS } from "data/wilayas";
+import { categoryConfig, mockNotificationTypes, severityConfig } from "data/mock/notificationsMock";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -336,38 +337,37 @@ function AISettings() {
 
 // ─── Notifications Tab ────────────────────────────────────────────────────────
 function NotificationsSettings() {
-  const [notifs, setNotifs] = useState({
-    newOrder:       true,
-    orderConfirmed: true,
-    orderRejected:  true,
-    orderShipped:   true,
-    lowStock:       true,
-    outOfStock:     true,
-    newCustomer:    false,
+  const [notifs, setNotifs] = useState(() => {
+    return mockNotificationTypes.reduce((acc, row) => {
+      acc[row.code] = row.digestMode !== "muted";
+      return acc;
+    }, {});
   });
-
-  const rows = [
-    { key: "newOrder",       label: "طلبية جديدة وردت",           desc: "إشعار عند وصول طلبية جديدة من البائع" },
-    { key: "orderConfirmed", label: "تأكيد الطلبية",              desc: "إشعار عند تأكيد الطلبية من الإدارة" },
-    { key: "orderRejected",  label: "رفض الطلبية",                desc: "إشعار عند رفض الطلبية" },
-    { key: "orderShipped",   label: "شحن الطلبية",                desc: "إشعار عند تسجيل شحن الطلبية" },
-    { key: "lowStock",       label: "تنبيه مخزون منخفض",         desc: "إشعار عند وصول المخزون لحد التنبيه" },
-    { key: "outOfStock",     label: "نفاد مخزون",                  desc: "إشعار عند نفاد صنف من المخزون" },
-    { key: "newCustomer",    label: "إضافة زبون جديد",            desc: "إشعار عند إضافة زبون جديد" },
-  ];
 
   return (
     <SoftBox>
-      <SectionHeader title="إعدادات الإشعارات" description="تحكم في الإشعارات التي تتلقاها داخل النظام" />
-      {rows.map((row) => (
-        <SettingRow key={row.key} label={row.label} description={row.desc}>
-          <Switch
-            checked={notifs[row.key]}
-            onChange={(e) => setNotifs(prev => ({ ...prev, [row.key]: e.target.checked }))}
-            color="info"
-          />
-        </SettingRow>
-      ))}
+      <SectionHeader
+        title="إعدادات الإشعارات"
+        description="هذه القائمة مبنية على notification_types حتى تتوسع مع الباكند بدون مفاتيح ثابتة"
+      />
+      {mockNotificationTypes.map((row) => {
+        const category = categoryConfig[row.category] || { label: row.category };
+        const severity = severityConfig[row.severity] || severityConfig.info;
+        return (
+          <SettingRow
+            key={row.code}
+            label={row.title}
+            description={`${row.code} · ${category.label} · ${severity.label}`}
+          >
+            <Switch
+              checked={notifs[row.code]}
+              disabled={!row.mutable}
+              onChange={(e) => setNotifs(prev => ({ ...prev, [row.code]: e.target.checked }))}
+              color="info"
+            />
+          </SettingRow>
+        );
+      })}
       <SoftBox display="flex" justifyContent="flex-end" mt={2}>
         <SoftButton variant="gradient" color="info" size="small">حفظ إعدادات الإشعارات</SoftButton>
       </SoftBox>

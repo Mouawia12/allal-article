@@ -32,6 +32,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { formatDZD, mockPurchases, paymentConfig, statusConfig, supplierOptions } from "./mockData";
+import { findSupplierByName, resolveSupplierLink, supplierMatchLabels } from "data/mock/suppliersMock";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color, icon: Icon }) {
@@ -234,7 +235,19 @@ function Purchases() {
                           </SoftTypography>
                         </td>
                         <td style={{ padding: "10px 12px" }}>
-                          <SoftTypography variant="caption" fontWeight="bold">{p.supplier}</SoftTypography>
+                          {(() => {
+                            const link = resolveSupplierLink(findSupplierByName(p.supplier) || p.supplier);
+                            return (
+                              <SoftBox>
+                                <SoftTypography variant="caption" fontWeight="bold">{p.supplier}</SoftTypography>
+                                {link.isLinked && (
+                                  <SoftTypography variant="caption" display="block" sx={{ color: "#17c1e8", fontWeight: 700 }}>
+                                    مرتبط عبر {supplierMatchLabels[link.matchedBy]}
+                                  </SoftTypography>
+                                )}
+                              </SoftBox>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           <SoftTypography variant="caption" color="text">{p.date}</SoftTypography>

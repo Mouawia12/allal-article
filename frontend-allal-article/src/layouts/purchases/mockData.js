@@ -1,3 +1,5 @@
+import { mockSuppliers } from "data/mock/suppliersMock";
+
 export const statusConfig = {
   pending:   { label: "في الانتظار", color: "warning" },
   confirmed: { label: "مؤكد",        color: "info" },
@@ -12,11 +14,7 @@ export const paymentConfig = {
 };
 
 export const supplierOptions = [
-  "مصنع الصلب الجزائري",
-  "شركة المعدن والأدوات",
-  "موردون الكهرباء الوطنية",
-  "شركة السباكة والري",
-  "مستلزمات الدهانات الفاخرة",
+  ...mockSuppliers.map((supplier) => supplier.name),
 ];
 
 export const purchaseProducts = [

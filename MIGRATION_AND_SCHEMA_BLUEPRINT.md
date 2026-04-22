@@ -1,6 +1,6 @@
 # ALLAL-ARTICLE — Migration and Schema Blueprint
 
-هذا الملف هو المرجع التقني لمرحلة قاعدة البيانات والـ migrations.  
+هذا الملف هو المرجع التقني لمرحلة قاعدة البيانات والـ migrations.
 مهمته أن يترجم المتطلبات الواردة في [README.md](/Users/mw/Downloads/allal-article/README.md:1) إلى تصميم بيانات واضح ومتوافق مع الواجهات الجاهزة الموجودة في `frontend-allal-article`.
 
 ## الهدف من هذه الوثيقة
@@ -8,6 +8,7 @@
 - توحيد أسماء الجداول والحقول قبل كتابة أول migration.
 - توضيح ترتيب الميغريشن الصحيح.
 - منع التعارض بين منطق الطلبيات ومنطق المخزون.
+- تثبيت فصل بيانات المشتركين قبل بناء أول جدول تشغيلي.
 - جعل Claude Code قادرًا على التنفيذ بدون تخمينات كثيرة.
 - ضمان أن الباك إند الناتج يمكن وصله بالواجهات الحالية بدل إعادة بنائها من الصفر.
 
@@ -27,20 +28,44 @@
 - جميع الجداول المهمة: `created_at`, `updated_at`.
 - الجداول التشغيلية الحساسة: `created_by`, `updated_by` حيث يفيد ذلك.
 - الحذف: `soft deletes` للجداول التي قد تحتاج أرشفة أو أثر تاريخي.
+- المنصة تعمل بنمط `schema per tenant`.
+- يوجد schema ثابت باسم `platform` لإدارة المشتركين والخطط والاشتراكات.
+- كل مشترك يحصل على schema منفصل مثل `tenant_a1b2c3d4`.
+- الجداول التشغيلية لا تنشأ في `public`.
+- تحديد المشترك يتم من JWT/subdomain/header موثوق، وليس من body request.
 
 ## قواعد Flyway الإلزامية
 
-- كل تغيير في schema يكون داخل ملف جديد:
-  `src/main/resources/db/migration/V{number}__description.sql`
+- كل تغيير في schema يكون داخل ملف migration جديد.
+- يفضّل فصل migrations إلى مسارين واضحين:
+  - `src/main/resources/db/migration/platform/V{number}__description.sql`
+  - `src/main/resources/db/migration/tenant/V{number}__description.sql`
+- `platform` migrations تطبق مرة واحدة على schema المنصة.
+- `tenant` migrations تطبق على كل schema مشترك عند الإنشاء، ثم على كل schemas المشتركين عند ترقية النظام.
 - لا يتم تعديل migration قديم بعد تطبيقه على أي بيئة مشتركة.
 - أسماء migrations تكون واضحة مثل:
-  `V1__create_users_and_roles.sql`
-  `V2__create_customers.sql`
-  `V3__create_products.sql`
+  `V1__create_platform_tenants_and_plans.sql`
+  `V2__create_platform_subscriptions.sql`
+  `V1__create_tenant_identity_and_rbac.sql`
+  `V2__create_tenant_customers.sql`
 - migrations الكبيرة في الإنتاج تحتاج backup قبل التطبيق.
 - seed الأساسي للأدوار والصلاحيات والولايات يمكن أن يكون عبر migrations منفصلة أو data seed منظم.
 
 ## تحسينات موصى بها قبل كتابة الميغريشن
+
+### 0) ثبّت الـ multi-tenancy قبل أي جدول تشغيلي
+
+الأفضل:
+- إنشاء `platform.tenants` و `platform.plans` أولًا.
+- بناء خدمة provisioning تنشئ schema المشترك وتطبق tenant migrations.
+- منع أي endpoint تشغيلي من العمل بدون `TenantContext`.
+- عدم استخدام `public` لتخزين بيانات الطلبيات أو الزبائن أو الأصناف.
+
+السبب:
+- يمنع خلط بيانات الشركات.
+- يجعل النسخ الاحتياطي والاسترجاع لكل مشترك أسهل.
+- يطابق واجهة المالك الحالية التي تعرض `schemaName` لكل مشترك.
+- يسمح بشبكة شركاء آمنة مبنية على صلاحيات صريحة.
 
 ### 1) لا تستخدم SQL ENUM جامد إذا كان من المتوقع التوسع
 
@@ -104,23 +129,90 @@
 
 ## ترتيب الميغريشن المقترح
 
+### A) Platform migrations
+
+تطبق مرة واحدة على schema `platform`.
+
 | الترتيب | مجموعة الجداول | السبب |
 |---|---|---|
-| 1 | users, user_profiles | أساس النظام |
-| 2 | roles, permissions, role_permissions, user_permissions | الصلاحيات مبكرًا |
-| 3 | customers, categories | master data مبكرًا |
-| 4 | products, product_images, product_price_histories | الأصناف قبل المخزون والطلبات |
-| 5 | warehouses | حتى لو كان هناك مخزن واحد حاليًا |
-| 6 | product_stocks, stock_movements, stock_reservations | تثبيت منطق المخزون |
-| 7 | orders | الكيان الرئيسي للطلبات |
-| 8 | order_items | يعتمد على orders و products |
-| 9 | order_events, order_item_events | التتبع والتايملاين |
-| 10 | carts, cart_items أو اعتماد draft orders فقط | حسب القرار النهائي |
-| 11 | notifications | التنبيهات والـ realtime |
-| 12 | audit_logs | تتبع العمليات الحرجة |
-| 13 | settings | إعدادات المالك والـ AI |
-| 14 | ai_jobs, ai_job_items | المعالجة الذكية |
-| 15 | media_assets / imports (اختياري لكن مستحسن) | دعم الملفات والرفع |
+| P1 | platform_users | مستخدمو مالك المنصة |
+| P2 | plans, feature_catalog, plan_features | كتالوج الميزات والخطط والحدود قبل إنشاء المشتركين |
+| P3 | tenants | مصدر الحقيقة لكل مشترك واسم schema |
+| P4 | subscriptions | تاريخ الاشتراك والتجديد والإيقاف |
+| P5 | tenant_provisioning_events | تتبع إنشاء schema وتطبيق migrations |
+| P6 | tenant_usage_snapshots | KPIs لوحة المالك بدون استعلام مباشر دائم على كل schema |
+| P7 | tenant_invite_codes, tenant_partnerships, partner_document_links, partner_document_claims, partner_document_events | شبكة الشركاء والصلاحيات ومزامنة فواتير البيع/الشراء والمرتجعات/المطالبات بين المشتركين |
+| P8 | support_tickets, support_ticket_participants, support_messages, support_attachments | تذاكر دعم وشات بين المالك والمشتركين مع صور وتسجيلات صوتية |
+| P9 | notification_types, platform_notifications, platform_notification_recipients, platform_notification_templates, platform_notification_actions, platform_notification_escalations, platform_notification_preferences, platform_notification_retention_policies, platform_notification_outbox | إشعارات المالك وبين المشتركين |
+| P10 | platform_resource_lock_policies, platform_resource_locks, platform_resource_lock_events | منع تعديل موارد المنصة من أكثر من مستخدم في نفس اللحظة |
+| P11 | platform_audit_logs | تدقيق عمليات المنصة |
+
+ملاحظة كتالوج الميزات:
+
+- `feature_catalog` هو مرجع الواجهة لمعرفة الميزات الظاهرة للجميع ورسائل الترقية.
+- `plan_features` يحدد هل الميزة مفعلة في خطة معينة وحدودها.
+- منع استخدام ميزة بسبب الخطة لا يعني إخفاءها من القائمة؛ يعني عرض Modal ترقية عند محاولة الاستخدام.
+
+ملاحظة حالات الدعم:
+
+- `waiting_owner` و `waiting_tenant` حالات آلية من آخر مرسل في `support_messages`.
+- المستخدم لا يختار هذه الحالات من الواجهة.
+- الأفعال اليدوية الوحيدة على الحالة هي: فتح، إغلاق، إعادة فتح.
+
+### B) Tenant schema migrations
+
+تطبق داخل كل schema مشترك مثل `tenant_a1b2c3d4`.
+
+| الترتيب | مجموعة الجداول | السبب |
+|---|---|---|
+| T1 | roles, permissions, role_permissions, users, user_profiles, user_permissions, access_denial_events | هوية وصلاحيات المشترك مع سجل محاولات الوصول الممنوعة |
+| T2 | wilayas, settings | بيانات مرجعية وإعدادات الشركة |
+| T3 | customers, customer_payments | الزبائن والرصيد قبل الطلبيات |
+| T4 | categories, products, product_images, product_price_histories | الأصناف قبل المخزون والطلبات |
+| T5 | warehouses | حتى لو كان هناك مخزن واحد حاليًا |
+| T6 | product_stocks, stock_movements, stock_reservations | تثبيت منطق المخزون |
+| T7 | orders | الكيان الرئيسي للطلبات |
+| T8 | order_items | يعتمد على orders و products |
+| T9 | order_events, order_item_events | التتبع والتايملاين |
+| T10 | returns, return_items | المرتجعات بعد الطلبات |
+| T11 | manufacturing_requests, manufacturing_request_materials, manufacturing_quality_checks, manufacturing_events, manufacturing_receipts | إدارة التصنيع بعد المنتجات والمخزون والطلبيات لأنها قد ترتبط ببيع أو بسد نقص مخزون |
+| T12 | suppliers, purchase_orders, purchase_order_items | الموردين والمشتريات وربط المورد بالشريك |
+| T13 | road_invoices, road_invoice_items, road_invoice_orders | فواتير الطريق |
+| T14 | accounting core: fiscal_years, periods, account_classes, account_templates, accounts, subledger_entities | نواة المحاسبة وشجرة الحسابات |
+| T15 | accounting operations: journal_books, sequences, journals, journal_items, dimensions | دفاتر اليومية والقيود والأبعاد |
+| T16 | accounting automation: tax_codes, accounting_settings, accounting_rules, opening_balances, reconciliation | الربط التلقائي والضرائب والمطابقة |
+| T17 | notification_types, notifications, notification_recipients, notification_templates, notification_actions, notification_escalations, notification_preferences, notification_rules, notification_retention_policies, notification_outbox | إشعارات المشترك |
+| T18 | resource_lock_policies, resource_locks, resource_lock_events | قفل التحرير ومنع التعديل المتزامن |
+| T19 | media_assets, ai_jobs, ai_job_items | وظائف مساندة |
+| T20 | audit_logs | تدقيق عمليات المشترك |
+
+ملاحظة ربط الموردين:
+
+- Migration جدول `suppliers` يسبق `purchase_orders` حتى تعتمد أوامر الشراء على `supplier_id` مع إبقاء `supplier_name` كلقطة تاريخية.
+- عند قبول ربط مشترك آخر، خدمة الشراكات تفحص `suppliers` داخل schema المشترك بالقيم الثابتة: `tax_number`, `commercial_register`, `email`, `phone`.
+- إذا كان التطابق فريداً، تحفظ المنصة حالة `supplier_match_status = suggested` وتعرض الواجهة سؤال التأكيد. عند الموافقة تحدث بطاقة المورد إلى `confirmed` وتحفظ `linked_partner_uuid`.
+- إذا كان التطابق مكرراً، تحفظ الحالة `ambiguous` وتمنع الربط التلقائي إلى أن يختار المستخدم بطاقة مورد محددة.
+
+ملاحظة مزامنة مستندات الشركاء:
+
+- جدول `platform.partner_document_links` هو سجل الربط الوحيد بين مستندين في schema مختلفين.
+- عند إنشاء أمر شراء لمورد مربوط، ينشأ رابط باتجاه `purchase_to_sale` ويولد عند الطرف الآخر أمر بيع وارد من شريك.
+- عند إنشاء أمر بيع لزبون مربوط، ينشأ رابط باتجاه `sale_to_purchase` ويولد عند الطرف الآخر أمر شراء وارد من شريك.
+- جداول `orders` و`purchase_orders` داخل tenant تحتفظ فقط بـ `partner_document_link_public_id` و`partner_sync_status` ولقطة الربط، ولا تحتوي FK مباشر إلى schema مشترك آخر.
+- يجب استخدام `idempotency_key` في منصة الربط حتى لا تتكرر الفاتورة المقابلة عند إعادة المحاولة.
+- حركة المخزون تتم داخل tenant نفسه فقط: البائع يحجز عند القبول ويخرج الكمية عند الشحن، والمشتري يسجل الكمية كمنتظرة ثم يدخلها للمخزون عند تأكيد الاستلام.
+- حالات مزامنة المستند يجب أن تغطي: `seller_reserved`, `shipped`, `in_transit`, `received` إضافة إلى القبول والرفض والإلغاء.
+- الإلغاء بعد الشحن، والمرتجع، والنقص، والضياع، والتلف لا تعالج بتغيير status فقط؛ تنشأ لها `partner_document_claims` مع سطور كميات وحل واضح.
+- المرتجع ينشئ حركة خروج عند المشتري وحركة دخول/حجر عند البائع عند وصوله، أما الضياع في الطريق فيبقى claim حتى يحسم بتعويض أو إشعار دائن أو إعادة شحن.
+
+ملاحظة التصنيع:
+
+- Migration التصنيع يأتي بعد `orders/order_items` لأن طلب التصنيع قد يشير إلى طلبية بيع، وبعد `product_stocks/stock_movements` لأنه يحجز المواد ويدخل المنتج النهائي.
+- إنشاء طلب تصنيع لا ينشئ حركة مخزون للمنتج النهائي.
+- الاعتماد يمكن أن ينشئ `stock_reservations` للمواد الخام، والبدء ينشئ `stock_movements` صرف مواد أو تحويل إلى WIP حسب إعداد المحاسبة.
+- الاستلام فقط ينشئ `stock_movement` دخول للمنتج النهائي في `destination_warehouse_id`.
+- إذا كان `source_type = sold_order` يحجز المنتج النهائي للطلبية المرتبطة بعد الاستلام، أما `stock_replenishment` فيدخل كمخزون عام.
+- كل انتقال حالة يكتب في `manufacturing_events` ويطلق إشعارًا من فئة `manufacturing`.
 
 ## الحالات الرسمية المقترحة
 
@@ -145,6 +237,25 @@
 - `fulfilled`
 - `cancelled`
 - `deleted_by_admin`
+
+### manufacturing_request_status
+
+- `draft`
+- `approved`
+- `queued`
+- `in_production`
+- `quality_check`
+- `ready_to_ship`
+- `in_transit`
+- `received`
+- `cancelled`
+
+### manufacturing_source_type
+
+- `sold_order`
+- `stock_replenishment`
+- `custom_order`
+- `manual`
 
 ### stock_movement_type
 
@@ -175,21 +286,70 @@
 
 ### notification_type
 
-- `order_created`
-- `order_updated`
-- `order_confirmed`
-- `order_rejected`
-- `order_line_cancelled`
-- `stock_warning`
-- `ai_job_completed`
-- `customer_created`
+هذه ليست SQL ENUM؛ تحفظ كـ seed في `notification_types.code` حتى يمكن إضافة أنواع جديدة بدون كسر migration قديم.
+
+- `product.created`
+- `product.updated`
+- `product.price_changed`
+- `inventory.low_stock`
+- `inventory.out_of_stock`
+- `order.submitted`
+- `order.confirmed`
+- `order.rejected`
+- `order.line_cancelled`
+- `return.created`
+- `payment.received`
+- `user.permission_changed`
+- `user.disabled`
+- `security.failed_login`
+- `ai.job_completed`
+- `accounting.auto_journal_failed`
+- `accounting.period_closed`
+- `partnership.requested`
+- `partnership.approved`
+- `partnership.rejected`
+- `partnership.permissions_changed`
+- `partnership.supplier_match_found`
+- `partnership.supplier_auto_linked`
+- `partner_document.purchase_to_sale_created`
+- `partner_document.sale_to_purchase_created`
+- `partner_document.status_changed`
+- `partner_document.shipped`
+- `partner_document.received`
+- `partner_document.cancel_requested`
+- `partner_document.return_requested`
+- `partner_document.loss_reported`
+- `partner_document.shortage_reported`
+- `partner_document.damage_reported`
+- `partner_document.claim_resolved`
+- `manufacturing.request_created`
+- `manufacturing.approved`
+- `manufacturing.queued`
+- `manufacturing.started`
+- `manufacturing.quality_check_required`
+- `manufacturing.quality_failed`
+- `manufacturing.ready_to_ship`
+- `manufacturing.shipped`
+- `manufacturing.received`
+- `manufacturing.delayed`
+- `manufacturing.deposit_pending`
+- `support.ticket_opened`
+- `support.message_sent`
+- `support.ticket_status_changed`
+- `support.ticket_closed`
+- `subscription.expiring_soon`
+- `subscription.expired`
+- `tenant.provisioning_failed`
 
 ## الجداول الأساسية
+
+> ملاحظة مهمة: الجداول التالية تمثل template داخل schema كل مشترك. جداول المنصة نفسها موثقة في [DATABASE_SCHEMA.md](/Users/mw/Downloads/allal-article/DATABASE_SCHEMA.md:1) تحت قسم `platform`. لا تنشأ جداول تشغيل المشتركين في `public`.
 
 ## 1) users
 
 الغرض:
-- المستخدمون الأساسيون للنظام: owner, admin, sales, viewer
+- المستخدمون داخل شركة مشتركة واحدة: owner/admin/sales/viewer/driver.
+- مالك المنصة يستخدم `platform.platform_users` وليس هذا الجدول.
 
 الحقول المقترحة:
 - `id`
@@ -262,8 +422,20 @@
 - `name`
 - `module`
 - `description`
+- `required_plan_feature_code`
+- `ui_route`
+- `ui_action_key`
+- `is_visible_to_all`
+- `denied_title`
+- `denied_message`
+- `denied_action_type` (`contact_admin`, `request_permission`, `upgrade_plan`, `contact_partner`)
+- `ui_metadata_json`
 - `created_at`
 - `updated_at`
+
+قاعدة واجهة مهمة:
+- الصلاحية لا تتحكم في ظهور الزر أو الصفحة فقط، بل في تنفيذ الفعل.
+- كل الصلاحيات والميزات الأساسية تبقى ظاهرة للمستخدم، وعند الفعل يرجع النظام سبب المنع ورسالة مناسبة.
 
 أمثلة `code`:
 - `view_products`
@@ -301,6 +473,25 @@
 
 ملاحظة:
 - هذا الجدول اختياري لكنه مفيد جدًا للأنظمة الإدارية المرنة.
+
+## 6.1) access_denial_events
+
+الغرض:
+- تسجيل محاولات استخدام ميزة ظاهرة لكن ممنوعة بسبب الخطة أو صلاحية المستخدم أو صلاحية الشريك.
+
+الحقول:
+- `id`
+- `public_id`
+- `user_id`
+- `permission_code`
+- `feature_code`
+- `partner_uuid`
+- `route`
+- `action_key`
+- `denial_reason` (`plan_required`, `user_permission_required`, `partner_permission_required`, `scope_denied`, `tenant_suspended`)
+- `message_shown`
+- `metadata_json`
+- `created_at`
 
 ## 7) customers
 
@@ -677,24 +868,270 @@
 
 ## 21) notifications
 
-الحقول المقترحة:
+هذا القسم خاص بجداول الإشعارات داخل schema المشترك. إشعارات مالك المنصة والإشعارات العابرة بين المشتركين وتذاكر الدعم لها جداول `platform.notification_types` و `platform.platform_notifications` و `platform.platform_notification_recipients`.
+
+الجداول المقترحة داخل كل tenant schema:
+
+### notification_types
+
 - `id`
-- `user_id`
-- `type`
+- `code` مثل `product.price_changed`
+- `category` (`orders`, `products`, `inventory`, `users`, `accounting`, `partnerships`, `partner_documents`, `support`)
+- `severity` (`info`, `success`, `warning`, `critical`, `action_required`)
+- `default_channels` jsonb
+- `title_template`
+- `body_template`
+- `short_template`
+- `reason_template`
+- `target_audience`
+- `target_role_code`
+- `target_permission_code`
+- `action_type`
+- `default_actions_json`
+- `privacy_policy`
+- `can_user_mute`
+- `retention_policy_code`
+- `escalation_policy_json`
+- `is_actionable`
+- `is_digestible`
+- `dedupe_window_minutes`
+- `is_active`
+- `created_at`
+
+### notifications
+
+- `id`
+- `public_id`
+- `notification_type_id`
+- `platform_notification_id` nullable، للإشعار القادم من علاقة بين مشتركين
+- `category`
+- `severity`
 - `title`
 - `body`
 - `entity_type`
 - `entity_id`
+- `source_type`
+- `source_id`
+- `actor_user_id`
+- `source_event_code`
+- `source_event_id`
+- `action_url`
+- `summary_text`
+- `reason_text`
+- `payload_json`
+- `dedupe_key`
+- `group_key`
+- `correlation_id`
+- `status`
+- `created_at`
+- `retention_until`
+- `expires_at`
+
+### notification_recipients
+
+- `id`
+- `notification_id`
+- `recipient_user_id`
+- `delivery_status`
+- `state`
+- `recipient_reason`
 - `is_read`
 - `read_at`
-- `payload_json`
+- `is_archived`
+- `archived_at`
+- `snoozed_until`
+- `actioned_at`
+- `last_seen_at`
+- `escalation_level`
+- `escalated_at`
+- `created_at`
+
+### notification_preferences
+
+- `id`
+- `user_id`
+- `notification_type_id`
+- `channel`
+- `is_enabled`
+- `minimum_severity`
+- `digest_mode`
+- `quiet_hours_json`
+- `created_at`
+- `updated_at`
+
+### notification_rules
+
+- `id`
+- `code`
+- `notification_type_id`
+- `trigger_event`
+- `condition_json`
+- `target_json`
+- `action_policy_json`
+- `escalation_policy_json`
+- `is_active`
+- `created_at`
+- `updated_at`
+
+### notification_templates
+
+- `id`
+- `notification_type_id`
+- `locale`
+- `channel`
+- `title_template`
+- `short_template`
+- `body_template`
+- `reason_template`
+- `created_at`
+- `updated_at`
+
+### notification_actions
+
+- `id`
+- `notification_id`
+- `recipient_id`
+- `action_code`
+- `action_label`
+- `action_url`
+- `status`
+- `performed_at`
+- `performed_by_user_id`
+- `result_json`
+- `created_at`
+
+### notification_escalations
+
+- `id`
+- `notification_id`
+- `recipient_id`
+- `from_user_id`
+- `to_user_id`
+- `to_role_code`
+- `level`
+- `reason`
+- `status`
+- `scheduled_at`
+- `sent_at`
+- `created_at`
+
+### notification_retention_policies
+
+- `id`
+- `code`
+- `category`
+- `severity`
+- `keep_days`
+- `archive_after_days`
+- `delete_outbox_after_days`
+- `is_legal_hold`
+- `created_at`
+- `updated_at`
+
+### notification_outbox
+
+- `id`
+- `notification_id`
+- `recipient_id`
+- `channel`
+- `status`
+- `attempt_count`
+- `next_attempt_at`
+- `last_error`
+- `created_at`
+- `delivered_at`
+
+فهارس:
+- index على `notifications.created_at`
+- index على `notifications.category`
+- index على `notifications.dedupe_key`
+- index على `notifications.group_key`
+- index على `notification_recipients(recipient_user_id, is_read)`
+- index على `notification_recipients(state, snoozed_until)`
+- index على `notification_outbox(status, next_attempt_at)`
+
+## 22) resource_locks
+
+هذا القسم خاص بقفل التحرير داخل schema المشترك. جداول المنصة المقابلة هي `platform.platform_resource_locks`.
+
+### resource_lock_policies
+
+- `id`
+- `resource_type`
+- `lock_scope`
+- `ttl_seconds`
+- `heartbeat_interval_seconds`
+- `stale_after_seconds`
+- `allow_force_takeover`
+- `force_takeover_permission`
+- `show_locker_identity`
+- `blocked_actions_json`
+- `is_active`
+- `created_at`
+- `updated_at`
+
+### resource_locks
+
+- `id`
+- `public_id`
+- `resource_type`
+- `resource_id`
+- `resource_public_id`
+- `resource_key`
+- `lock_scope`
+- `status`
+- `locked_by_user_id`
+- `locked_by_session_id`
+- `lock_token`
+- `device_label`
+- `acquired_at`
+- `heartbeat_at`
+- `expires_at`
+- `released_at`
+- `release_reason`
+- `taken_over_by_user_id`
+- `taken_over_at`
+- `metadata_json`
+
+### resource_lock_events
+
+- `id`
+- `lock_id`
+- `event_type`
+- `actor_user_id`
+- `details_json`
 - `created_at`
 
 فهارس:
-- index على `user_id, is_read`
-- index على `type`
+- index على `resource_locks(resource_type, resource_id, lock_scope, status)`
+- index على `resource_locks(resource_type, resource_key, lock_scope, status)`
+- index على `resource_locks(status, expires_at)`
+- index على `resource_lock_events(lock_id, created_at)`
 
-## 22) audit_logs
+السياسات الأولية التي يجب زرعها:
+
+- `sales_order/edit`
+- `sales_order/approve`
+- `purchase_order/edit`
+- `purchase_order/receive`
+- `purchase_order/invoice`
+- `inventory_adjustment/post`
+- `stock_count/edit`
+- `product/edit`
+- `product/price_update`
+- `journal/edit`
+- `journal/post`
+- `fiscal_period/close`
+- `accounting_settings/edit`
+- `user_permissions/edit`
+- `supplier/edit`
+- `supplier/link_partner`
+- `partnership/approve`
+- `partnership/permissions_update`
+- `partner_document/sync`
+- `partner_document/confirm`
+
+## 23) audit_logs
 
 الحقول المقترحة:
 - `id`
@@ -839,8 +1276,55 @@
 - default AI provider = `openai`
 - order number prefix = `ORD`
 
+### Seed محاسبي إلزامي لكل مشترك
+
+- `account_classes` وفق القالب المختار، ويفضل قالب `dz_scf_trading`.
+- `account_templates` و `account_template_items` لشجرة الحسابات الافتراضية.
+- `journal_books`: مبيعات، مشتريات، صندوق، بنك، مخزون، يدوي، افتتاح، إقفال.
+- `number_sequences` لكل دفتر حسب السنة.
+- `dimension_types`: مركز تكلفة، ولاية، بائع، مخزن، مسار شحن.
+- `tax_codes` و `tax_rates` الأساسية إذا كانت الضرائب مفعلة.
+- `payment_methods`: نقدي، تحويل بنكي، شيك.
+- `cash_boxes` للصندوق الافتراضي.
+- `bank_accounts` للحساب البنكي الافتراضي إذا أدخله المستخدم.
+- `accounting_settings` لكل المفاتيح الإجبارية:
+  - `sales_revenue`
+  - `sales_returns`
+  - `discount_given`
+  - `cogs`
+  - `inventory`
+  - `inventory_adjustment_gain`
+  - `inventory_adjustment_loss`
+  - `customers_control`
+  - `suppliers_control`
+  - `cash`
+  - `bank`
+  - `cheques_receivable`
+  - `cheques_payable`
+  - `tax_collected`
+  - `tax_deductible`
+  - `tax_payable`
+  - `shipping_income`
+  - `shipping_expense`
+  - `retained_earnings`
+  - `current_year_profit`
+- `accounting_rules` الأساسية:
+  - `sale_confirmed`
+  - `sale_cogs_posted`
+  - `sale_return`
+  - `customer_payment`
+  - `purchase_received`
+  - `purchase_return`
+  - `supplier_payment`
+  - `stock_adjustment`
+  - `opening_balance_posted`
+
 ## قواعد منطقية يجب أن تنعكس في الميغريشن والخدمات
 
+- أي endpoint تشغيلي يجب أن يعمل داخل `TenantContext` مضبوط.
+- لا تقبل `schema_name` أو `tenant_id` من body request في عمليات المشترك.
+- إنشاء مشترك جديد يجب أن ينشئ سجل `platform.tenants` ثم schema منفصل ثم يطبق tenant migrations.
+- لوحة المالك تقرأ من `platform` و snapshots، ولا تخلط مستخدم platform مع مستخدم tenant.
 - الطلبية المؤكدة فقط هي التي تحجز المخزون رسميًا.
 - الطلبية `submitted` قد تؤثر على `pending_qty` لكنها لا تخصم من `reserved_qty`.
 - `available_qty = on_hand_qty - reserved_qty`
@@ -856,11 +1340,24 @@
 
 ### Minimum Viable Schema Phase 1
 
-- `users`
-- `user_profiles`
+#### Platform
+
+- `platform_users`
+- `plans`
+- `plan_features`
+- `tenants`
+- `subscriptions`
+- `tenant_provisioning_events`
+- `tenant_usage_snapshots`
+- `platform_audit_logs`
+
+#### Tenant template
+
 - `roles`
 - `permissions`
 - `role_permissions`
+- `users`
+- `user_profiles`
 - `user_permissions`
 - `customers`
 - `categories`
@@ -880,7 +1377,19 @@
 
 ### Phase 2
 
+- `notification_types`
 - `notifications`
+- `notification_recipients`
+- `notification_templates`
+- `notification_actions`
+- `notification_escalations`
+- `notification_preferences`
+- `notification_rules`
+- `notification_retention_policies`
+- `notification_outbox`
+- `resource_lock_policies`
+- `resource_locks`
+- `resource_lock_events`
 - `ai_jobs`
 - `ai_job_items`
 - `payments` / `transactions`

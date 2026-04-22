@@ -50,6 +50,8 @@ import OwnerDashboard from "layouts/owner/dashboard";
 import OwnerTenants  from "layouts/owner/tenants";
 import OwnerPlans    from "layouts/owner/plans";
 import OwnerRevenue  from "layouts/owner/revenue";
+import OwnerNotifications from "layouts/owner/notifications";
+import OwnerSupport from "layouts/owner/support";
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
@@ -113,6 +115,8 @@ const [rtlCache, setRtlCache] = useState(null);
         <Route path="/owner/tenants"   element={<OwnerTenants />} />
         <Route path="/owner/plans"     element={<OwnerPlans />} />
         <Route path="/owner/revenue"   element={<OwnerRevenue />} />
+        <Route path="/owner/notifications" element={<OwnerNotifications />} />
+        <Route path="/owner/support" element={<OwnerSupport />} />
         <Route path="/owner/*"         element={<Navigate to="/owner/dashboard" />} />
       </Routes>
     );

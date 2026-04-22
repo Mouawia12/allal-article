@@ -22,6 +22,8 @@ import MenuOpenIcon from "@mui/icons-material/MenuOpen";
 import MenuIcon from "@mui/icons-material/Menu";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import TranslateIcon from "@mui/icons-material/Translate";
+import NotificationsIcon from "@mui/icons-material/Notifications";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 
 import { localizeNode, useI18n } from "i18n";
 
@@ -30,6 +32,8 @@ const NAV_ITEMS = [
   { label: "Tenants",     icon: <PeopleIcon />,    path: "/owner/tenants" },
   { label: "Plans",       icon: <StarIcon />,      path: "/owner/plans" },
   { label: "Revenue",     icon: <ReceiptIcon />,   path: "/owner/revenue" },
+  { label: "Notifications", icon: <NotificationsIcon />, path: "/owner/notifications" },
+  { label: "Support", icon: <SupportAgentIcon />, path: "/owner/support" },
 ];
 
 const SIDEBAR_W = 220;

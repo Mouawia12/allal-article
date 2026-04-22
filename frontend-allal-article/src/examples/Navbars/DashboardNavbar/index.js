@@ -27,6 +27,8 @@ import Toolbar from "@mui/material/Toolbar";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Badge from "@mui/material/Badge";
+import Divider from "@mui/material/Divider";
 import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
@@ -55,10 +57,11 @@ import {
   setOpenConfigurator,
 } from "context";
 import { useI18n } from "i18n";
-
-// Images
-import team2 from "assets/images/team-2.jpg";
-import logoSpotify from "assets/images/small-logos/logo-spotify.svg";
+import {
+  categoryConfig,
+  mockNotificationPreview,
+  severityConfig,
+} from "data/mock/notificationsMock";
 
 function DashboardNavbar({ absolute, light, isMini }) {
   const [navbarType, setNavbarType] = useState();
@@ -101,6 +104,14 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const handleCloseMenu = () => setOpenMenu(false);
   const handleOpenLanguageMenu = (event) => setLanguageMenuAnchor(event.currentTarget);
   const handleCloseLanguageMenu = () => setLanguageMenuAnchor(null);
+  const unreadCount = mockNotificationPreview.filter((item) => !item.isRead).length;
+
+  const notificationItemColor = (severity) => {
+    if (severity === "critical") return "error";
+    if (severity === "action_required") return "warning";
+    if (severity === "success") return "success";
+    return "info";
+  };
 
   // Render the notifications menu
   const renderMenu = () => (
@@ -115,29 +126,37 @@ function DashboardNavbar({ absolute, light, isMini }) {
       onClose={handleCloseMenu}
       sx={{ mt: 2 }}
     >
-      <NotificationItem
-        image={<img src={team2} alt="person" />}
-        title={["New message", "from Laur"]}
-        date="13 minutes ago"
-        onClick={handleCloseMenu}
-      />
-      <NotificationItem
-        image={<img src={logoSpotify} alt="person" />}
-        title={["New album", "by Travis Scott"]}
-        date="1 day"
-        onClick={handleCloseMenu}
-      />
-      <NotificationItem
-        color="secondary"
-        image={
-          <Icon fontSize="small" sx={{ color: ({ palette: { white } }) => white.main }}>
-            payment
-          </Icon>
-        }
-        title={["", "Payment successfully completed"]}
-        date="2 days"
-        onClick={handleCloseMenu}
-      />
+      <MenuItem disabled>
+        <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+          آخر الإشعارات
+        </SoftTypography>
+      </MenuItem>
+      {mockNotificationPreview.map((item) => {
+        const category = categoryConfig[item.category] || { icon: "notifications" };
+        const severity = severityConfig[item.severity] || severityConfig.info;
+        return (
+          <NotificationItem
+            key={item.publicId}
+            component={Link}
+            to={item.actionUrl}
+            color={notificationItemColor(item.severity)}
+            image={
+              <Icon fontSize="small" sx={{ color: ({ palette: { white } }) => white.main }}>
+                {category.icon}
+              </Icon>
+            }
+            title={[item.isRead ? "" : "جديد", item.title]}
+            date={`${item.createdAt} · ${severity.label}`}
+            onClick={handleCloseMenu}
+          />
+        );
+      })}
+      <Divider sx={{ my: 0.5 }} />
+      <MenuItem component={Link} to="/notifications" onClick={handleCloseMenu}>
+        <SoftTypography variant="button" color="info" fontWeight="bold">
+          عرض كل الإشعارات
+        </SoftTypography>
+      </MenuItem>
     </Menu>
   );
 
@@ -247,7 +266,9 @@ function DashboardNavbar({ absolute, light, isMini }) {
                 variant="contained"
                 onClick={handleOpenMenu}
               >
-                <Icon className={light ? "text-white" : "text-dark"}>notifications</Icon>
+                <Badge badgeContent={unreadCount} color="error" overlap="circular">
+                  <Icon className={light ? "text-white" : "text-dark"}>notifications</Icon>
+                </Badge>
               </IconButton>
               {renderLanguageMenu()}
               {renderMenu()}

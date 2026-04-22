@@ -29,8 +29,15 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { calcLineTotal, formatDZD, mockPurchases, purchaseProducts, supplierOptions } from "./mockData";
-import { linkedSuppliers, mockPartnerProducts } from "data/mock/partnershipMock";
+import { calcLineTotal, formatDZD, mockPurchases, purchaseProducts } from "./mockData";
+import { mockPartnerProducts } from "data/mock/partnershipMock";
+import {
+  findSupplierByName,
+  getSupplierName,
+  getSupplierOptions,
+  resolveSupplierLink,
+  supplierMatchLabels,
+} from "data/mock/suppliersMock";
 
 let lineId = 1;
 
@@ -137,14 +144,10 @@ export default function PurchaseForm() {
   const editPurchase = mockPurchases.find((purchase) => purchase.id === id);
   const isEdit = Boolean(editPurchase);
 
-  // Detect linked partners for supplier-aware product list
-  const linkedSupplierOptions = linkedSuppliers.map((s) => s.name);
-  const allSupplierOptions = [
-    ...linkedSuppliers.map((s) => ({ name: s.name, uuid: s.uuid, isLinked: true, permissions: s.permissions })),
-    ...supplierOptions.map((n) => ({ name: n, uuid: null, isLinked: false, permissions: {} })),
-  ];
-
-  const [supplier, setSupplier] = useState(editPurchase?.supplier || null);
+  const supplierOptions = useMemo(() => getSupplierOptions(), []);
+  const [supplier, setSupplier] = useState(() => (
+    editPurchase?.supplier ? findSupplierByName(editPurchase.supplier) || editPurchase.supplier : null
+  ));
   const [date, setDate] = useState(editPurchase?.date || new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState(editPurchase?.expectedDate || "");
   const [warehouse, setWarehouse] = useState(editPurchase?.warehouse || "المخزن الرئيسي");
@@ -166,16 +169,16 @@ export default function PurchaseForm() {
   });
   const [savedDialog, setSavedDialog] = useState(null);
 
-  // Linked supplier detection — if selected supplier matches a partnership, use their products
+  // Linked supplier detection uses stable identifiers, not display names.
   const linkedMatch = useMemo(() => {
     if (!supplier) return null;
-    const supplierName = typeof supplier === "object" ? supplier.name : supplier;
-    return allSupplierOptions.find((s) => s.isLinked && s.name === supplierName) ?? null;
+    const resolved = resolveSupplierLink(supplier);
+    return resolved.isLinked ? resolved : null;
   }, [supplier]);
 
   const activeProducts = useMemo(() => {
-    if (linkedMatch?.uuid && mockPartnerProducts[linkedMatch.uuid]) {
-      return mockPartnerProducts[linkedMatch.uuid].map((p) => ({
+    if (linkedMatch?.partner?.uuid && mockPartnerProducts[linkedMatch.partner.uuid]) {
+      return mockPartnerProducts[linkedMatch.partner.uuid].map((p) => ({
         id: p.id,
         name: p.nameAr,
         unit: p.unit,
@@ -248,20 +251,33 @@ export default function PurchaseForm() {
                 <Grid item xs={12} md={6}>
                   <Autocomplete
                     size="small"
-                    options={[...linkedSupplierOptions, ...supplierOptions]}
+                    options={supplierOptions}
                     value={supplier}
                     onChange={(_, value) => setSupplier(value)}
+                    getOptionLabel={getSupplierName}
+                    isOptionEqualToValue={(option, value) => {
+                      if (!option || !value) return false;
+                      if (typeof option === "string" || typeof value === "string") {
+                        return getSupplierName(option) === getSupplierName(value);
+                      }
+                      return option.id === value.id;
+                    }}
                     renderOption={(props, option) => {
-                      const isLinked = linkedSupplierOptions.includes(option);
+                      const link = resolveSupplierLink(option);
                       return (
-                        <li {...props}>
+                        <li {...props} key={option.id || option.name}>
                           <SoftBox display="flex" alignItems="center" gap={1}>
-                            {isLinked && (
+                            {link.isLinked && (
                               <SoftBox sx={{ fontSize: 9, background: "#e3f8fd", color: "#17c1e8", border: "1px solid #b2ebf9", borderRadius: 1, px: 0.8, py: 0.2, fontWeight: 700, whiteSpace: "nowrap" }}>
                                 مرتبط
                               </SoftBox>
                             )}
-                            <span>{option}</span>
+                            <span>{option.name}</span>
+                            {option.taxNumber && (
+                              <SoftTypography variant="caption" color="secondary">
+                                {option.taxNumber}
+                              </SoftTypography>
+                            )}
                           </SoftBox>
                         </li>
                       );
@@ -277,10 +293,15 @@ export default function PurchaseForm() {
                         <SoftTypography variant="caption" sx={{ color: "#17c1e8", fontWeight: 700 }}>مورد مرتبط</SoftTypography>
                       </SoftBox>
                       <SoftTypography variant="caption" color="secondary" display="block" sx={{ mt: 0.3 }}>
-                        تعرض حقول الأصناف أدناه مخزون هذا الشريك مباشرةً.
+                        تم التعرف على الربط عبر {supplierMatchLabels[linkedMatch.matchedBy] || "معرف ثابت"}، وتعرض حقول الأصناف أدناه مخزون هذا الشريك مباشرةً.
                         {linkedMatch.permissions?.create_purchase_link && " عند الحفظ ستتحول الطلبية تلقائياً لفاتورة مبيعات عنده."}
                       </SoftTypography>
                     </SoftBox>
+                  )}
+                  {supplier && !linkedMatch && (
+                    <SoftTypography variant="caption" color="secondary" display="block" sx={{ mt: 0.8 }}>
+                      هذا المورد غير مربوط حالياً. اربطه من بطاقة المورد باستخدام UUID أو الرقم الضريبي أو البريد.
+                    </SoftTypography>
                   )}
                 </Grid>
                 <Grid item xs={12} md={3}>

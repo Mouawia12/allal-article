@@ -20,6 +20,8 @@ import ExtensionIcon from "@mui/icons-material/Extension";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import HomeIcon from "@mui/icons-material/Home";
+import HubIcon from "@mui/icons-material/Hub";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyIcon from "@mui/icons-material/Key";
 import LibraryBooksIcon from "@mui/icons-material/LibraryBooks";
@@ -35,6 +37,7 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PublicIcon from "@mui/icons-material/Public";
 import RemoveIcon from "@mui/icons-material/Remove";
 import SearchIcon from "@mui/icons-material/Search";
+import SecurityIcon from "@mui/icons-material/Security";
 import SettingsIcon from "@mui/icons-material/Settings";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
@@ -43,7 +46,9 @@ import TouchAppIcon from "@mui/icons-material/TouchApp";
 import TranslateIcon from "@mui/icons-material/Translate";
 import WarningIcon from "@mui/icons-material/Warning";
 import WatchLaterIcon from "@mui/icons-material/WatchLater";
+import WarehouseIcon from "@mui/icons-material/Warehouse";
 import WifiIcon from "@mui/icons-material/Wifi";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 
 const ICON_MAP = {
   account_circle: AccountCircleIcon,
@@ -64,6 +69,8 @@ const ICON_MAP = {
   extension: ExtensionIcon,
   favorite: FavoriteIcon,
   home: HomeIcon,
+  hub: HubIcon,
+  inventory_2: Inventory2Icon,
   keyboard_arrow_down: KeyboardArrowDownIcon,
   key: KeyIcon,
   library_books: LibraryBooksIcon,
@@ -79,6 +86,7 @@ const ICON_MAP = {
   public: PublicIcon,
   remove: RemoveIcon,
   search: SearchIcon,
+  security: SecurityIcon,
   settings: SettingsIcon,
   shopping_cart: ShoppingCartIcon,
   skip_next: SkipNextIcon,
@@ -87,7 +95,9 @@ const ICON_MAP = {
   translate: TranslateIcon,
   warning: WarningIcon,
   watch_later: WatchLaterIcon,
+  warehouse: WarehouseIcon,
   wifi: WifiIcon,
+  admin_panel_settings: AdminPanelSettingsIcon,
 };
 
 const AppIcon = forwardRef(({ children, ...props }, ref) => {

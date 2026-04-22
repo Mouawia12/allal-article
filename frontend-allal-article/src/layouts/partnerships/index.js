@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Box from "@mui/material/Box";
@@ -48,6 +48,7 @@ import {
   mockPendingApprovals,
   mockMyPendingRequests,
 } from "data/mock/partnershipMock";
+import { findSupplierIdentityMatch, supplierMatchLabels } from "data/mock/suppliersMock";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const riskColor = { low: "#82d616", medium: "#fb8c00", high: "#ea0606" };
@@ -82,6 +83,7 @@ function GenerateCodeDialog({ open, onClose }) {
     view_sales_data: false,
     clone_products: false,
     create_purchase_link: false,
+    create_sales_link: false,
   });
   const [generated, setGenerated] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -104,7 +106,7 @@ function GenerateCodeDialog({ open, onClose }) {
     setLabel("");
     setMaxUses("");
     setExpiresAt("");
-    setPerms({ view_inventory: true, view_pricing: false, view_sales_data: false, clone_products: false, create_purchase_link: false });
+    setPerms({ view_inventory: true, view_pricing: false, view_sales_data: false, clone_products: false, create_purchase_link: false, create_sales_link: false });
     onClose();
   };
 
@@ -285,8 +287,18 @@ function ApprovalDialog({ request, onClose }) {
     view_sales_data: false,
     clone_products: false,
     create_purchase_link: false,
+    create_sales_link: false,
   });
+  const [supplierLinkDecision, setSupplierLinkDecision] = useState("pending");
+  const supplierMatch = request ? findSupplierIdentityMatch(request) : null;
+
+  useEffect(() => {
+    setSupplierLinkDecision("pending");
+  }, [request?.id]);
+
   if (!request) return null;
+
+  const supplierMatchLabel = supplierMatchLabels[supplierMatch?.matchedBy] || "بيانات تعريف";
 
   return (
     <Dialog open={!!request} onClose={onClose} maxWidth="sm" fullWidth>
@@ -303,10 +315,13 @@ function ApprovalDialog({ request, onClose }) {
             {[
               { label: "الشركة", value: request.partnerName },
               { label: "البريد", value: request.partnerEmail },
+              { label: "الهاتف", value: request.partnerPhone },
+              { label: "الرقم الضريبي", value: request.partnerTaxNumber },
+              { label: "السجل التجاري", value: request.partnerCommercialRegister },
               { label: "الولاية", value: request.partnerWilaya },
               { label: "الكود المستخدم", value: request.inviteCode },
               { label: "تاريخ الطلب", value: request.requestedAt },
-            ].map(({ label, value }) => (
+            ].filter(({ value }) => value).map(({ label, value }) => (
               <Box key={label}>
                 <Box sx={{ fontSize: 10, color: "#8392ab", mb: 0.2 }}>{label}</Box>
                 <Box sx={{ fontSize: 12, fontWeight: 500, color: "#344767" }}>{value}</Box>
@@ -316,6 +331,59 @@ function ApprovalDialog({ request, onClose }) {
           {request.message && (
             <Box sx={{ background: "#f8f9fa", borderRadius: 2, p: 1.5, fontSize: 12, color: "#344767", fontStyle: "italic" }}>
               &ldquo;{request.message}&rdquo;
+            </Box>
+          )}
+
+          {supplierMatch && (
+            <Box sx={{
+              background: supplierLinkDecision === "accepted" ? "#f0fde4" : supplierLinkDecision === "skipped" ? "#f8f9fa" : "#fff8e1",
+              border: supplierLinkDecision === "accepted" ? "1px solid #82d61644" : supplierLinkDecision === "skipped" ? "1px solid #dee2e6" : "1px solid #fbc02d55",
+              borderRadius: 2,
+              p: 1.5,
+              display: "flex",
+              gap: 1.2,
+              alignItems: "flex-start",
+            }}>
+              {supplierLinkDecision === "accepted" ? (
+                <CheckIcon sx={{ fontSize: 18, color: "#82d616", flexShrink: 0, mt: 0.2 }} />
+              ) : (
+                <WarningAmberIcon sx={{ fontSize: 18, color: supplierLinkDecision === "skipped" ? "#8392ab" : "#fb8c00", flexShrink: 0, mt: 0.2 }} />
+              )}
+              <Box sx={{ flex: 1 }}>
+                <Box sx={{ fontSize: 12, fontWeight: 700, color: "#344767", mb: 0.4 }}>
+                  وجدنا مورداً محفوظاً قد يكون نفس هذا الشريك
+                </Box>
+                <Box sx={{ fontSize: 11, color: "#344767", lineHeight: 1.7 }}>
+                  بطاقة المورد: <Box component="span" sx={{ fontWeight: 700 }}>{supplierMatch.supplier.name}</Box>
+                  {" · "}التطابق عبر {supplierMatchLabel}: <Box component="span" sx={{ fontWeight: 700 }}>{supplierMatch.value}</Box>
+                  {supplierMatch.ambiguous && " · يوجد أكثر من مورد بنفس القيمة، يحتاج مراجعة"}
+                </Box>
+                <Box sx={{ fontSize: 10, color: "#8392ab", mt: 0.3 }}>
+                  الاسم ليس شرط الربط؛ القرار يعتمد على بيانات ثابتة وغير متكررة.
+                </Box>
+                {supplierLinkDecision === "pending" && !supplierMatch.ambiguous && (
+                  <Box sx={{ display: "flex", gap: 1, mt: 1.2, flexWrap: "wrap" }}>
+                    <Box component="button" onClick={() => setSupplierLinkDecision("accepted")}
+                      sx={{ background: "#82d616", border: "none", borderRadius: 1.5, px: 1.4, py: 0.55, cursor: "pointer", color: "#fff", fontSize: 11, fontWeight: 700 }}>
+                      نعم، اربطه تلقائياً
+                    </Box>
+                    <Box component="button" onClick={() => setSupplierLinkDecision("skipped")}
+                      sx={{ background: "#fff", border: "1px solid #dee2e6", borderRadius: 1.5, px: 1.4, py: 0.55, cursor: "pointer", color: "#8392ab", fontSize: 11, fontWeight: 600 }}>
+                      لا، أراجعه لاحقاً
+                    </Box>
+                  </Box>
+                )}
+                {supplierLinkDecision === "accepted" && (
+                  <Box sx={{ fontSize: 11, color: "#5faa0e", mt: 0.8, fontWeight: 600 }}>
+                    عند القبول سيتم حفظ معرف الشريك داخل بطاقة المورد تلقائياً.
+                  </Box>
+                )}
+                {supplierLinkDecision === "skipped" && (
+                  <Box sx={{ fontSize: 11, color: "#8392ab", mt: 0.8 }}>
+                    سيتم تفعيل الربط فقط، ويمكن ربط بطاقة المورد لاحقاً من صفحة الموردين.
+                  </Box>
+                )}
+              </Box>
             </Box>
           )}
 
@@ -345,7 +413,7 @@ function ApprovalDialog({ request, onClose }) {
         </Box>
         <Box component="button" onClick={onClose}
           sx={{ background: "linear-gradient(135deg, #82d616, #5faa0e)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 12, color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, marginLeft: "auto" }}>
-          <CheckIcon sx={{ fontSize: 14 }} /> قبول وتفعيل الربط
+          <CheckIcon sx={{ fontSize: 14 }} /> {supplierLinkDecision === "accepted" ? "قبول وتفعيل الربط + ربط المورد" : "قبول وتفعيل الربط"}
         </Box>
       </DialogActions>
     </Dialog>

@@ -36,6 +36,8 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import ResourceLockBanner from "components/ResourceLockBanner";
+import { getMockResourceLock } from "data/mock/resourceLocksMock";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const mockOrderDetail = {
@@ -135,6 +137,7 @@ function OrderDetail() {
   const [returnDialog, setReturnDialog] = useState(false);
 
   const sc = statusConfig[orderStatus] || { label: orderStatus, color: "secondary" };
+  const editLock = getMockResourceLock("sales_order", order.id);
 
   const handleAction = (action) => {
     if (action === "approve") setOrderStatus("confirmed");
@@ -200,7 +203,7 @@ function OrderDetail() {
               >
                 رفض الطلبية
               </SoftButton>
-              <SoftButton variant="outlined" color="info" size="small" startIcon={<EditIcon />}>
+              <SoftButton variant="outlined" color="info" size="small" startIcon={<EditIcon />} disabled={Boolean(editLock)}>
                 تعديل
               </SoftButton>
             </SoftBox>
@@ -227,6 +230,8 @@ function OrderDetail() {
             </SoftBox>
           )}
         </SoftBox>
+
+        <ResourceLockBanner lock={editLock} resourceLabel="الطلبية" />
 
         <Grid container spacing={3}>
           {/* ── Left Column ── */}
