@@ -50,6 +50,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import GridViewIcon from "@mui/icons-material/GridView";
 import ListIcon from "@mui/icons-material/List";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -59,25 +61,33 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
+import useProductFavorites from "hooks/useProductFavorites";
+import { formatDZD, getPriceListsFor, resolveProductPrice } from "data/mock/pricingInventoryMock";
+import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
+import demoToolsImage from "assets/images/products/demo-tools.jpg";
+import demoCablesImage from "assets/images/products/demo-cables.jpg";
+import demoBuildingSuppliesImage from "assets/images/products/demo-building-supplies.jpg";
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const categories = ["الكل", "مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
+const favoriteCategory = "المفضلة";
+const categoryFilters = ["الكل", favoriteCategory, ...categories.filter((cat) => cat !== "الكل")];
 
 // weightPerUnit: وزن وحدة قياس واحدة (كغ) | unitsPerPackage: عدد القطع في كرطون/علبة | packageUnit: اسم وحدة التعليب
 const mockProducts = [
-  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.05,  unitsPerPackage: 100, packageUnit: "كرطون" },
-  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.03,  unitsPerPackage: 200, packageUnit: "كرطون" },
-  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.02,  unitsPerPackage: 500, packageUnit: "كيس"   },
-  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.35,  unitsPerPackage: 12,  packageUnit: "علبة"  },
-  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.5,   unitsPerPackage: 12,  packageUnit: "علبة"  },
-  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.4,   unitsPerPackage: 6,   packageUnit: "علبة"  },
-  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.3,   unitsPerPackage: 100, packageUnit: "رزمة"  },
-  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.2,   unitsPerPackage: 100, packageUnit: "رزمة"  },
-  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  color: "#FFE66D", weightPerUnit: 0.1,   unitsPerPackage: 20,  packageUnit: "كرطون" },
-  { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد"   },
-  { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد"   },
+  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.05,  unitsPerPackage: 100, packageUnit: "كرطون", image: demoBoltsImage },
+  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.03,  unitsPerPackage: 200, packageUnit: "كرطون", image: demoBoltsImage },
+  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.02,  unitsPerPackage: 500, packageUnit: "كيس", image: demoBoltsImage },
+  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.35,  unitsPerPackage: 12,  packageUnit: "علبة", image: demoToolsImage },
+  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.5,   unitsPerPackage: 12,  packageUnit: "علبة", image: demoToolsImage },
+  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.4,   unitsPerPackage: 6,   packageUnit: "علبة", image: demoToolsImage },
+  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.3,   unitsPerPackage: 100, packageUnit: "رزمة", image: demoCablesImage },
+  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.2,   unitsPerPackage: 100, packageUnit: "رزمة", image: demoCablesImage },
+  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  color: "#FFE66D", weightPerUnit: 0.1,   unitsPerPackage: 20,  packageUnit: "كرطون", image: demoCablesImage },
+  { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
+  { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
   { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", color: "#A8E6CF", weightPerUnit: 0.45,  unitsPerPackage: 10,  packageUnit: "علبة"  },
-  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون" },
+  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون", image: demoBuildingSuppliesImage },
   { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         stock: 60,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون" },
   { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  color: "#B0C4DE", weightPerUnit: 0.15,  unitsPerPackage: 24,  packageUnit: "كرطون" },
   { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", color: "#F4A460", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة"  },
@@ -778,7 +788,19 @@ function getOrderProductStatus(product) {
 }
 
 // ─── Product Card ─────────────────────────────────────────────────────────────
-function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onSelect, cardRef }) {
+function ProductCard({
+  product,
+  cartItem,
+  priceInfo,
+  isFavorite,
+  onToggleFavorite,
+  onAdd,
+  onEdit,
+  onRemove,
+  selected,
+  onSelect,
+  cardRef,
+}) {
   const inCart = !!cartItem;
   const outOfStock = product.stock === 0;
   const lowStock = product.stock > 0 && product.stock < 50;
@@ -807,7 +829,8 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onS
       <SoftBox
         sx={{
           width: "100%",
-          height: 70,
+          aspectRatio: "1 / 1",
+          minHeight: 0,
           borderRadius: 2,
           background: outOfStock
             ? "#e0e0e0"
@@ -817,9 +840,19 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onS
           justifyContent: "center",
           mb: 1.5,
           position: "relative",
+          overflow: "hidden",
         }}
       >
-        <Inventory2Icon sx={{ color: "#fff", fontSize: 28, opacity: 0.8 }} />
+        {product.image ? (
+          <SoftBox
+            component="img"
+            src={product.image}
+            alt={product.name}
+            sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <Inventory2Icon sx={{ color: "#fff", fontSize: 28, opacity: 0.8 }} />
+        )}
         {inCart && (
           <SoftBox
             sx={{
@@ -838,15 +871,43 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onS
             <CheckIcon sx={{ color: "#fff", fontSize: 14 }} />
           </SoftBox>
         )}
+        <Tooltip title={isFavorite ? "إزالة من المفضلة" : "إضافة للمفضلة"}>
+          <IconButton
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFavorite(product.id);
+            }}
+            sx={{
+              position: "absolute",
+              top: 4,
+              left: 4,
+              width: 26,
+              height: 26,
+              background: "#fff",
+              color: isFavorite ? "#fb8c00" : "#8392ab",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+              "&:hover": { background: "#fff7e6", color: "#fb8c00" },
+            }}
+            aria-label={isFavorite ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+          >
+            {isFavorite ? <StarIcon sx={{ fontSize: 17 }} /> : <StarBorderIcon sx={{ fontSize: 17 }} />}
+          </IconButton>
+        </Tooltip>
       </SoftBox>
 
       {/* Info */}
       <SoftTypography variant="button" fontWeight="bold" lineHeight={1.3} mb={0.5}>
         {product.name}
       </SoftTypography>
-      <SoftTypography variant="caption" color="secondary" mb={1}>
-        {product.code}
-      </SoftTypography>
+      <SoftBox display="flex" alignItems="center" gap={0.5} mb={1} flexWrap="wrap">
+        <SoftTypography variant="caption" color="secondary">
+          {product.code}
+        </SoftTypography>
+        {isFavorite && (
+          <Chip label="مفضل" size="small" color="warning" sx={{ height: 18, fontSize: 10 }} />
+        )}
+      </SoftBox>
 
       {/* Stock Badge */}
       <SoftBox mb={1.5}>
@@ -857,6 +918,18 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onS
         ) : (
           <Chip label={`${product.stock} ${product.unit}`} size="small" color="success" sx={{ height: 20, fontSize: 11 }} />
         )}
+      </SoftBox>
+
+      <SoftBox mb={1.5} p={1} sx={{ background: "#f8fbff", border: "1px solid #d7ebff", borderRadius: 1.5 }}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
+          <SoftTypography variant="caption" color="secondary">السعر</SoftTypography>
+          <SoftTypography variant="caption" fontWeight="bold" color="info">
+            {formatDZD(priceInfo.unitPrice)} دج
+          </SoftTypography>
+        </SoftBox>
+        <SoftTypography variant="caption" color="secondary" display="block">
+          {priceInfo.sourceLabel}
+        </SoftTypography>
       </SoftBox>
 
       {/* Cart Actions */}
@@ -899,7 +972,19 @@ function ProductCard({ product, cartItem, onAdd, onEdit, onRemove, selected, onS
   );
 }
 
-function ProductListRow({ product, cartItem, selected, rowRef, onSelect, onAdd, onEdit, onRemove }) {
+function ProductListRow({
+  product,
+  cartItem,
+  priceInfo,
+  isFavorite,
+  selected,
+  rowRef,
+  onSelect,
+  onToggleFavorite,
+  onAdd,
+  onEdit,
+  onRemove,
+}) {
   const inCart = !!cartItem;
   const outOfStock = product.stock === 0;
   const status = getOrderProductStatus(product);
@@ -938,9 +1023,19 @@ function ProductListRow({ product, cartItem, selected, rowRef, onSelect, onAdd, 
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
+              overflow: "hidden",
             }}
           >
-            <Inventory2Icon sx={{ color: "#fff", fontSize: 18, opacity: 0.9 }} />
+            {product.image ? (
+              <SoftBox
+                component="img"
+                src={product.image}
+                alt={product.name}
+                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <Inventory2Icon sx={{ color: "#fff", fontSize: 18, opacity: 0.9 }} />
+            )}
           </SoftBox>
           <SoftBox>
             <SoftTypography variant="button" fontWeight="bold">
@@ -962,8 +1057,36 @@ function ProductListRow({ product, cartItem, selected, rowRef, onSelect, onAdd, 
           {product.unit}
         </SoftTypography>
       </td>
+      <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
+        <SoftTypography variant="caption" fontWeight="bold" color="info">
+          {formatDZD(priceInfo.unitPrice)} دج
+        </SoftTypography>
+        <SoftTypography variant="caption" color="secondary" display="block">
+          {priceInfo.sourceLabel}
+        </SoftTypography>
+      </td>
       <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
         <SoftBadge variant="gradient" color={status.color} size="xs" badgeContent={status.label} container />
+      </td>
+      <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
+        <Tooltip title={isFavorite ? "إزالة من المفضلة" : "إضافة للمفضلة"}>
+          <IconButton
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFavorite(product.id);
+            }}
+            sx={{
+              color: isFavorite ? "#fb8c00" : "#8392ab",
+              border: "1px solid #e9ecef",
+              borderRadius: 1,
+              "&:hover": { background: "#fff7e6", color: "#fb8c00" },
+            }}
+            aria-label={isFavorite ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+          >
+            {isFavorite ? <StarIcon fontSize="small" /> : <StarBorderIcon fontSize="small" />}
+          </IconButton>
+        </Tooltip>
       </td>
       <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
         {inCart ? (
@@ -1012,6 +1135,8 @@ function NewOrder() {
   const [view, setView] = useState("grid");
   const [category, setCategory] = useState("الكل");
   const [search, setSearch] = useState("");
+  const salesPriceLists = getPriceListsFor("sales");
+  const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const [cart, setCart] = useState({}); // { productId: { product, qty, willShip } }
   const [selectedProductId, setSelectedProductId] = useState(mockProducts[0]?.id ?? null);
   const [qtyDialog, setQtyDialog] = useState(null); // { product, qty }
@@ -1024,6 +1149,7 @@ function NewOrder() {
   const [customers, setCustomers] = useState(mockCustomers);
   const [successDialog, setSuccessDialog] = useState(false);
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+  const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   const normalizeQty = (value) => {
     const digitsOnly = String(value ?? "").replace(/[^\d]/g, "");
@@ -1045,13 +1171,21 @@ function NewOrder() {
   ];
 
   const filteredProducts = mockProducts.filter((p) => {
-    const matchCat = category === "الكل" || p.category === category;
+    const matchCat =
+      category === "الكل" ||
+      (category === favoriteCategory && isFavorite(p.id)) ||
+      p.category === category;
     const matchSearch = p.name.includes(search) || p.code.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
 
   const cartItems = Object.values(cart);
   const cartCount = cartItems.length;
+  const selectedPriceList = salesPriceLists.find((list) => list.id === selectedPriceListId) || salesPriceLists[0];
+  const cartAmount = cartItems.reduce((sum, item) => {
+    const priceInfo = resolveProductPrice(item.product, selectedPriceListId, "sales");
+    return sum + Number(item.qty || 0) * priceInfo.unitPrice;
+  }, 0);
 
   useEffect(() => {
     if (filteredProducts.length === 0) {
@@ -1373,10 +1507,10 @@ function NewOrder() {
               />
               {/* Category Tabs */}
               <SoftBox display="flex" gap={1} flexWrap="wrap">
-                {categories.map((cat) => (
+                {categoryFilters.map((cat) => (
                   <Chip
                     key={cat}
-                    label={cat}
+                    label={cat === favoriteCategory ? `${cat} (${favoriteCount})` : cat}
                     size="small"
                     onClick={() => setCategory(cat)}
                     color={category === cat ? "info" : "default"}
@@ -1434,6 +1568,8 @@ function NewOrder() {
                       <ProductCard
                         product={product}
                         cartItem={cart[product.id]}
+                        priceInfo={resolveProductPrice(product, selectedPriceListId, "sales")}
+                        isFavorite={isFavorite(product.id)}
                         selected={selectedProductId === product.id}
                         onSelect={() => setSelectedProductId(product.id)}
                         cardRef={(node) => {
@@ -1444,6 +1580,7 @@ function NewOrder() {
 
                           delete productCardRefs.current[product.id];
                         }}
+                        onToggleFavorite={toggleFavorite}
                         onAdd={openAddDialog}
                         onEdit={openEditDialog}
                         onRemove={removeFromCart}
@@ -1458,7 +1595,7 @@ function NewOrder() {
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "#f8fbff" }}>
-                        {["الصنف", "المخزون", "الوحدة", "الحالة", "الإجراء"].map((header) => (
+                        {["الصنف", "المخزون", "الوحدة", "السعر", "الحالة", "مفضلة", "الإجراء"].map((header) => (
                           <th
                             key={header}
                             style={{
@@ -1477,7 +1614,7 @@ function NewOrder() {
                     <tbody>
                       {filteredProducts.length === 0 ? (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: "center", padding: 32 }}>
+                          <td colSpan={7} style={{ textAlign: "center", padding: 32 }}>
                             <SoftTypography variant="body2" color="text">
                               لا توجد أصناف مطابقة
                             </SoftTypography>
@@ -1489,6 +1626,8 @@ function NewOrder() {
                             key={product.id}
                             product={product}
                             cartItem={cart[product.id]}
+                            priceInfo={resolveProductPrice(product, selectedPriceListId, "sales")}
+                            isFavorite={isFavorite(product.id)}
                             selected={selectedProductId === product.id}
                             onSelect={() => setSelectedProductId(product.id)}
                             rowRef={(node) => {
@@ -1499,6 +1638,7 @@ function NewOrder() {
 
                               delete productCardRefs.current[product.id];
                             }}
+                            onToggleFavorite={toggleFavorite}
                             onAdd={openAddDialog}
                             onEdit={openEditDialog}
                             onRemove={removeFromCart}
@@ -1566,6 +1706,27 @@ function NewOrder() {
                 </Tooltip>
               </SoftBox>
 
+              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
+                قائمة الأسعار
+              </SoftTypography>
+              <FormControl size="small" fullWidth sx={{ mb: 1 }}>
+                <InputLabel>قائمة الأسعار</InputLabel>
+                <Select
+                  value={selectedPriceListId}
+                  label="قائمة الأسعار"
+                  onChange={(event) => setSelectedPriceListId(event.target.value)}
+                >
+                  {salesPriceLists.map((list) => (
+                    <MenuItem key={list.id} value={list.id}>
+                      {list.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
+                {selectedPriceList?.description}
+              </SoftTypography>
+
               <Divider sx={{ my: 2 }} />
 
               {/* Cart Items */}
@@ -1581,7 +1742,11 @@ function NewOrder() {
                 </SoftBox>
               ) : (
                 <SoftBox maxHeight={350} sx={{ overflowY: "auto" }}>
-                  {cartItems.map(({ product, qty, willShip }) => (
+                  {cartItems.map(({ product, qty, willShip }) => {
+                    const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
+                    const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
+
+                    return (
                     <SoftBox key={product.id} mb={1.5}>
                       <SoftBox
                         p={1.5}
@@ -1598,6 +1763,9 @@ function NewOrder() {
                             </SoftTypography>
                             <SoftTypography variant="caption" color="secondary" display="block">
                               {product.code}
+                            </SoftTypography>
+                            <SoftTypography variant="caption" color="info" fontWeight="bold" display="block">
+                              {formatDZD(priceInfo.unitPrice)} دج · {priceInfo.sourceLabel}
                             </SoftTypography>
                           </SoftBox>
                           <IconButton
@@ -1649,20 +1817,26 @@ function NewOrder() {
                           </SoftBox>
 
                           {/* Ship Toggle */}
-                          <Tooltip title={willShip ? "سيتم الشحن" : "استلام مباشر"}>
-                            <Chip
-                              size="small"
-                              icon={<LocalShippingIcon fontSize="small" />}
-                              label={willShip ? "شحن" : "مباشر"}
-                              color={willShip ? "info" : "default"}
-                              onClick={() => toggleWillShip(product.id)}
-                              sx={{ cursor: "pointer", height: 22, fontSize: 10 }}
-                            />
-                          </Tooltip>
+                          <SoftBox textAlign="left">
+                            <Tooltip title={willShip ? "سيتم الشحن" : "استلام مباشر"}>
+                              <Chip
+                                size="small"
+                                icon={<LocalShippingIcon fontSize="small" />}
+                                label={willShip ? "شحن" : "مباشر"}
+                                color={willShip ? "info" : "default"}
+                                onClick={() => toggleWillShip(product.id)}
+                                sx={{ cursor: "pointer", height: 22, fontSize: 10 }}
+                              />
+                            </Tooltip>
+                            <SoftTypography variant="caption" fontWeight="bold" display="block" mt={0.5}>
+                              {formatDZD(lineTotal)} دج
+                            </SoftTypography>
+                          </SoftBox>
                         </SoftBox>
                       </SoftBox>
                     </SoftBox>
-                  ))}
+                    );
+                  })}
                 </SoftBox>
               )}
 
@@ -1691,6 +1865,12 @@ function NewOrder() {
                     <SoftTypography variant="caption" color="text">إجمالي الوحدات:</SoftTypography>
                     <SoftTypography variant="caption" fontWeight="bold">
                       {cartItems.reduce((s, i) => s + i.qty, 0)}
+                    </SoftTypography>
+                  </SoftBox>
+                  <SoftBox display="flex" justifyContent="space-between" mt={0.5}>
+                    <SoftTypography variant="caption" color="text">إجمالي المبلغ:</SoftTypography>
+                    <SoftTypography variant="caption" fontWeight="bold" color="info">
+                      {formatDZD(cartAmount)} دج
                     </SoftTypography>
                   </SoftBox>
                 </SoftBox>
@@ -1842,6 +2022,10 @@ function NewOrder() {
                     الوزن الإجمالي: {(parsedQty * qtyDialog.product.weightPerUnit).toFixed(2)} كغ
                   </SoftTypography>
                 )}
+                <SoftTypography variant="caption" sx={{ color: "#17c1e8", fontWeight: "bold", display: "block", mt: 0.5 }}>
+                  السعر: {formatDZD(resolveProductPrice(qtyDialog.product, selectedPriceListId, "sales").unitPrice)} دج ·{" "}
+                  {resolveProductPrice(qtyDialog.product, selectedPriceListId, "sales").sourceLabel}
+                </SoftTypography>
               </SoftBox>
             </DialogContent>
             <DialogActions sx={{ p: 2, gap: 1 }}>

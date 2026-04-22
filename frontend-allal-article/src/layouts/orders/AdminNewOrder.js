@@ -37,6 +37,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
+import { formatDZD, getPriceListsFor, resolveProductPrice } from "data/mock/pricingInventoryMock";
 import {
   CustomerInfoDialog,
   emptyNewCustomerForm,
@@ -85,9 +86,11 @@ function getCustomerDebt(customer) {
 }
 
 // ─── Row Component ────────────────────────────────────────────────────────────
-function OrderRow({ row, rowIndex, totalRows, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef }) {
+function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef }) {
   const product = row.product;
   const stockColor = !product ? "inherit" : product.stock === 0 ? "#ea0606" : product.stock < 10 ? "#fb8c00" : "#66BB6A";
+  const priceInfo = product ? resolveProductPrice(product, priceListId, "sales") : null;
+  const lineTotal = product && row.qty ? Number(row.qty || 0) * Number(priceInfo.unitPrice || 0) : 0;
 
   return (
     <TableRow
@@ -186,6 +189,22 @@ function OrderRow({ row, rowIndex, totalRows, onChange, onDelete, onProductConfi
         </SoftTypography>
       </TableCell>
 
+      {/* Price */}
+      <TableCell sx={{ py: 0.5, width: 130, textAlign: "center" }}>
+        {priceInfo ? (
+          <>
+            <SoftTypography variant="caption" fontWeight="bold" color="info">
+              {formatDZD(priceInfo.unitPrice)} دج
+            </SoftTypography>
+            <SoftTypography variant="caption" color="secondary" display="block">
+              {priceInfo.sourceLabel}
+            </SoftTypography>
+          </>
+        ) : (
+          <SoftTypography variant="caption" color="secondary">—</SoftTypography>
+        )}
+      </TableCell>
+
       {/* Packages */}
       <TableCell sx={{ py: 0.5, width: 110, textAlign: "center" }}>
         {product && row.qty ? (
@@ -212,6 +231,13 @@ function OrderRow({ row, rowIndex, totalRows, onChange, onDelete, onProductConfi
       <TableCell sx={{ py: 0.5, width: 80, textAlign: "center" }}>
         <SoftTypography variant="caption" fontWeight="medium" sx={{ color: stockColor }}>
           {product ? product.stock : "—"}
+        </SoftTypography>
+      </TableCell>
+
+      {/* Line Total */}
+      <TableCell sx={{ py: 0.5, width: 120, textAlign: "center" }}>
+        <SoftTypography variant="caption" fontWeight="bold" color={lineTotal ? "text" : "secondary"}>
+          {lineTotal ? `${formatDZD(lineTotal)} دج` : "—"}
         </SoftTypography>
       </TableCell>
 
@@ -250,6 +276,8 @@ export default function AdminNewOrder() {
   const [newCustomerDialog, setNewCustomerDialog] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({ ...emptyNewCustomerForm });
   const [notes, setNotes] = useState("");
+  const salesPriceLists = getPriceListsFor("sales");
+  const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
   const qtyRefs = useRef({});
@@ -308,6 +336,10 @@ export default function AdminNewOrder() {
   // Derived totals
   const filledRows = rows.filter((r) => r.product && r.qty);
   const totalWeight = filledRows.reduce((s, r) => s + Number(calcWeight(r.product, r.qty)), 0);
+  const totalAmount = filledRows.reduce((sum, row) => {
+    const priceInfo = resolveProductPrice(row.product, selectedPriceListId, "sales");
+    return sum + Number(row.qty || 0) * priceInfo.unitPrice;
+  }, 0);
   const totalItems = filledRows.length;
 
   const handleSave = (action) => {
@@ -320,7 +352,7 @@ export default function AdminNewOrder() {
       return;
     }
     const status = action === "confirm" ? "confirmed" : "draft";
-    console.log("Order saved:", { customer, status, rows: filledRows, notes });
+    console.log("Order saved:", { customer, status, priceListId: selectedPriceListId, rows: filledRows, notes, totalAmount });
     navigate("/orders");
   };
 
@@ -486,6 +518,27 @@ export default function AdminNewOrder() {
               )}
             </SoftBox>
 
+            <SoftBox minWidth={220}>
+              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
+                قائمة الأسعار
+              </SoftTypography>
+              <FormControl size="small" fullWidth>
+                <InputLabel>قائمة الأسعار</InputLabel>
+                <Select
+                  value={selectedPriceListId}
+                  label="قائمة الأسعار"
+                  onChange={(event) => setSelectedPriceListId(event.target.value)}
+                >
+                  {salesPriceLists.map((list) => (
+                    <MenuItem key={list.id} value={list.id}>{list.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <SoftTypography variant="caption" color="secondary" display="block" mt={0.7}>
+                الأصناف غير المسعرة أو سعرها 0 تأخذ السعر الرئيسي.
+              </SoftTypography>
+            </SoftBox>
+
             {/* Notes */}
             <SoftBox flex="1" minWidth={220}>
               <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
@@ -516,7 +569,8 @@ export default function AdminNewOrder() {
               <SoftBox display="flex" gap={2}>
                 <SoftTypography variant="caption" color="secondary">
                   {totalItems} صنف ·{" "}
-                  <span style={{ color: "#fb8c00", fontWeight: 600 }}>{totalWeight.toFixed(2)} كغ</span>
+                  <span style={{ color: "#fb8c00", fontWeight: 600 }}>{totalWeight.toFixed(2)} كغ</span>{" "}
+                  · <span style={{ color: "#17c1e8", fontWeight: 600 }}>{formatDZD(totalAmount)} دج</span>
                 </SoftTypography>
               </SoftBox>
             )}
@@ -531,9 +585,11 @@ export default function AdminNewOrder() {
                     { label: "الصنف",      w: null },
                     { label: "الكمية",     w: 100 },
                     { label: "الوحدة",     w: 70  },
+                    { label: "السعر",      w: 130 },
                     { label: "التعليب",    w: 110 },
                     { label: "الوزن",      w: 90  },
                     { label: "المخزون",    w: 80  },
+                    { label: "الإجمالي",   w: 120 },
                     { label: "الكود",      w: 110 },
                     { label: "",           w: 48  },
                   ].map(({ label, w }, i) => (
@@ -562,6 +618,7 @@ export default function AdminNewOrder() {
                     row={row}
                     rowIndex={idx}
                     totalRows={rows.length}
+                    priceListId={selectedPriceListId}
                     onChange={handleChange}
                     onDelete={handleDelete}
                     onProductConfirmed={handleProductConfirmed}
@@ -588,6 +645,12 @@ export default function AdminNewOrder() {
                   <SoftTypography variant="caption" color="secondary" display="block">الوزن الإجمالي</SoftTypography>
                   <SoftTypography variant="h6" fontWeight="bold" sx={{ color: "#fb8c00" }}>
                     {totalWeight.toFixed(2)} كغ
+                  </SoftTypography>
+                </SoftBox>
+                <SoftBox textAlign="center">
+                  <SoftTypography variant="caption" color="secondary" display="block">إجمالي المبلغ</SoftTypography>
+                  <SoftTypography variant="h6" fontWeight="bold" sx={{ color: "#17c1e8" }}>
+                    {formatDZD(totalAmount)} دج
                   </SoftTypography>
                 </SoftBox>
               </SoftBox>

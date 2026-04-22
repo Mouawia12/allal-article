@@ -17,6 +17,7 @@ import NewOrderRouter from "layouts/orders/NewOrderRouter";
 import Products from "layouts/products";
 import ProductDetail from "layouts/products/ProductDetail";
 import ProductForm from "layouts/products/ProductForm";
+import PriceLists from "layouts/products/PriceLists";
 import Customers from "layouts/customers";
 import Suppliers from "layouts/suppliers";
 import Inventory from "layouts/inventory";
@@ -57,6 +58,7 @@ import Cube from "examples/Icons/Cube";
 import Basket from "examples/Icons/Basket";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import FactoryIcon from "@mui/icons-material/Factory";
+import PriceChangeIcon from "@mui/icons-material/PriceChange";
 
 const routes = [
   // ─── Main ───────────────────────────────────────────────
@@ -86,6 +88,15 @@ const routes = [
     route: "/products",
     icon: <Cube size="12px" />,
     component: <Products />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "قوائم الأسعار",
+    key: "price-lists",
+    route: "/products/price-lists",
+    icon: <PriceChangeIcon fontSize="small" />,
+    component: <PriceLists />,
     noCollapse: true,
   },
   {
@@ -330,6 +341,17 @@ const routes = [
     key: "new-order-admin",
     route: "/orders/admin/new",
     component: <AdminNewOrder />,
+  },
+  {
+    key: "product-favorites",
+    route: "/products/favorites",
+    component: (
+      <Products
+        initialCategory="المفضلة"
+        title="مفضلة الأصناف"
+        subtitle="الأصناف التي أضفتها للمفضلة للوصول السريع"
+      />
+    ),
   },
   {
     key: "product-detail",

@@ -29,6 +29,7 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Badge from "@mui/material/Badge";
 import Divider from "@mui/material/Divider";
+import Tooltip from "@mui/material/Tooltip";
 import Icon from "components/AppIcon";
 
 // Soft UI Dashboard React components
@@ -70,7 +71,9 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
   const { locale, languages, setLocale, t } = useI18n();
-  const route = useLocation().pathname.split("/").slice(1);
+  const { pathname } = useLocation();
+  const route = pathname.split("/").slice(1);
+  const favoritesActive = pathname === "/products/favorites";
 
   useEffect(() => {
     // Setting the navbar type
@@ -248,6 +251,24 @@ function DashboardNavbar({ absolute, light, isMini }) {
               >
                 <Icon>settings</Icon>
               </IconButton>
+              <Tooltip title="مفضلة الأصناف">
+                <IconButton
+                  component={Link}
+                  to="/products/favorites"
+                  size="small"
+                  color="inherit"
+                  sx={navbarIconButton}
+                  aria-label="مفضلة الأصناف"
+                >
+                  <Icon
+                    sx={({ palette: { dark, warning, white } }) => ({
+                      color: favoritesActive ? warning.main : light ? white.main : dark.main,
+                    })}
+                  >
+                    favorite
+                  </Icon>
+                </IconButton>
+              </Tooltip>
               <IconButton
                 size="small"
                 color="inherit"

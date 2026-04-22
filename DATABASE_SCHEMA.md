@@ -1,6 +1,6 @@
 # مخطط قاعدة البيانات — ALLAL-ARTICLE
 
-> آخر تحديث: 2026-04-21
+> آخر تحديث: 2026-04-22
 > قاعدة البيانات المعتمدة: PostgreSQL
 > الباك إند المستقبلي: Spring Boot 3.x + Java 21
 > الميغريشن: Flyway
@@ -38,6 +38,9 @@ database
 │   ├── users
 │   ├── customers
 │   ├── products
+│   ├── product_favorites
+│   ├── price_lists
+│   ├── price_list_items
 │   ├── orders
 │   ├── stock_movements
 │   ├── journals
@@ -1022,6 +1025,31 @@ unique (public_id),
 unique (sku)
 ```
 
+#### `product_favorites`
+
+مفضلة الأصناف تخص المستخدم داخل نفس شركة المشترك، وليست خاصية عامة على الصنف. هذا يمنع أن يؤثر تفضيل بائع على باقي المستخدمين، ويسمح لواجهة البيع بعرض فلتر سريع للأصناف الأكثر استعمالًا لكل مستخدم.
+
+```sql
+id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
+user_id             bigint not null references users(id),
+product_id          bigint not null references products(id),
+source_context      varchar(40) not null default 'manual',
+note                varchar(240),
+sort_order          integer not null default 0,
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now(),
+unique (public_id),
+unique (user_id, product_id)
+```
+
+فهارس مهمة:
+
+```sql
+create index idx_product_favorites_user on product_favorites(user_id, sort_order, created_at desc);
+create index idx_product_favorites_product on product_favorites(product_id);
+```
+
 #### `product_images`
 
 ```sql
@@ -1052,17 +1080,90 @@ effective_at            timestamptz not null default now(),
 created_at              timestamptz not null default now()
 ```
 
+#### `price_lists`
+
+قوائم الأسعار تسمح بإنشاء تسعيرات متعددة حسب نوع العميل أو قناة البيع أو نوع الشراء، مثل: "أسعار أحمد"، "أسعار الجملة"، "أسعار نصف جملة". القائمة اختيارية في الطلبية، ولا يلزم أن تحتوي كل الأصناف.
+
+```sql
+id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
+code                varchar(60) not null,
+name                varchar(160) not null,
+price_list_type     varchar(30) not null default 'sales',
+                      -- sales, purchase, both
+currency            varchar(3) not null default 'DZD',
+description         text,
+is_default          boolean not null default false,
+is_active           boolean not null default true,
+starts_at           timestamptz,
+ends_at             timestamptz,
+created_by          bigint references users(id),
+updated_by          bigint references users(id),
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now(),
+deleted_at          timestamptz,
+unique (public_id),
+unique (code),
+check (price_list_type in ('sales', 'purchase', 'both'))
+```
+
+#### `price_list_items`
+
+سطر التسعير يخص صنفاً واحداً داخل قائمة واحدة. إذا لم يوجد سطر للصنف، أو كان `unit_price_amount` فارغاً أو `0`، يستخدم النظام السعر الرئيسي من `products.current_price_amount`.
+
+```sql
+id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
+price_list_id       bigint not null references price_lists(id),
+product_id          bigint not null references products(id),
+unit_price_amount   numeric(14,2),
+min_qty             numeric(14,3) not null default 1,
+is_active           boolean not null default true,
+note                text,
+created_by          bigint references users(id),
+updated_by          bigint references users(id),
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now(),
+unique (public_id),
+unique (price_list_id, product_id, min_qty),
+check (unit_price_amount is null or unit_price_amount >= 0),
+check (min_qty > 0)
+```
+
+فهارس وقواعد مهمة:
+
+```sql
+create index idx_price_lists_type_active on price_lists(price_list_type, is_active, name);
+create index idx_price_list_items_lookup on price_list_items(price_list_id, product_id, min_qty);
+create index idx_price_list_items_product on price_list_items(product_id);
+```
+
+- اختيار قائمة أسعار في البيع أو الشراء يحفظ snapshot على رأس المستند وعلى كل سطر؛ لا يعاد تسعير الفواتير القديمة إذا تغيرت القائمة لاحقاً.
+- `0` داخل قائمة الأسعار لا يعني بيعاً مجانياً؛ يعني fallback للسعر الرئيسي. إذا احتاج النظام لاحقاً إلى هدية أو خصم 100%، تنفذ كسطر خصم/عرض مستقل وليس كسعر قائمة `0`.
+- في البيع يسمح باختيار قوائم `sales` أو `both`. في الشراء يسمح باختيار قوائم `purchase` أو `both`.
+
 #### `warehouses`
 
 ```sql
 id              bigint generated always as identity primary key,
 code            varchar(50) not null unique,
 name            varchar(150) not null,
+warehouse_type  varchar(40) not null default 'operational',
+                  -- central, operational, returns, quarantine, virtual
+city            varchar(120),
+address         text,
+manager_id      bigint references users(id),
+capacity_qty    numeric(14,3),
 is_default      boolean not null default false,
 is_active       boolean not null default true,
 created_at      timestamptz not null default now(),
 updated_at      timestamptz not null default now()
 ```
+
+قواعد المستودعات:
+- كل رصيد مخزون يجب أن يكون على مستوى `product_id + warehouse_id` وليس على مستوى الصنف فقط.
+- يمكن وجود مستودع مركزي، مستودعات تشغيلية، ومستودع مرتجعات/حجر.
+- التحويل بين المستودعات لا يغير إجمالي مخزون الشركة، لكنه يغير توزيع الكميات بين المستودعات.
 
 #### `product_stocks`
 
@@ -1082,6 +1183,13 @@ created_at          timestamptz not null default now(),
 updated_at          timestamptz not null default now(),
 unique (product_id, warehouse_id)
 ```
+
+قواعد `product_stocks`:
+- هذا الجدول read model سريع، والمصدر التاريخي هو `stock_movements`.
+- `available_qty = on_hand_qty - reserved_qty`.
+- `projected_qty = available_qty - pending_qty`.
+- التحويل بين المستودعات ينقص `on_hand_qty` من المصدر ويزيده في الوجهة.
+- لا يسمح بنقل الكمية المحجوزة؛ الحد الأعلى للتحويل هو `available_qty`.
 
 #### `stock_movements`
 
@@ -1103,6 +1211,52 @@ performed_by        bigint references users(id),
 created_at          timestamptz not null default now(),
 unique (public_id)
 ```
+
+#### `stock_transfers` و `stock_transfer_items`
+
+```sql
+stock_transfers:
+id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
+transfer_number     varchar(50) not null unique,
+transfer_type       varchar(30) not null default 'product',
+                      -- product, warehouse_full
+from_warehouse_id   bigint not null references warehouses(id),
+to_warehouse_id     bigint not null references warehouses(id),
+status              varchar(30) not null default 'posted',
+                      -- draft, posted, cancelled
+reason              text,
+created_by          bigint references users(id),
+posted_by           bigint references users(id),
+posted_at           timestamptz,
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now(),
+unique (public_id),
+check (from_warehouse_id <> to_warehouse_id)
+
+create index idx_stock_transfers_warehouses on stock_transfers(from_warehouse_id, to_warehouse_id, created_at desc);
+
+stock_transfer_items:
+id                  bigint generated always as identity primary key,
+stock_transfer_id   bigint not null references stock_transfers(id),
+product_id          bigint not null references products(id),
+qty                 numeric(14,3) not null,
+out_movement_id     bigint references stock_movements(id),
+in_movement_id      bigint references stock_movements(id),
+notes               text,
+created_at          timestamptz not null default now(),
+check (qty > 0)
+
+create index idx_stock_transfer_items_transfer on stock_transfer_items(stock_transfer_id);
+create index idx_stock_transfer_items_product on stock_transfer_items(product_id);
+```
+
+قواعد تحويلات المستودعات:
+- تحويل صنف واحد ينشئ رأس `stock_transfers.transfer_type = product` وسطر واحد أو أكثر في `stock_transfer_items`.
+- تحويل مستودع كامل ينشئ `transfer_type = warehouse_full` وسطوراً لكل صنف له كمية متاحة في المستودع المصدر.
+- كل سطر تحويل ينشئ حركتين في `stock_movements`: حركة خروج من مستودع المصدر، وحركة دخول إلى مستودع الوجهة.
+- الكميات المحجوزة لا تنقل في تحويل المستودع الكامل؛ تبقى في المصدر حتى تنتهي الطلبية أو يحرر الحجز.
+- لا يسمح بنقل كمية أكبر من `product_stocks.available_qty`.
 
 #### `stock_reservations`
 
@@ -1263,29 +1417,60 @@ partner_document_link_public_id uuid,
 partner_source_document_public_id uuid,
 partner_sync_status varchar(40) not null default 'none',
                       -- none, pending_target_confirmation, accepted, partially_accepted, rejected, cancelled,
-                      -- seller_reserved, shipped, in_transit, received, fulfilled, failed
+                      -- seller_reserved, shipped, in_transit, received, completed, failed
 order_status        varchar(40) not null default 'draft',
+                      -- draft, submitted, under_review, confirmed, shipped, completed, cancelled, rejected
 shipping_status     varchar(40) not null default 'pending',
+                      -- none, pending, shipped
 payment_status      varchar(30) not null default 'unpaid',
+price_list_id       bigint references price_lists(id),
+price_list_name_snapshot varchar(160),
+price_currency      varchar(3) not null default 'DZD',
 notes               text,
 internal_notes      text,
 total_amount        numeric(14,2) not null default 0,
 total_weight        numeric(14,3) not null default 0,
 created_by          bigint references users(id),
 updated_by          bigint references users(id),
+reviewed_by         bigint references users(id),
 confirmed_by        bigint references users(id),
+shipped_by          bigint references users(id),
+completed_by        bigint references users(id),
+cancelled_by        bigint references users(id),
 rejected_by         bigint references users(id),
 created_at          timestamptz not null default now(),
 updated_at          timestamptz not null default now(),
 submitted_at        timestamptz,
+review_started_at   timestamptz,
 confirmed_at        timestamptz,
+shipped_at          timestamptz,
+completion_due_at   timestamptz,
+completed_at        timestamptz,
+auto_completed_at   timestamptz,
+cancelled_at        timestamptz,
 rejected_at         timestamptz,
 deleted_at          timestamptz,
 unique (public_id)
 
 create index idx_orders_partner_document_link on orders(partner_document_link_public_id);
 create index idx_orders_linked_partner on orders(linked_partner_uuid, partner_sync_status);
+create index idx_orders_status on orders(order_status, created_at desc);
+create index idx_orders_price_list on orders(price_list_id, created_at desc);
+create index idx_orders_shipping_completion_due on orders(order_status, completion_due_at)
+  where order_status = 'shipped';
 ```
+
+قواعد حالة الطلبية:
+- الانتقال الرسمي: `draft -> submitted -> under_review -> confirmed -> shipped -> completed`.
+- `cancelled` مسموحة قبل الشحن فقط، بما في ذلك حالة `confirmed`.
+- بعد `shipped` لا يسمح بتعديل السطور أو إلغاء الطلبية؛ المعالجة تكون عبر `returns`.
+- عند الشحن يضبط النظام `shipped_at` و`completion_due_at = shipped_at + interval '3 days'`.
+- Job دوري يحول `order_status = shipped` إلى `completed` عند تجاوز `completion_due_at` ويملأ `auto_completed_at`.
+- زر فاتورة الطريق يعتمد على الحالة: يظهر من `confirmed` فما فوق.
+- زر المرتجع يعتمد على وجود `shipped_qty > returned_qty` في الأسطر ولا يظهر قبل الشحن.
+- عند اختيار `price_list_id`، ينسخ النظام اسم القائمة إلى `price_list_name_snapshot` ويحتسب أسعار السطور وقت الإنشاء أو التعديل المسموح.
+- إذا لم يجد النظام سعراً للصنف داخل القائمة، أو وجد السعر `0`، تكون `pricing_source = product_default` ويستخدم `products.current_price_amount`.
+- جدول أسطر البيع يجب أن يعرض عمود السعر لكل صنف، والملخص يحسب `total_amount = sum(line_subtotal)` للأسطر غير الملغاة.
 
 #### `order_items`
 
@@ -1299,11 +1484,18 @@ line_status             varchar(40) not null default 'pending',
 partner_source_line_public_id uuid,
 requested_qty           numeric(14,3) not null,
 approved_qty            numeric(14,3) not null default 0,
-allocated_qty           numeric(14,3) not null default 0,
 shipped_qty             numeric(14,3) not null default 0,
+returned_qty            numeric(14,3) not null default 0,
 cancelled_qty           numeric(14,3) not null default 0,
 original_requested_qty  numeric(14,3),
+price_list_id           bigint references price_lists(id),
+price_list_item_id      bigint references price_list_items(id),
+price_list_name_snapshot varchar(160),
+pricing_source          varchar(40) not null default 'product_default',
+                          -- price_list, product_default, manual_override
+base_unit_price         numeric(14,2),
 unit_price              numeric(14,2),
+line_subtotal           numeric(14,2) not null default 0,
 line_weight             numeric(14,3),
 is_shipping_required    boolean not null default true,
 customer_note           text,
@@ -1314,8 +1506,25 @@ created_at              timestamptz not null default now(),
 updated_at              timestamptz not null default now(),
 deleted_at              timestamptz,
 unique (public_id),
-unique (order_id, line_number)
+unique (order_id, line_number),
+check (approved_qty >= 0),
+check (shipped_qty >= 0),
+check (returned_qty >= 0),
+check (cancelled_qty >= 0),
+check (approved_qty + cancelled_qty = requested_qty),
+check (shipped_qty <= approved_qty),
+check (returned_qty <= shipped_qty)
 ```
+
+قواعد سطور الطلبية:
+- الحالات الرسمية: `pending`, `approved`, `modified`, `shipped`, `cancelled`.
+- لا توجد حالة `deleted_by_admin`؛ حذف السطر الإداري يحول السطر إلى `cancelled`.
+- السطر الملغى يبقى في `order_items` وواجهة الفاتورة، لكنه يستبعد من الطباعة بفلاتر `line_status <> 'cancelled'`.
+- تعديل `approved_qty` أو `cancelled_qty` يجب أن يحافظ على المعادلة: `approved_qty + cancelled_qty = requested_qty`.
+- عند حفظ تعديل الإدارة: السطر غير الملموس يصبح `approved`، والسطر الذي تغيرت كمياته يصبح `modified`.
+- عند الشحن: كل سطر غير ملغى يصبح `line_status = shipped` و`shipped_qty = approved_qty`.
+- المرتجع لا يعدل الشحن مباشرة؛ يضيف `return_items` ويحدث `order_items.returned_qty`.
+- `unit_price` و`line_subtotal` هما snapshot تاريخي ولا يتغيران عند تعديل قائمة الأسعار لاحقاً.
 
 #### `order_events`
 
@@ -1340,6 +1549,11 @@ reason          text,
 performed_by    bigint references users(id),
 created_at      timestamptz not null default now()
 ```
+
+أحداث إلزامية في الطلبية:
+- `order.submitted`, `order.review_started`, `order.confirmed`, `order.shipped`, `order.completed`, `order.auto_completed`, `order.cancelled`, `order.rejected`.
+- `order_item.modified`, `order_item.cancelled`, `order_item.shipped`, `order_item.returned`.
+- يجب أن يحفظ `old_values_json` و`new_values_json` فروقات الكميات، خصوصاً `approved_qty`, `cancelled_qty`, `shipped_qty`, `returned_qty`.
 
 #### `returns` و `return_items`
 
@@ -1440,22 +1654,46 @@ partner_document_link_public_id uuid,
 partner_source_document_public_id uuid,
 partner_sync_status varchar(40) not null default 'none',
                       -- none, pending_target_confirmation, accepted, partially_accepted, rejected, cancelled,
-                      -- seller_reserved, shipped, in_transit, received, fulfilled, failed
-status              varchar(30) not null default 'pending',
+                      -- seller_reserved, shipped, in_transit, received, completed, failed
+status              varchar(30) not null default 'draft',
+                      -- draft, confirmed, received, cancelled
 payment_status      varchar(30) not null default 'unpaid',
+price_list_id       bigint references price_lists(id),
+price_list_name_snapshot varchar(160),
+price_currency      varchar(3) not null default 'DZD',
 expected_date       date,
 received_date       date,
 received_by         bigint references users(id),
+sent_to_supplier_by bigint references users(id),
+sent_to_supplier_at timestamptz,
+cancelled_by        bigint references users(id),
+cancelled_at        timestamptz,
 total_amount        numeric(14,2) not null default 0,
 notes               text,
 created_by          bigint references users(id),
+updated_by          bigint references users(id),
 created_at          timestamptz not null default now(),
 updated_at          timestamptz not null default now(),
 unique (public_id)
 
 create index idx_purchase_orders_partner_document_link on purchase_orders(partner_document_link_public_id);
 create index idx_purchase_orders_linked_partner on purchase_orders(linked_partner_uuid, partner_sync_status);
+create index idx_purchase_orders_price_list on purchase_orders(price_list_id, created_at desc);
+```
 
+قواعد أوامر الشراء:
+- الرحلة الرسمية: `draft -> confirmed -> received`.
+- `draft` تظهر كمسودة شراء في الواجهة، وزرها الأساسي "إرسال للمورد".
+- `confirmed` تعني أن الأمر أرسل/اعتمد للمورد وينتظر الاستلام.
+- `received` تقفل تعديل أمر الشراء؛ أي تصحيح بعد الاستلام يتم عبر `purchase_returns` أو قيد تسوية.
+- `cancelled` مسموحة قبل الاستلام فقط.
+- عند الاستلام الكامل: `received_qty = ordered_qty` لكل سطر، وتكتب حركة دخول مخزون.
+- مرتجع المشتريات لا ينقص `received_qty`، بل يحدث `returned_qty` وينشئ حركة خروج مخزون وإشعاراً دائنًا/تخفيض ذمة المورد.
+- أوامر الشراء يمكن أن تختار قائمة أسعار نوعها `purchase` أو `both`، ويتم حفظ اسمها كسجل تاريخي.
+- إذا لم يكن للصنف سعر داخل قائمة الشراء المختارة أو كان السعر `0`، يستخدم النظام السعر الرئيسي من بطاقة الصنف حتى لا يتوقف إدخال أمر الشراء.
+- جدول أسطر الشراء يعرض عمود السعر لكل صنف، والملخص يحسب إجمالي أمر الشراء من `line_subtotal`.
+
+```sql
 purchase_order_items:
 id                  bigint generated always as identity primary key,
 purchase_order_id   bigint not null references purchase_orders(id),
@@ -1463,8 +1701,76 @@ product_id          bigint not null references products(id),
 partner_source_line_public_id uuid,
 ordered_qty         numeric(14,3) not null,
 received_qty        numeric(14,3) not null default 0,
+returned_qty        numeric(14,3) not null default 0,
+price_list_id       bigint references price_lists(id),
+price_list_item_id  bigint references price_list_items(id),
+price_list_name_snapshot varchar(160),
+pricing_source      varchar(40) not null default 'product_default',
+                      -- price_list, product_default, manual_override
+base_unit_price     numeric(14,2),
 unit_price          numeric(14,2),
-notes               text
+line_subtotal       numeric(14,2) not null default 0,
+notes               text,
+check (ordered_qty >= 0),
+check (received_qty >= 0),
+check (returned_qty >= 0),
+check (received_qty <= ordered_qty),
+check (returned_qty <= received_qty)
+
+create index idx_purchase_order_items_order on purchase_order_items(purchase_order_id);
+
+purchase_returns:
+id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
+return_number       varchar(50) not null unique,
+purchase_order_id   bigint not null references purchase_orders(id),
+supplier_id         bigint references suppliers(id),
+supplier_name       varchar(200) not null,
+supplier_invoice_no varchar(80),
+return_date         date not null,
+status              varchar(30) not null default 'draft',
+                      -- draft, posted, cancelled
+warehouse_id        bigint references warehouses(id),
+reason              text,
+total_amount        numeric(14,2) not null default 0,
+tax_amount          numeric(14,2) not null default 0,
+net_amount          numeric(14,2) not null default 0,
+accounting_status   varchar(30) not null default 'pending',
+                      -- pending, posted, reversed
+journal_public_id   uuid,
+stock_posting_status varchar(30) not null default 'pending',
+                      -- pending, posted, reversed
+returned_by         bigint references users(id),
+received_by_supplier varchar(160),
+created_by          bigint references users(id),
+posted_by           bigint references users(id),
+posted_at           timestamptz,
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now(),
+unique (public_id)
+
+create index idx_purchase_returns_order on purchase_returns(purchase_order_id);
+create index idx_purchase_returns_supplier on purchase_returns(supplier_id, return_date);
+create index idx_purchase_returns_accounting on purchase_returns(accounting_status, journal_public_id);
+
+purchase_return_items:
+id                  bigint generated always as identity primary key,
+purchase_return_id  bigint not null references purchase_returns(id),
+purchase_order_item_id bigint references purchase_order_items(id),
+product_id          bigint not null references products(id),
+returned_qty        numeric(14,3) not null,
+unit_cost_amount    numeric(14,2) not null default 0,
+tax_rate            numeric(5,2) not null default 0,
+tax_amount          numeric(14,2) not null default 0,
+line_total_amount   numeric(14,2) not null default 0,
+stock_movement_id   bigint references stock_movements(id),
+condition_status    varchar(40) not null default 'return_to_supplier',
+                      -- return_to_supplier, damaged, quarantine, price_adjustment
+notes               text,
+created_at          timestamptz not null default now(),
+unique (purchase_return_id, purchase_order_item_id)
+
+create index idx_purchase_return_items_product on purchase_return_items(product_id);
 ```
 
 ---

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Autocomplete from "@mui/material/Autocomplete";
@@ -12,6 +12,7 @@ import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import TextField from "@mui/material/TextField";
@@ -30,6 +31,13 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { calcLineTotal, formatDZD, mockPurchases, purchaseProducts } from "./mockData";
+import {
+  getDefaultWarehouse,
+  getPriceListsFor,
+  mockWarehouses,
+  priceSourceLabels,
+  resolveProductPrice,
+} from "data/mock/pricingInventoryMock";
 import { mockPartnerProducts } from "data/mock/partnershipMock";
 import {
   findSupplierByName,
@@ -42,17 +50,20 @@ import {
 let lineId = 1;
 
 function createLine(product = null) {
+  const priceInfo = product ? resolveProductPrice(product, "MAIN", "purchase") : null;
+
   return {
     id: lineId++,
     product,
     qty: product ? 1 : "",
-    unitPrice: product?.price || "",
+    unitPrice: priceInfo?.unitPrice || product?.price || "",
+    pricingSource: priceInfo?.source || "product_default",
     taxRate: product?.taxRate ?? 19,
     notes: "",
   };
 }
 
-function PurchaseLine({ line, canDelete, onChange, onDelete, onEnterLastField, productOptions }) {
+function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnterLastField, productOptions }) {
   const set = (key, value) => onChange(line.id, key, value);
   const lineTotal = calcLineTotal({
     qty: line.qty,
@@ -68,12 +79,18 @@ function PurchaseLine({ line, canDelete, onChange, onDelete, onEnterLastField, p
           options={productOptions ?? purchaseProducts}
           value={line.product}
           onChange={(_, product) => {
-            set("product", product);
             if (product) {
-              set("unitPrice", product.price);
-              set("taxRate", product.taxRate);
-              if (!line.qty) set("qty", 1);
+              const priceInfo = resolveProductPrice(product, priceListId, "purchase");
+              set("__product_with_price", {
+                product,
+                unitPrice: priceInfo.unitPrice,
+                pricingSource: priceInfo.source,
+                taxRate: product.taxRate,
+                qty: line.qty || 1,
+              });
+              return;
             }
+            set("__product_with_price", { product: null, unitPrice: "", pricingSource: "product_default", qty: "" });
           }}
           getOptionLabel={(option) => option ? `${option.id} - ${option.name}` : ""}
           renderInput={(params) => <TextField {...params} placeholder="اكتب كود أو اسم الصنف..." />}
@@ -99,6 +116,9 @@ function PurchaseLine({ line, canDelete, onChange, onDelete, onEnterLastField, p
           onChange={(event) => set("unitPrice", event.target.value)}
           inputProps={{ min: 0 }}
         />
+        <SoftTypography variant="caption" color="secondary" display="block" mt={0.3}>
+          {priceSourceLabels[line.pricingSource] || "السعر الرئيسي"}
+        </SoftTypography>
       </td>
       <td style={{ padding: "10px 8px", width: 95 }}>
         <TextField
@@ -148,9 +168,11 @@ export default function PurchaseForm() {
   const [supplier, setSupplier] = useState(() => (
     editPurchase?.supplier ? findSupplierByName(editPurchase.supplier) || editPurchase.supplier : null
   ));
+  const purchasePriceLists = getPriceListsFor("purchase");
+  const [selectedPriceListId, setSelectedPriceListId] = useState(editPurchase?.priceListId || "PURCHASE_MAIN");
   const [date, setDate] = useState(editPurchase?.date || new Date().toISOString().slice(0, 10));
   const [expectedDate, setExpectedDate] = useState(editPurchase?.expectedDate || "");
-  const [warehouse, setWarehouse] = useState(editPurchase?.warehouse || "المخزن الرئيسي");
+  const [warehouse, setWarehouse] = useState(editPurchase?.warehouseId || getDefaultWarehouse(mockWarehouses)?.id || "WH-MAIN");
   const [paymentTerms, setPaymentTerms] = useState(editPurchase?.paymentStatus === "paid" ? "cash" : "credit");
   const [notes, setNotes] = useState(editPurchase?.notes || "");
   const [lines, setLines] = useState(() => {
@@ -162,6 +184,7 @@ export default function PurchaseForm() {
         product,
         qty: line.qty,
         unitPrice: line.unitPrice,
+        pricingSource: line.pricingSource || "product_default",
         taxRate: line.taxRate,
         notes: "",
       };
@@ -191,6 +214,16 @@ export default function PurchaseForm() {
     return purchaseProducts;
   }, [linkedMatch]);
 
+  useEffect(() => {
+    setLines((items) =>
+      items.map((line) => {
+        if (!line.product || line.pricingSource === "manual_override") return line;
+        const priceInfo = resolveProductPrice(line.product, selectedPriceListId, "purchase");
+        return { ...line, unitPrice: priceInfo.unitPrice, pricingSource: priceInfo.source };
+      })
+    );
+  }, [selectedPriceListId]);
+
   const totals = useMemo(() => {
     const validLines = lines.filter((line) => line.product && Number(line.qty) > 0);
     const untaxed = validLines.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.unitPrice || 0), 0);
@@ -199,7 +232,15 @@ export default function PurchaseForm() {
   }, [lines]);
 
   const changeLine = (lineToChange, key, value) => {
-    setLines((items) => items.map((line) => line.id === lineToChange ? { ...line, [key]: value } : line));
+    setLines((items) =>
+      items.map((line) =>
+        line.id === lineToChange && key === "__product_with_price"
+          ? { ...line, ...value }
+          : line.id === lineToChange
+          ? { ...line, [key]: value, ...(key === "unitPrice" ? { pricingSource: "manual_override" } : {}) }
+          : line
+      )
+    );
   };
 
   const deleteLine = (lineToDelete) => {
@@ -310,17 +351,33 @@ export default function PurchaseForm() {
                 <Grid item xs={12} md={3}>
                   <TextField fullWidth size="small" type="date" label="تاريخ الاستلام المتوقع" value={expectedDate} onChange={(e) => setExpectedDate(e.target.value)} InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={4}>
                   <FormControl size="small" fullWidth>
-                    <Select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-                      <MenuItem value="المخزن الرئيسي">المخزن الرئيسي</MenuItem>
-                      <MenuItem value="مخزن الأدوات">مخزن الأدوات</MenuItem>
-                      <MenuItem value="مخزن السباكة">مخزن السباكة</MenuItem>
-                      <MenuItem value="مخزن الدهانات">مخزن الدهانات</MenuItem>
+                    <InputLabel>مستودع الاستلام</InputLabel>
+                    <Select value={warehouse} label="مستودع الاستلام" onChange={(e) => setWarehouse(e.target.value)}>
+                      {mockWarehouses.map((item) => (
+                        <MenuItem key={item.id} value={item.id}>
+                          {item.name}{item.isDefault ? " · افتراضي" : ""}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={4}>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel>قائمة الأسعار</InputLabel>
+                    <Select
+                      value={selectedPriceListId}
+                      label="قائمة الأسعار"
+                      onChange={(e) => setSelectedPriceListId(e.target.value)}
+                    >
+                      {purchasePriceLists.map((list) => (
+                        <MenuItem key={list.id} value={list.id}>{list.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
                   <FormControl size="small" fullWidth>
                     <Select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
                       <MenuItem value="cash">دفع نقدي عند الاستلام</MenuItem>
@@ -359,6 +416,7 @@ export default function PurchaseForm() {
                         key={line.id}
                         line={line}
                         canDelete={lines.length > 1}
+                        priceListId={selectedPriceListId}
                         onChange={changeLine}
                         onDelete={deleteLine}
                         onEnterLastField={addLine}
@@ -374,6 +432,18 @@ export default function PurchaseForm() {
           <Grid item xs={12} lg={4}>
             <Card sx={{ p: 2.5 }}>
               <SoftTypography variant="h6" fontWeight="bold" mb={2}>ملخص الأمر</SoftTypography>
+              <SoftBox display="flex" justifyContent="space-between" mb={1}>
+                <SoftTypography variant="caption" color="secondary">قائمة الأسعار</SoftTypography>
+                <SoftTypography variant="caption" fontWeight="bold">
+                  {purchasePriceLists.find((list) => list.id === selectedPriceListId)?.name || "—"}
+                </SoftTypography>
+              </SoftBox>
+              <SoftBox display="flex" justifyContent="space-between" mb={1}>
+                <SoftTypography variant="caption" color="secondary">مستودع الاستلام</SoftTypography>
+                <SoftTypography variant="caption" fontWeight="bold">
+                  {mockWarehouses.find((item) => item.id === warehouse)?.name || "—"}
+                </SoftTypography>
+              </SoftBox>
               <SoftBox display="flex" justifyContent="space-between" mb={1}>
                 <SoftTypography variant="caption" color="secondary">عدد الأسطر</SoftTypography>
                 <SoftTypography variant="caption" fontWeight="bold">{totals.validLines.length}</SoftTypography>

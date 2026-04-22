@@ -28,43 +28,43 @@ import Footer from "examples/Footer";
 const mockOrders = [
   {
     id: "ORD-2024-001", customer: "شركة الرياض للمقاولات", salesperson: "أحمد محمد",
-    date: "2024-01-15", status: "confirmed", shippingStatus: "shipped", lines: 5, total: "12,500",
+    date: "2024-01-15", status: "completed", shippingStatus: "shipped", lines: 5, returnedQty: 0, total: "12,500",
   },
   {
     id: "ORD-2024-002", customer: "مؤسسة البناء الحديث", salesperson: "خالد عمر",
-    date: "2024-01-16", status: "submitted", shippingStatus: "pending", lines: 3, total: "8,200",
+    date: "2024-01-16", status: "submitted", shippingStatus: "pending", lines: 3, returnedQty: 0, total: "8,200",
   },
   {
     id: "ORD-2024-003", customer: "شركة الإنشاءات المتحدة", salesperson: "محمد سعيد",
-    date: "2024-01-17", status: "under_review", shippingStatus: "pending", lines: 8, total: "34,600",
+    date: "2024-01-17", status: "under_review", shippingStatus: "pending", lines: 8, returnedQty: 0, total: "34,600",
   },
   {
     id: "ORD-2024-004", customer: "مجموعة الخليج للتطوير", salesperson: "أحمد محمد",
-    date: "2024-01-18", status: "draft", shippingStatus: "none", lines: 2, total: "4,100",
+    date: "2024-01-18", status: "draft", shippingStatus: "none", lines: 2, returnedQty: 0, total: "4,100",
   },
   {
     id: "ORD-2024-005", customer: "شركة الأفق للتجارة", salesperson: "يوسف علي",
-    date: "2024-01-18", status: "fulfilled", shippingStatus: "shipped", lines: 6, total: "22,300",
+    date: "2024-01-18", status: "shipped", shippingStatus: "shipped", lines: 6, returnedQty: 18, total: "22,300",
   },
   {
     id: "ORD-2024-006", customer: "مؤسسة النجاح التجارية", salesperson: "خالد عمر",
-    date: "2024-01-19", status: "cancelled", shippingStatus: "none", lines: 4, total: "9,800",
+    date: "2024-01-19", status: "cancelled", shippingStatus: "none", lines: 4, returnedQty: 0, total: "9,800",
   },
   {
     id: "ORD-2024-007", customer: "شركة المستقبل للصناعة", salesperson: "محمد سعيد",
-    date: "2024-01-20", status: "confirmed", shippingStatus: "partial", lines: 7, total: "18,750",
+    date: "2024-01-20", status: "confirmed", shippingStatus: "pending", lines: 7, returnedQty: 4, total: "18,750",
   },
   {
     id: "ORD-2024-008", customer: "مجموعة الوطن للأعمال", salesperson: "يوسف علي",
-    date: "2024-01-21", status: "rejected", shippingStatus: "none", lines: 3, total: "6,400",
+    date: "2024-01-21", status: "rejected", shippingStatus: "none", lines: 3, returnedQty: 0, total: "6,400",
   },
   {
     id: "ORD-2024-009", customer: "شركة التقدم للمقاولات", salesperson: "أحمد محمد",
-    date: "2024-01-22", status: "submitted", shippingStatus: "pending", lines: 5, total: "15,200",
+    date: "2024-01-22", status: "submitted", shippingStatus: "pending", lines: 5, returnedQty: 0, total: "15,200",
   },
   {
     id: "ORD-2024-010", customer: "مؤسسة الإبداع التجارية", salesperson: "خالد عمر",
-    date: "2024-01-22", status: "under_review", shippingStatus: "pending", lines: 9, total: "41,000",
+    date: "2024-01-22", status: "under_review", shippingStatus: "pending", lines: 9, returnedQty: 0, total: "41,000",
   },
 ];
 
@@ -74,7 +74,8 @@ const statusConfig = {
   submitted:    { label: "مرسلة",       color: "info" },
   under_review: { label: "قيد المراجعة", color: "warning" },
   confirmed:    { label: "مؤكدة",       color: "success" },
-  fulfilled:    { label: "مكتملة",      color: "success" },
+  shipped:      { label: "مشحونة",      color: "success" },
+  completed:    { label: "مكتملة",      color: "success" },
   cancelled:    { label: "ملغاة",       color: "error" },
   rejected:     { label: "مرفوضة",      color: "error" },
 };
@@ -82,7 +83,6 @@ const statusConfig = {
 const shippingConfig = {
   none:     { label: "—",             color: "secondary" },
   pending:  { label: "في الانتظار",   color: "warning" },
-  partial:  { label: "جزئي",          color: "info" },
   shipped:  { label: "تم الشحن",      color: "success" },
 };
 
@@ -92,7 +92,8 @@ const tabs = [
   { key: "submitted",   label: "مرسلة" },
   { key: "under_review",label: "قيد المراجعة" },
   { key: "confirmed",   label: "مؤكدة" },
-  { key: "fulfilled",   label: "مكتملة" },
+  { key: "shipped",     label: "مشحونة" },
+  { key: "completed",   label: "مكتملة" },
   { key: "cancelled",   label: "ملغاة" },
   { key: "rejected",    label: "مرفوضة" },
 ];
@@ -152,7 +153,7 @@ function Orders() {
           {[
             { label: "إجمالي الطلبيات", value: mockOrders.length, color: "info" },
             { label: "مرسلة / قيد المراجعة", value: mockOrders.filter(o => ["submitted","under_review"].includes(o.status)).length, color: "warning" },
-            { label: "مؤكدة", value: mockOrders.filter(o => o.status === "confirmed").length, color: "success" },
+            { label: "مؤكدة / مشحونة / مكتملة", value: mockOrders.filter(o => ["confirmed","shipped","completed"].includes(o.status)).length, color: "success" },
             { label: "ملغاة / مرفوضة", value: mockOrders.filter(o => ["cancelled","rejected"].includes(o.status)).length, color: "error" },
           ].map((stat) => (
             <Grid item xs={6} sm={3} key={stat.label}>
@@ -233,7 +234,7 @@ function Orders() {
                 <tr style={{ borderBottom: "1px solid #e9ecef" }}>
                   {[
                     "رقم الطلبية", "الزبون", "البائع", "التاريخ",
-                    "الحالة", "الشحن", "السطور", "الإجمالي (دج)", "إجراء",
+                    "الحالة", "الشحن", "السطور", "المرتجع", "قائمة الأسعار", "الإجمالي (دج)", "إجراء",
                   ].map((h) => (
                     <th key={h} style={{ padding: "10px 14px", textAlign: "right" }}>
                       <ColHeader>{h}</ColHeader>
@@ -244,7 +245,7 @@ function Orders() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: "center", padding: 40 }}>
+                    <td colSpan={11} style={{ textAlign: "center", padding: 40 }}>
                       <SoftTypography variant="body2" color="text">
                         لا توجد نتائج
                       </SoftTypography>
@@ -307,6 +308,20 @@ function Orders() {
                         <td style={{ padding: "12px 14px", textAlign: "center" }}>
                           <SoftTypography variant="caption" color="text">
                             {order.lines}
+                          </SoftTypography>
+                        </td>
+                        <td style={{ padding: "12px 14px", textAlign: "center" }}>
+                          {order.returnedQty > 0 ? (
+                            <SoftTypography variant="caption" color="error" fontWeight="bold">
+                              {order.returnedQty}
+                            </SoftTypography>
+                          ) : (
+                            <SoftTypography variant="caption" color="secondary">—</SoftTypography>
+                          )}
+                        </td>
+                        <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                          <SoftTypography variant="caption" color="text">
+                            {order.priceList || (order.id === "ORD-2024-003" ? "أسعار نصف جملة" : "السعر الرئيسي")}
                           </SoftTypography>
                         </td>
                         <td style={{ padding: "12px 14px" }}>

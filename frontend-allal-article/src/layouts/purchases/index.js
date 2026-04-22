@@ -22,6 +22,7 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import ReceiptIcon from "@mui/icons-material/Receipt";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import PendingIcon from "@mui/icons-material/Pending";
+import AssignmentReturnIcon from "@mui/icons-material/AssignmentReturn";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -31,7 +32,15 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { formatDZD, mockPurchases, paymentConfig, statusConfig, supplierOptions } from "./mockData";
+import {
+  calcReturnAmount,
+  calcReturnedQty,
+  formatDZD,
+  mockPurchases,
+  paymentConfig,
+  statusConfig,
+  supplierOptions,
+} from "./mockData";
 import { findSupplierByName, resolveSupplierLink, supplierMatchLabels } from "data/mock/suppliersMock";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -85,6 +94,7 @@ function Purchases() {
   const unpaidAmount   = mockPurchases
     .filter(p => p.paymentStatus !== "paid")
     .reduce((s, p) => s + p.totalAmount, 0);
+  const returnedQty = mockPurchases.reduce((sum, purchase) => sum + calcReturnedQty(purchase), 0);
 
   return (
     <DashboardLayout>
@@ -104,16 +114,19 @@ function Purchases() {
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="في الانتظار"  value={pendingCount}   color="#fb8c00" icon={PendingIcon} />
+          <Grid item xs={6} sm={4} md={2.4}>
+            <StatCard label="مسودة شراء"  value={pendingCount}   color="#fb8c00" icon={PendingIcon} />
           </Grid>
-          <Grid item xs={6} sm={3}>
-            <StatCard label="مؤكدة"         value={confirmedCount} color="#17c1e8" icon={ReceiptIcon} />
+          <Grid item xs={6} sm={4} md={2.4}>
+            <StatCard label="مؤكدة للمورد" value={confirmedCount} color="#17c1e8" icon={ReceiptIcon} />
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid item xs={6} sm={4} md={2.4}>
             <StatCard label="مستلمة"        value={receivedCount}  color="#66BB6A" icon={LocalShippingIcon} />
           </Grid>
-          <Grid item xs={6} sm={3}>
+          <Grid item xs={6} sm={4} md={2.4}>
+            <StatCard label="مرتجع مشتريات" value={returnedQty} color="#ea0606" icon={AssignmentReturnIcon} />
+          </Grid>
+          <Grid item xs={6} sm={4} md={2.4}>
             <StatCard
               label="غير مدفوعة"
               value={`${(unpaidAmount / 1000000).toFixed(1)}م دج`}
@@ -131,8 +144,8 @@ function Purchases() {
               TabIndicatorProps={{ style: { background: "#17c1e8" } }}>
               {[
                 { label: "الكل",          count: mockPurchases.length },
-                { label: "في الانتظار",  count: pendingCount },
-                { label: "مؤكدة",         count: confirmedCount },
+                { label: "مسودة شراء",   count: pendingCount },
+                { label: "مؤكدة للمورد",  count: confirmedCount },
                 { label: "مستلمة",        count: receivedCount },
                 { label: "ملغاة",         count: mockPurchases.filter(p => p.status === "cancelled").length },
               ].map((t, i) => (
@@ -197,7 +210,7 @@ function Purchases() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f8f9fa" }}>
-                    {["رقم الأمر", "المورد", "تاريخ الطلب", "التاريخ المتوقع", "الأصناف", "الإجمالي (دج)", "الحالة", "الدفع", "المستلِم", "إجراء"].map((h) => (
+                    {["رقم الأمر", "المورد", "تاريخ الطلب", "التاريخ المتوقع", "الأصناف", "المرتجع", "قائمة الأسعار", "الإجمالي (دج)", "الحالة", "الدفع", "المستلِم", "إجراء"].map((h) => (
                       <th key={h} style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                         <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
                       </th>
@@ -207,7 +220,7 @@ function Purchases() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: 40 }}>
+                      <td colSpan={12} style={{ textAlign: "center", padding: 40 }}>
                         <SoftTypography variant="body2" color="text">
                           لا توجد أوامر شراء مطابقة
                         </SoftTypography>
@@ -216,6 +229,8 @@ function Purchases() {
                   ) : filtered.map((p, i) => {
                     const sc = statusConfig[p.status];
                     const pc = paymentConfig[p.paymentStatus];
+                    const purchaseReturnedQty = calcReturnedQty(p);
+                    const returnAmount = calcReturnAmount(p);
                     return (
                       <tr
                         key={p.id}
@@ -257,6 +272,25 @@ function Purchases() {
                         </td>
                         <td style={{ padding: "10px 12px", textAlign: "center" }}>
                           <SoftTypography variant="caption" fontWeight="bold">{p.itemsCount}</SoftTypography>
+                        </td>
+                        <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                          {purchaseReturnedQty > 0 ? (
+                            <SoftBox>
+                              <SoftTypography variant="caption" color="error" fontWeight="bold">
+                                {purchaseReturnedQty}
+                              </SoftTypography>
+                              <SoftTypography variant="caption" color="secondary" display="block">
+                                {formatDZD(returnAmount)} دج
+                              </SoftTypography>
+                            </SoftBox>
+                          ) : (
+                            <SoftTypography variant="caption" color="secondary">—</SoftTypography>
+                          )}
+                        </td>
+                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+                          <SoftTypography variant="caption" color="text">
+                            {p.priceListName || "أسعار شراء الموردين"}
+                          </SoftTypography>
                         </td>
                         <td style={{ padding: "10px 12px" }}>
                           <SoftTypography variant="caption" fontWeight="bold">{formatDZD(p.totalAmount)}</SoftTypography>

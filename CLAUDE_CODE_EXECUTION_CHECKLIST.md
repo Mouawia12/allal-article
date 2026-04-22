@@ -81,7 +81,7 @@
   - Auth
   - Users / Roles / Permissions
   - Customers
-  - Categories / Products / Media
+  - Categories / Products / Media / Favorites
   - Inventory
   - Orders
   - Realtime
@@ -199,6 +199,17 @@
   - البائع يرى آخر تعديل سعر من قائمة الأصناف.
   - صفحة الصنف تعرض timeline واضح لتغيرات السعر بدون منطق mock مخفي.
 
+- [ ] 2.6 بناء مفضلة الأصناف لكل مستخدم.
+  المطلوب:
+  - جدول `product_favorites` داخل schema المشترك
+  - unique على `user_id + product_id`
+  - endpoint لإضافة/إزالة صنف من المفضلة
+  - قائمة الأصناف ترجع `isFavorite` للمستخدم الحالي
+  - فلتر `المفضلة` في صفحة الأصناف وواجهة إضافة الطلبية السريعة
+  منجز عندما:
+  - يستطيع كل مستخدم امتلاك مفضلة مستقلة لا تؤثر على بقية المستخدمين.
+  - المفضلة تظهر فورًا في كروت/جدول الأصناف وفي تدفق إنشاء الطلبية.
+
 ## Phase 3 — Inventory Core
 
 - [ ] 3.1 تثبيت النموذج الرسمي للمخزون.
@@ -289,25 +300,24 @@
   - submitted
   - under_review
   - confirmed
-  - partially_fulfilled
-  - fulfilled
+  - shipped
+  - completed
   - cancelled
   - rejected
   منجز عندما:
   - لا يمكن تنفيذ transition غير منطقي برمجيًا.
+  - `cancelled` مسموحة قبل الشحن فقط، و`completed` تتم يدوياً أو تلقائياً بعد 3 أيام من `shipped_at`.
 
 - [ ] 5.2 تثبيت line statuses و line lifecycle.
   المطلوب:
   - pending
   - approved
   - modified
-  - partially_allocated
-  - allocated
-  - fulfilled
+  - shipped
   - cancelled
-  - deleted_by_admin
   منجز عندما:
-  - حذف السطر إداريًا لا يزيله من السجل.
+  - حذف السطر إداريًا يحوله إلى `cancelled` ولا يزيله من شاشة الفاتورة أو سجل التدقيق.
+  - السطر الملغى يخفى في الطباعة فقط.
 
 - [ ] 5.3 بناء order detail aggregate بشكل Odoo-like.
   المطلوب:
@@ -315,6 +325,7 @@
   - line grid
   - item status badges
   - original qty / final qty / shipped qty / cancelled qty
+  - returned qty
   - internal notes
   منجز عندما:
   - الإدارة تستطيع فهم ما الذي طلب وما الذي تغير وما الذي شحن من شاشة واحدة.
@@ -325,7 +336,10 @@
   - reject
   - reduce qty
   - cancel line
-  - partial ship
+  - cancel order before shipping
+  - full ship approved lines
+  - complete order after shipping
+  - auto-complete after 3 days from `shipped_at`
   - add internal note
   - re-open review if needed
   منجز عندما:
@@ -341,6 +355,17 @@
   - live updates
   منجز عندما:
   - صفحة `tables` أو الصفحة البديلة تعكس منطق البونات المذكور في `README`.
+
+- [ ] 5.6 بناء مرتجعات البيع والمشتريات كعمليات Domain مستقلة.
+  المطلوب:
+  - `returns` و`return_items` للمبيعات
+  - `purchase_returns` و`purchase_return_items` للمشتريات
+  - أعمدة `returned_qty` في قوائم وفواتير البيع والشراء
+  - منع إرجاع كمية أكبر من المشحون/المستلم غير المرتجع
+  - تلوين الأسطر المرتجعة جزئياً، وتمييز المرتجعة بالكامل بالأحمر
+  - أثر محاسبي ومخزني داخل نفس transaction
+  منجز عندما:
+  - صفحة فاتورة الشراء تحتوي زر مرتجع، والمرتجع يحدث المخزون والذمم والضريبة وسجل التدقيق.
 
 ## Phase 6 — Realtime and Notifications
 
@@ -511,6 +536,7 @@
   - viewer
   - demo categories
   - demo products
+  - demo product favorites per demo user
   - demo customers
   - demo orders in multiple statuses
   منجز عندما:

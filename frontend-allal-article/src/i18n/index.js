@@ -104,10 +104,22 @@ function isPlainObject(value) {
 
 function localizeChildren(children, t) {
   if (Array.isArray(children)) {
-    return children.map((child) => localizeNode(child, t));
+    return localizeNodeArray(children, t);
   }
 
   return localizeNode(children, t);
+}
+
+function localizeNodeArray(nodes, t) {
+  return nodes.map((child, index) => {
+    const localizedChild = localizeNode(child, t);
+
+    if (isValidElement(localizedChild) && localizedChild.key == null) {
+      return cloneElement(localizedChild, { key: `localized-${index}` });
+    }
+
+    return localizedChild;
+  });
 }
 
 export function localizeValue(value, t) {
@@ -147,7 +159,7 @@ export function localizeNode(node, t) {
   }
 
   if (Array.isArray(node)) {
-    return node.map((child) => localizeNode(child, t));
+    return localizeNodeArray(node, t);
   }
 
   if (!isValidElement(node)) {

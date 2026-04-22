@@ -1,8 +1,8 @@
 import { mockSuppliers } from "data/mock/suppliersMock";
 
 export const statusConfig = {
-  pending:   { label: "في الانتظار", color: "warning" },
-  confirmed: { label: "مؤكد",        color: "info" },
+  pending:   { label: "مسودة شراء", color: "warning" },
+  confirmed: { label: "مؤكد للمورد", color: "info" },
   received:  { label: "مستلم",       color: "success" },
   cancelled: { label: "ملغى",        color: "error" },
 };
@@ -44,9 +44,9 @@ export const mockPurchases = [
     invoiceNo: null,
     notes: "تأكيد الكميات قبل الاستلام النهائي.",
     lines: [
-      { id: 1, productCode: "RAW-STL-001", product: "حديد تسليح 12mm", qty: 18, receivedQty: 0, unit: "قنطار", unitPrice: 85000, taxRate: 19 },
-      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 35, receivedQty: 0, unit: "لوح", unitPrice: 12000, taxRate: 19 },
-      { id: 3, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 8, receivedQty: 0, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
+      { id: 1, productCode: "RAW-STL-001", product: "حديد تسليح 12mm", qty: 18, receivedQty: 0, returnedQty: 0, unit: "قنطار", unitPrice: 85000, taxRate: 19 },
+      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 35, receivedQty: 0, returnedQty: 0, unit: "لوح", unitPrice: 12000, taxRate: 19 },
+      { id: 3, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 8, receivedQty: 0, returnedQty: 0, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
     ],
   },
   {
@@ -66,9 +66,9 @@ export const mockPurchases = [
     invoiceNo: "BILL-2024-014",
     notes: "تم دفع تسبيق 300,000 دج.",
     lines: [
-      { id: 1, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 20, receivedQty: 8, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
-      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 30, receivedQty: 12, unit: "لوح", unitPrice: 12000, taxRate: 19 },
-      { id: 3, productCode: "PLB-PVC-050", product: "أنبوب PVC 50mm", qty: 160, receivedQty: 80, unit: "قطعة", unitPrice: 720, taxRate: 19 },
+      { id: 1, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 20, receivedQty: 8, returnedQty: 0, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
+      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 30, receivedQty: 12, returnedQty: 0, unit: "لوح", unitPrice: 12000, taxRate: 19 },
+      { id: 3, productCode: "PLB-PVC-050", product: "أنبوب PVC 50mm", qty: 160, receivedQty: 80, returnedQty: 0, unit: "قطعة", unitPrice: 720, taxRate: 19 },
     ],
   },
   {
@@ -88,8 +88,8 @@ export const mockPurchases = [
     invoiceNo: "BILL-2024-011",
     notes: "تمت المطابقة مع فاتورة المورد.",
     lines: [
-      { id: 1, productCode: "ELC-CBL-025", product: "كابل كهربائي 2.5mm", qty: 45, receivedQty: 45, unit: "لفة", unitPrice: 18500, taxRate: 19 },
-      { id: 2, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 12, receivedQty: 12, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
+      { id: 1, productCode: "ELC-CBL-025", product: "كابل كهربائي 2.5mm", qty: 45, receivedQty: 45, returnedQty: 5, unit: "لفة", unitPrice: 18500, taxRate: 19 },
+      { id: 2, productCode: "TLS-DRL-001", product: "مثقاب كهربائي", qty: 12, receivedQty: 12, returnedQty: 12, unit: "قطعة", unitPrice: 14500, taxRate: 19 },
     ],
   },
   {
@@ -109,8 +109,8 @@ export const mockPurchases = [
     invoiceNo: "BILL-2024-009",
     notes: "ينتظر تسجيل الدفع للمورد.",
     lines: [
-      { id: 1, productCode: "PLB-PVC-050", product: "أنبوب PVC 50mm", qty: 300, receivedQty: 300, unit: "قطعة", unitPrice: 720, taxRate: 19 },
-      { id: 2, productCode: "PNT-WHT-020", product: "دهان أبيض 20L", qty: 16, receivedQty: 16, unit: "دلو", unitPrice: 6400, taxRate: 19 },
+      { id: 1, productCode: "PLB-PVC-050", product: "أنبوب PVC 50mm", qty: 300, receivedQty: 300, returnedQty: 60, unit: "قطعة", unitPrice: 720, taxRate: 19 },
+      { id: 2, productCode: "PNT-WHT-020", product: "دهان أبيض 20L", qty: 16, receivedQty: 16, returnedQty: 0, unit: "دلو", unitPrice: 6400, taxRate: 19 },
     ],
   },
   {
@@ -130,8 +130,8 @@ export const mockPurchases = [
     invoiceNo: null,
     notes: "ألغي بسبب اختلاف السعر النهائي.",
     lines: [
-      { id: 1, productCode: "RAW-STL-001", product: "حديد تسليح 12mm", qty: 30, receivedQty: 0, unit: "قنطار", unitPrice: 85000, taxRate: 19 },
-      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 55, receivedQty: 0, unit: "لوح", unitPrice: 12000, taxRate: 19 },
+      { id: 1, productCode: "RAW-STL-001", product: "حديد تسليح 12mm", qty: 30, receivedQty: 0, returnedQty: 0, unit: "قنطار", unitPrice: 85000, taxRate: 19 },
+      { id: 2, productCode: "RAW-STL-002", product: "صفائح حديد 2mm", qty: 55, receivedQty: 0, returnedQty: 0, unit: "لوح", unitPrice: 12000, taxRate: 19 },
     ],
   },
   {
@@ -151,7 +151,7 @@ export const mockPurchases = [
     invoiceNo: "BILL-2024-007",
     notes: "",
     lines: [
-      { id: 1, productCode: "PNT-WHT-020", product: "دهان أبيض 20L", qty: 70, receivedQty: 0, unit: "دلو", unitPrice: 6400, taxRate: 19 },
+      { id: 1, productCode: "PNT-WHT-020", product: "دهان أبيض 20L", qty: 70, receivedQty: 0, returnedQty: 0, unit: "دلو", unitPrice: 6400, taxRate: 19 },
     ],
   },
 ];
@@ -166,4 +166,17 @@ export function formatDZD(value) {
 export function calcLineTotal(line) {
   const subtotal = Number(line.qty || 0) * Number(line.unitPrice || 0);
   return subtotal + (subtotal * Number(line.taxRate || 0)) / 100;
+}
+
+export function calcReturnedQty(purchase) {
+  return (purchase.lines || []).reduce((sum, line) => sum + Number(line.returnedQty || 0), 0);
+}
+
+export function calcReturnLineTotal(line, qty = line.returnedQty) {
+  const subtotal = Number(qty || 0) * Number(line.unitPrice || 0);
+  return subtotal + (subtotal * Number(line.taxRate || 0)) / 100;
+}
+
+export function calcReturnAmount(purchase) {
+  return (purchase.lines || []).reduce((sum, line) => sum + calcReturnLineTotal(line), 0);
 }

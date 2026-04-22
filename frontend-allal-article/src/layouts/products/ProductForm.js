@@ -23,6 +23,7 @@ import SoftButton from "components/SoftButton";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { getDefaultWarehouse, mockWarehouses } from "data/mock/pricingInventoryMock";
 
 const categories = ["مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
 const units = ["قطعة", "متر", "كيلوغرام", "لتر", "علبة", "لفة", "كرتون", "طقم"];
@@ -227,6 +228,7 @@ function ProductForm() {
     weightPerUnit:   isEdit ? "0.05" : "",    // وزن القطعة الواحدة (كغ)
     unitsPerPackage: isEdit ? "100" : "",     // عدد القطع في الكرطون/العلبة
     packageUnit:     isEdit ? "كرطون" : "كرطون", // اسم وحدة التعليب
+    initialWarehouseId: getDefaultWarehouse(mockWarehouses)?.id || "WH-MAIN",
   });
 
   const [images, setImages] = useState(
@@ -420,7 +422,7 @@ function ProductForm() {
                   المخزون الابتدائي
                 </SoftTypography>
                 <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} sm={4}>
                     <TextField
                       fullWidth
                       type="number"
@@ -431,7 +433,24 @@ function ProductForm() {
                       inputProps={{ min: 0 }}
                     />
                   </Grid>
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      select
+                      label="مستودع الإدخال"
+                      value={form.initialWarehouseId}
+                      onChange={handleChange("initialWarehouseId")}
+                      size="small"
+                      helperText="تدخل الكمية الابتدائية في هذا المستودع"
+                    >
+                      {mockWarehouses.map((warehouse) => (
+                        <MenuItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}{warehouse.isDefault ? " · افتراضي" : ""}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
                     <TextField
                       fullWidth
                       type="number"

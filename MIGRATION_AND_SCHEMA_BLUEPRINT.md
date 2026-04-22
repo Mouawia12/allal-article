@@ -108,7 +108,8 @@
 
 الأفضل:
 - الإبقاء على السطر
-- تغيير `line_status` إلى `deleted_by_admin` أو `cancelled`
+- تغيير `line_status` إلى `cancelled`
+- ضبط `cancelled_qty = requested_qty` و`approved_qty = 0`
 - حفظ سبب التغيير والكمية الأصلية
 
 السبب:
@@ -120,7 +121,7 @@
 | الواجهة الحالية | البيانات المطلوبة | الجداول الدنيا المطلوبة |
 |---|---|---|
 | Dashboard | KPIs، آخر الطلبيات، مؤشرات مخزون، نشاط حديث | `orders`, `order_items`, `product_stocks`, `audit_logs`, `users` |
-| Tables | قائمة طلبيات + قائمة أصناف/عملاء | `orders`, `customers`, `products`, `categories`, `product_price_histories` |
+| Tables | قائمة طلبيات + قائمة أصناف/عملاء | `orders`, `customers`, `products`, `categories`, `product_favorites`, `product_price_histories`, `price_lists`, `price_list_items` |
 | Billing | فواتير، وسائل دفع، حركات، كشف عميل | `orders`, `customers`, `payments` أو `transactions`, `order_items` |
 | Virtual Reality | إنشاء طلبية سريعة وسلة وبحث | `products`, `categories`, `orders(draft)` أو `carts`, `customers` |
 | Profile | بيانات المستخدم وصلاحياته ونشاطه | `users`, `roles`, `permissions`, `audit_logs` |
@@ -168,15 +169,15 @@
 | T1 | roles, permissions, role_permissions, users, user_profiles, user_permissions, access_denial_events | هوية وصلاحيات المشترك مع سجل محاولات الوصول الممنوعة |
 | T2 | wilayas, settings | بيانات مرجعية وإعدادات الشركة |
 | T3 | customers, customer_payments | الزبائن والرصيد قبل الطلبيات |
-| T4 | categories, products, product_images, product_price_histories | الأصناف قبل المخزون والطلبات |
+| T4 | categories, products, product_favorites, product_images, product_price_histories, price_lists, price_list_items | الأصناف وقوائم الأسعار قبل المخزون والطلبات |
 | T5 | warehouses | حتى لو كان هناك مخزن واحد حاليًا |
-| T6 | product_stocks, stock_movements, stock_reservations | تثبيت منطق المخزون |
+| T6 | product_stocks, stock_movements, stock_transfers, stock_transfer_items, stock_reservations | تثبيت منطق المخزون والتحويل بين المستودعات |
 | T7 | orders | الكيان الرئيسي للطلبات |
 | T8 | order_items | يعتمد على orders و products |
 | T9 | order_events, order_item_events | التتبع والتايملاين |
 | T10 | returns, return_items | المرتجعات بعد الطلبات |
 | T11 | manufacturing_requests, manufacturing_request_materials, manufacturing_quality_checks, manufacturing_events, manufacturing_receipts | إدارة التصنيع بعد المنتجات والمخزون والطلبيات لأنها قد ترتبط ببيع أو بسد نقص مخزون |
-| T12 | suppliers, purchase_orders, purchase_order_items | الموردين والمشتريات وربط المورد بالشريك |
+| T12 | suppliers, purchase_orders, purchase_order_items, purchase_returns, purchase_return_items | الموردين والمشتريات ومرتجعات الشراء وربط المورد بالشريك |
 | T13 | road_invoices, road_invoice_items, road_invoice_orders | فواتير الطريق |
 | T14 | accounting core: fiscal_years, periods, account_classes, account_templates, accounts, subledger_entities | نواة المحاسبة وشجرة الحسابات |
 | T15 | accounting operations: journal_books, sequences, journals, journal_items, dimensions | دفاتر اليومية والقيود والأبعاد |
@@ -189,6 +190,7 @@
 ملاحظة ربط الموردين:
 
 - Migration جدول `suppliers` يسبق `purchase_orders` حتى تعتمد أوامر الشراء على `supplier_id` مع إبقاء `supplier_name` كلقطة تاريخية.
+- جداول `purchase_returns` و`purchase_return_items` تأتي بعد أوامر الشراء وأسطرها، وتعتمد على `stock_movements` لتسجيل خروج مخزون المرتجع. الربط المحاسبي يحفظ `journal_public_id` منطقياً ثم يثبت FK لاحقاً بعد إنشاء نواة المحاسبة.
 - عند قبول ربط مشترك آخر، خدمة الشراكات تفحص `suppliers` داخل schema المشترك بالقيم الثابتة: `tax_number`, `commercial_register`, `email`, `phone`.
 - إذا كان التطابق فريداً، تحفظ المنصة حالة `supplier_match_status = suggested` وتعرض الواجهة سؤال التأكيد. عند الموافقة تحدث بطاقة المورد إلى `confirmed` وتحفظ `linked_partner_uuid`.
 - إذا كان التطابق مكرراً، تحفظ الحالة `ambiguous` وتمنع الربط التلقائي إلى أن يختار المستخدم بطاقة مورد محددة.
@@ -222,8 +224,8 @@
 - `submitted`
 - `under_review`
 - `confirmed`
-- `partially_fulfilled`
-- `fulfilled`
+- `shipped`
+- `completed`
 - `cancelled`
 - `rejected`
 
@@ -232,11 +234,14 @@
 - `pending`
 - `approved`
 - `modified`
-- `partially_allocated`
-- `allocated`
-- `fulfilled`
+- `shipped`
 - `cancelled`
-- `deleted_by_admin`
+
+قواعد الحالات:
+- `confirmed` آخر حالة يمكن فيها إلغاء الطلبية قبل خروجها من المخزن.
+- بعد `shipped` يختفي الإلغاء والتعديل، ويظهر المرتجع واكتمال الطلبية.
+- `completed` يمكن أن تتم يدوياً بزر "اكتمال طلبية" أو تلقائياً بعد 3 أيام من `shipped_at`.
+- `deleted_by_admin` غير معتمدة؛ أي حذف إداري يتحول إلى `cancelled` فقط.
 
 ### manufacturing_request_status
 
@@ -563,6 +568,7 @@
 - `barcode`
 - `current_price_amount`
 - `price_currency`
+- `is_favorite_for_current_user` في read model/API فقط، ويُحسب من `product_favorites` ولا يخزن داخل `products`
 - `last_price_updated_at`
 - `last_price_updated_by`
 - `status` (`active`, `inactive`, `archived`)
@@ -584,10 +590,38 @@
 - صفحة إضافة الطلبية
 - صفحة الصنف
 - كرت الصنف مع إظهار آخر تعديل سعر
+- كرت الصنف وواجهة الطلبية السريعة يستطيعان عرض النجمة وفلتر `المفضلة`
 - تبويب `سجل الأسعار` داخل صفحة الصنف
+- قوائم الأسعار تستخدم `current_price_amount` كسعر fallback عندما لا يوجد سعر للصنف داخل القائمة أو كان سعر القائمة `0`
 - dashboard widgets
 
-## 10) product_images
+## 10) product_favorites
+
+الغرض:
+- حفظ الأصناف المفضلة لكل مستخدم داخل schema المشترك لتسريع البيع والبحث اليومي
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `user_id`
+- `product_id`
+- `source_context` (`manual`, `order_entry`, `product_page`)
+- `note`
+- `sort_order`
+- `created_at`
+- `updated_at`
+
+فهارس:
+- unique على `user_id, product_id`
+- index على `user_id, sort_order, created_at`
+- index على `product_id`
+
+ملاحظات:
+- لا تضف عمود `is_favorite` داخل `products` لأن المفضلة شخصية لكل مستخدم.
+- endpoint قائمة الأصناف يرجع `isFavorite` للمستخدم الحالي من join أو projection.
+- حذف صنف أو أرشفته لا يحذف سجل المفضلة قسريًا إلا إذا كان هناك soft-delete policy واضحة؛ الواجهة تخفي المفضلة غير النشطة افتراضيًا.
+
+## 11) product_images
 
 الحقول المقترحة:
 - `id`
@@ -635,7 +669,60 @@
 - هذا الجدول هو مصدر tab `سجل الأسعار` في صفحة الصنف.
 - يمكن لاحقًا استخدامه في تقارير التسعير أو تنبيهات تغيّر السعر.
 
-## 11) warehouses
+### price_lists
+
+الغرض:
+- إنشاء قوائم أسعار متعددة باسم واضح مثل "أسعار أحمد"، "أسعار الجملة"، "أسعار نصف جملة"
+- السماح باختيار قائمة أسعار عند إنشاء طلبية بيع أو أمر شراء
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `code`
+- `name`
+- `price_list_type` (`sales`, `purchase`, `both`)
+- `currency`
+- `description`
+- `is_default`
+- `is_active`
+- `starts_at`
+- `ends_at`
+- `created_by`
+- `updated_by`
+- `created_at`
+- `updated_at`
+- `deleted_at`
+
+فهارس:
+- unique على `code`
+- index على `price_list_type, is_active, name`
+
+### price_list_items
+
+الغرض:
+- تسعير أصناف محددة داخل قائمة أسعار محددة بدون إلزام القائمة بتسعير كل الأصناف
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `price_list_id`
+- `product_id`
+- `unit_price_amount`
+- `min_qty`
+- `is_active`
+- `note`
+- `created_by`
+- `updated_by`
+- `created_at`
+- `updated_at`
+
+قواعد:
+- unique على `price_list_id + product_id + min_qty`.
+- إذا لم يوجد سطر للصنف داخل القائمة، أو كان `unit_price_amount` فارغاً أو `0`، يستخدم النظام `products.current_price_amount`.
+- `0` لا يستخدم كبيع مجاني؛ الهدايا أو الخصومات الكاملة تنفذ كخصم مستقل حتى لا يختلط fallback مع العروض.
+- الطلبية أو أمر الشراء يخزن snapshot للسعر واسم القائمة على السطر حتى لا تتغير الفواتير القديمة عند تعديل القائمة لاحقاً.
+
+## 12) warehouses
 
 الغرض:
 - طبقة توسع مستقبلية
@@ -644,14 +731,21 @@
 - `id`
 - `code`
 - `name`
+- `warehouse_type`
+- `city`
+- `address`
+- `manager_id`
+- `capacity_qty`
 - `is_default`
+- `is_active`
 - `created_at`
 - `updated_at`
 
 ملاحظة:
-- حتى لو كان هناك مخزن واحد الآن، وجود هذا الجدول من البداية يوفر إعادة هيكلة مؤلمة لاحقًا.
+- كل رصيد يجب أن يرتبط بمستودع. حتى لو كان هناك مخزن واحد الآن، وجود هذا الجدول من البداية يوفر إعادة هيكلة مؤلمة لاحقًا.
+- الأنواع المقترحة: `central`, `operational`, `returns`, `quarantine`, `virtual`.
 
-## 12) product_stocks
+## 13) product_stocks
 
 الغرض:
 - read model سريع للمخزون لكل منتج ولكل مخزن
@@ -676,8 +770,10 @@
 
 ملاحظة مهمة:
 - `available_qty` و `projected_qty` يفضل تحديثهما عبر service موحدة وليس كتابة عشوائية من عدة أماكن.
+- المفتاح الفعلي للرصيد هو `product_id + warehouse_id`.
+- لا يسمح بتحويل كمية أكبر من `available_qty`.
 
-## 13) stock_movements
+## 14) stock_movements
 
 الغرض:
 - المصدر التاريخي لحركة المخزون
@@ -700,9 +796,53 @@
 فهارس:
 - index على `product_id, warehouse_id`
 - index على `source_type, source_id`
+
+## 14.1) stock_transfers
+
+الغرض:
+- رأس عملية تحويل مخزون بين مستودعين، سواء صنف محدد أو تحويل كل المتاح من مستودع كامل.
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `transfer_number`
+- `transfer_type` (`product`, `warehouse_full`)
+- `from_warehouse_id`
+- `to_warehouse_id`
+- `status` (`draft`, `posted`, `cancelled`)
+- `reason`
+- `created_by`
+- `posted_by`
+- `posted_at`
+- `created_at`
+- `updated_at`
+
+قواعد:
+- `from_warehouse_id <> to_warehouse_id`.
+- عند الترحيل، لا يعدل الرصيد مباشرة من الواجهة؛ service واحدة تنشئ حركات خروج/دخول وتعيد حساب `product_stocks`.
+- تحويل مستودع كامل ينقل فقط الكميات المتاحة، ويترك المحجوز في المصدر.
+
+## 14.2) stock_transfer_items
+
+الغرض:
+- سطور التحويل لكل صنف.
+
+الحقول المقترحة:
+- `id`
+- `stock_transfer_id`
+- `product_id`
+- `qty`
+- `out_movement_id`
+- `in_movement_id`
+- `notes`
+- `created_at`
+
+قواعد:
+- `qty > 0`.
+- كل سطر ينتج حركتين: خروج من المصدر ودخول للوجهة.
 - index على `movement_type`
 
-## 14) stock_reservations
+## 15) stock_reservations
 
 الغرض:
 - تتبع الحجز الناتج عن الطلبيات المؤكدة أو المخصصة جزئيًا
@@ -721,7 +861,7 @@
 ملاحظة:
 - هذا الجدول يجعل `reserved_qty` قابلة للتفسير وليس مجرد aggregate غامض.
 
-## 15) orders
+## 16) orders
 
 الغرض:
 - رأس الطلبية
@@ -732,19 +872,29 @@
 - `order_number`
 - `customer_id`
 - `sales_user_id`
+- `price_list_id`
+- `price_list_name_snapshot`
+- `price_currency`
+- `total_amount`
 - `order_status`
 - `review_started_at`
 - `confirmed_at`
-- `fulfilled_at`
+- `shipped_at`
+- `completion_due_at`
+- `completed_at`
+- `auto_completed_at`
 - `cancelled_at`
 - `rejected_at`
-- `shipping_status` (`not_required`, `pending`, `partial`, `completed`)
+- `shipping_status` (`none`, `pending`, `shipped`)
 - `notes`
 - `internal_notes`
 - `created_by`
 - `updated_by`
 - `confirmed_by`
 - `reviewed_by`
+- `shipped_by`
+- `completed_by`
+- `cancelled_by`
 - `rejected_by`
 - `created_at`
 - `updated_at`
@@ -761,8 +911,10 @@
 تحسين مهم:
 - استخدم `order_number` كسلسلة business-facing.
 - لا تعتمد على `id` في العرض للمستخدم.
+- اختيار قائمة الأسعار في رأس الطلبية يحدد أسعار السطور، لكن كل سطر يحفظ snapshot مستقل للسعر حتى تبقى الطلبية التاريخية ثابتة.
+- ملخص الطلبية يعرض إجمالي المبلغ من `sum(order_items.line_subtotal)` للأسطر غير الملغاة.
 
-## 16) order_items
+## 17) order_items
 
 الغرض:
 - سطور الطلبية
@@ -776,10 +928,17 @@
 - `line_status`
 - `requested_qty`
 - `approved_qty`
-- `allocated_qty`
 - `shipped_qty`
+- `returned_qty`
 - `cancelled_qty`
 - `original_requested_qty`
+- `price_list_id`
+- `price_list_item_id`
+- `price_list_name_snapshot`
+- `pricing_source` (`price_list`, `product_default`, `manual_override`)
+- `base_unit_price`
+- `unit_price`
+- `line_subtotal`
 - `is_shipping_required`
 - `customer_note`
 - `internal_note`
@@ -798,8 +957,13 @@
 ملاحظة أساسية:
 - `original_requested_qty` مهم لإظهار الفرق بعد تعديل الإدارة.
 - السطر لا يحذف نهائيًا؛ يتغير `line_status`.
+- لا توجد حالة `deleted_by_admin`؛ الحذف الإداري يعني `line_status = cancelled`.
+- يجب أن يحافظ الباك إند على `approved_qty + cancelled_qty = requested_qty`.
+- الشحن الحالي كامل: `shipped_qty = approved_qty` لكل سطر غير ملغى.
+- المرتجع يحدث `returned_qty` ولا يخفض `shipped_qty`.
+- عمود السعر في جدول سطور البيع يعرض `unit_price`، ومصدر السعر يوضح هل جاء من القائمة أو من السعر الرئيسي.
 
-## 17) order_events
+## 18) order_events
 
 الغرض:
 - timeline على مستوى الطلبية
@@ -820,7 +984,7 @@
 - `shipping_status_changed`
 - `note_added`
 
-## 18) order_item_events
+## 19) order_item_events
 
 الغرض:
 - timeline على مستوى السطر
@@ -840,7 +1004,7 @@
 الفائدة:
 - ضروري جدًا لفلسفة “لا نخفي السطر المحذوف”.
 
-## 19) carts
+## 20) carts
 
 هذا الجدول اختياري إذا لم يتم اعتماد `orders(draft)` بدلًا منه.
 
@@ -854,7 +1018,7 @@
 - `created_at`
 - `updated_at`
 
-## 20) cart_items
+## 21) cart_items
 
 الحقول المقترحة:
 - `id`
@@ -866,7 +1030,7 @@
 - `created_at`
 - `updated_at`
 
-## 21) notifications
+## 22) notifications
 
 هذا القسم خاص بجداول الإشعارات داخل schema المشترك. إشعارات مالك المنصة والإشعارات العابرة بين المشتركين وتذاكر الدعم لها جداول `platform.notification_types` و `platform.platform_notifications` و `platform.platform_notification_recipients`.
 
@@ -1050,7 +1214,7 @@
 - index على `notification_recipients(state, snoozed_until)`
 - index على `notification_outbox(status, next_attempt_at)`
 
-## 22) resource_locks
+## 23) resource_locks
 
 هذا القسم خاص بقفل التحرير داخل schema المشترك. جداول المنصة المقابلة هي `platform.platform_resource_locks`.
 
@@ -1131,7 +1295,7 @@
 - `partner_document/sync`
 - `partner_document/confirm`
 
-## 23) audit_logs
+## 24) audit_logs
 
 الحقول المقترحة:
 - `id`
@@ -1152,7 +1316,7 @@
 - index على `action`
 - index على `created_at`
 
-## 23) settings
+## 25) settings
 
 الغرض:
 - إعدادات النظام العامة وإعدادات الـ AI
@@ -1174,7 +1338,7 @@
 - `system.default_locale`
 - `system.company_name`
 
-## 24) ai_jobs
+## 26) ai_jobs
 
 الحقول المقترحة:
 - `id`
@@ -1192,7 +1356,7 @@
 - `created_at`
 - `updated_at`
 
-## 25) ai_job_items
+## 27) ai_job_items
 
 الحقول المقترحة:
 - `id`
@@ -1290,6 +1454,7 @@
 - `accounting_settings` لكل المفاتيح الإجبارية:
   - `sales_revenue`
   - `sales_returns`
+  - `purchase_returns`
   - `discount_given`
   - `cogs`
   - `inventory`
@@ -1331,6 +1496,11 @@
 - `projected_qty = on_hand_qty - reserved_qty - pending_qty`
 - السطر الملغى أو المحذوف إداريًا يبقى موجودًا.
 - أي تعديل سعر يجب أن يحدّث `products.current_price_amount` ويكتب سطرًا في `product_price_histories`.
+- قوائم الأسعار لا تعدل السعر الرئيسي للصنف؛ هي طبقة تسعير اختيارية، وإذا غاب سعر الصنف داخل القائمة أو كان `0` يعود النظام إلى `products.current_price_amount`.
+- طلبات البيع وأوامر الشراء تحفظ `price_list_id` واسم القائمة كسجل تاريخي، وكل سطر يحفظ `unit_price`, `pricing_source`, `line_subtotal`.
+- إجمالي البيع أو الشراء لا يعتمد على إعادة احتساب حي من قائمة الأسعار، بل على snapshots السطور حتى لا تتأثر المستندات القديمة بتعديل القائمة.
+- مرتجع المشتريات لا يعدل أمر الشراء بصمت؛ ينشئ `purchase_returns` و`purchase_return_items` ويحدث `purchase_order_items.returned_qty` عبر خدمة واحدة.
+- أثر مرتجع المشتريات يجب أن يشمل خروج المخزون، تخفيض ذمة المورد أو إشعار دائن، وعكس TVA القابل للخصم داخل نفس transaction.
 - أي تغيير مهم على الطلب أو السطر يجب أن يكتب event + audit log.
 - تحديث المخزون لا يتم من الواجهة مباشرة؛ يتم عبر service domain واحدة.
 
@@ -1362,8 +1532,11 @@
 - `customers`
 - `categories`
 - `products`
+- `product_favorites`
 - `product_images`
 - `product_price_histories`
+- `price_lists`
+- `price_list_items`
 - `warehouses`
 - `product_stocks`
 - `stock_movements`
