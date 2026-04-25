@@ -1,214 +1,379 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
 
-import Card from "@mui/material/Card";
-import Grid from "@mui/material/Grid";
-import TextField from "@mui/material/TextField";
-import InputAdornment from "@mui/material/InputAdornment";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import MenuItem from "@mui/material/MenuItem";
 import Avatar from "@mui/material/Avatar";
-import Chip from "@mui/material/Chip";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import Switch from "@mui/material/Switch";
-import FormControlLabel from "@mui/material/FormControlLabel";
+import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
-import SearchIcon from "@mui/icons-material/Search";
+import FormControl from "@mui/material/FormControl";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import Slider from "@mui/material/Slider";
+import Switch from "@mui/material/Switch";
+import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+
 import AddIcon from "@mui/icons-material/Add";
-import EditIcon from "@mui/icons-material/Edit";
 import BlockIcon from "@mui/icons-material/Block";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import SecurityIcon from "@mui/icons-material/Security";
 import CloseIcon from "@mui/icons-material/Close";
+import EditIcon from "@mui/icons-material/Edit";
+import LockIcon from "@mui/icons-material/Lock";
+import SearchIcon from "@mui/icons-material/Search";
+import SecurityIcon from "@mui/icons-material/Security";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 
 import SoftBox from "components/SoftBox";
-import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import SoftBadge from "components/SoftBadge";
+import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const mockUsers = [
-  {
-    id: 1, name: "أحمد محمد",    email: "ahmed@company.com",  role: "salesperson", status: "active",
-    lastLogin: "2024-01-22 15:30", ordersCount: 8, phone: "0555-111111",
-  },
-  {
-    id: 2, name: "خالد عمر",     email: "khaled@company.com", role: "salesperson", status: "active",
-    lastLogin: "2024-01-22 14:00", ordersCount: 10, phone: "0561-222222",
-  },
-  {
-    id: 3, name: "محمد سعيد",    email: "msaeed@company.com", role: "salesperson", status: "active",
-    lastLogin: "2024-01-22 09:15", ordersCount: 18, phone: "0536-333333",
-  },
-  {
-    id: 4, name: "يوسف علي",     email: "yousef@company.com", role: "salesperson", status: "active",
-    lastLogin: "2024-01-21 16:45", ordersCount: 11, phone: "0502-444444",
-  },
-  {
-    id: 5, name: "سارة الإدارة", email: "sara@company.com",   role: "admin",       status: "active",
-    lastLogin: "2024-01-22 16:00", ordersCount: 0, phone: "0518-555555",
-  },
-  {
-    id: 6, name: "المالك",       email: "owner@company.com",  role: "owner",       status: "active",
-    lastLogin: "2024-01-22 08:00", ordersCount: 0, phone: "0544-000000",
-  },
-  {
-    id: 7, name: "مستخدم معطل", email: "old@company.com",    role: "salesperson", status: "inactive",
-    lastLogin: "2023-12-01 10:00", ordersCount: 3, phone: "0557-666666",
-  },
-];
-
-const roleConfig = {
-  owner:       { label: "مالك",          color: "#7928ca" },
-  admin:       { label: "إدارة",         color: "#17c1e8" },
-  salesperson: { label: "بائع",          color: "#82d616" },
-  viewer:      { label: "مشاهدة فقط",   color: "#8392ab" },
-};
+import { WILAYAS } from "data/wilayas";
+import {
+  allPermissions,
+  getUserPermissions,
+  mockUsers as initialUsers,
+  permissionsByModule,
+  roleConfig,
+  roleDefaultPermissions,
+} from "data/mock/usersMock";
 
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 
-const allPermissions = [
-  { key: "view_orders",    label: "عرض الطلبيات",           group: "الطلبيات" },
-  { key: "create_order",   label: "إنشاء طلبية",            group: "الطلبيات" },
-  { key: "edit_order",     label: "تعديل الطلبية",          group: "الطلبيات" },
-  { key: "confirm_order",  label: "تأكيد الطلبية",          group: "الطلبيات" },
-  { key: "reject_order",   label: "رفض الطلبية",            group: "الطلبيات" },
-  { key: "view_all_orders",label: "عرض كل الطلبيات",        group: "الطلبيات" },
-  { key: "view_products",  label: "عرض الأصناف",            group: "الأصناف" },
-  { key: "create_product", label: "إضافة صنف",              group: "الأصناف" },
-  { key: "edit_product",   label: "تعديل صنف",              group: "الأصناف" },
-  { key: "view_stock",     label: "عرض المخزون",            group: "المخزون" },
-  { key: "edit_stock",     label: "تعديل المخزون",          group: "المخزون" },
-  { key: "view_customers", label: "عرض الزبائن",            group: "الزبائن" },
-  { key: "manage_customers",label: "إدارة الزبائن",         group: "الزبائن" },
-  { key: "view_reports",   label: "عرض التقارير",           group: "التقارير" },
-  { key: "view_logs",      label: "عرض السجلات",            group: "السجلات" },
-  { key: "manage_users",   label: "إدارة المستخدمين",       group: "النظام" },
-  { key: "manage_settings",label: "إدارة إعدادات النظام",  group: "النظام" },
-  { key: "manage_ai",      label: "إدارة إعدادات AI",       group: "النظام" },
-];
-
-const groupedPermissions = allPermissions.reduce((acc, p) => {
-  if (!acc[p.group]) acc[p.group] = [];
-  acc[p.group].push(p);
-  return acc;
-}, {});
-
 // ─── Permissions Dialog ───────────────────────────────────────────────────────
-function PermissionsDialog({ user, onClose }) {
-  const defaultPerms = {
-    owner:       allPermissions.map(p => p.key),
-    admin:       ["view_orders","create_order","edit_order","confirm_order","reject_order","view_all_orders","view_products","view_stock","view_customers","manage_customers","view_reports","view_logs"],
-    salesperson: ["view_orders","create_order","view_products","view_customers"],
-    viewer:      ["view_orders","view_products","view_customers","view_reports"],
-  };
+function PermissionsDialog({ user, onClose, onSave }) {
+  const effectivePerms = getUserPermissions(user);
+  const [perms, setPerms] = useState(new Set(effectivePerms));
+  const isOwner = user?.role === "owner";
 
-  const [perms, setPerms] = useState(new Set(defaultPerms[user?.role] || []));
-
-  const toggle = (key) => {
+  const toggle = (code) => {
+    if (isOwner) return;
     setPerms((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      next.has(code) ? next.delete(code) : next.add(code);
       return next;
     });
   };
 
+  const toggleModule = (moduleName) => {
+    if (isOwner) return;
+    const moduleCodes = (permissionsByModule[moduleName] || []).map((p) => p.code);
+    const allActive = moduleCodes.every((c) => perms.has(c));
+    setPerms((prev) => {
+      const next = new Set(prev);
+      if (allActive) moduleCodes.forEach((c) => next.delete(c));
+      else moduleCodes.forEach((c) => next.add(c));
+      return next;
+    });
+  };
+
+  const resetToRole = () => {
+    setPerms(new Set(roleDefaultPermissions[user?.role] || []));
+  };
+
   if (!user) return null;
+  const rc = roleConfig[user.role] || roleConfig.viewer;
 
   return (
-    <Dialog open={!!user} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
+    <Dialog open={!!user} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ pb: 1 }}>
         <SoftBox display="flex" alignItems="center" justifyContent="space-between">
-          <SoftBox display="flex" alignItems="center" gap={1}>
-            <SecurityIcon />
-            <SoftTypography variant="h6" fontWeight="bold">
-              صلاحيات: {user.name}
-            </SoftTypography>
+          <SoftBox display="flex" alignItems="center" gap={1.5}>
+            <Avatar sx={{ bgcolor: avatarColors[user.id % avatarColors.length], width: 36, height: 36, fontSize: 13 }}>
+              {user.name[0]}
+            </Avatar>
+            <SoftBox>
+              <SoftTypography variant="h6" fontWeight="bold">صلاحيات: {user.name}</SoftTypography>
+              <SoftBox display="flex" gap={0.7} alignItems="center">
+                <Chip label={rc.label} size="small" sx={{ height: 18, fontSize: 10, fontWeight: 700, background: rc.bg, color: rc.color }} />
+                <SoftTypography variant="caption" color="secondary">{perms.size} صلاحية ممنوحة</SoftTypography>
+              </SoftBox>
+            </SoftBox>
           </SoftBox>
-          <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
+          <SoftBox display="flex" gap={1} alignItems="center">
+            {!isOwner && (
+              <Tooltip title="إعادة تعيين لصلاحيات الدور الافتراضية">
+                <SoftButton variant="outlined" color="secondary" size="small" onClick={resetToRole}>
+                  إعادة تعيين
+                </SoftButton>
+              </Tooltip>
+            )}
+            <IconButton onClick={onClose} size="small"><CloseIcon /></IconButton>
+          </SoftBox>
         </SoftBox>
       </DialogTitle>
-      <DialogContent dividers>
-        <Grid container spacing={3}>
-          {Object.entries(groupedPermissions).map(([group, groupPerms]) => (
-            <Grid item xs={12} sm={6} key={group}>
-              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={1} display="block">
-                {group}
-              </SoftTypography>
-              {groupPerms.map((p) => (
-                <FormControlLabel
-                  key={p.key}
-                  control={
+      <DialogContent dividers sx={{ p: 2 }}>
+        {isOwner && (
+          <SoftBox p={1.5} mb={2} sx={{ background: "#f5ecff", borderRadius: 2, border: "1px solid #7928ca22" }}>
+            <SoftTypography variant="caption" color="secondary">
+              المالك يملك جميع الصلاحيات دائماً ولا يمكن تغييرها.
+            </SoftTypography>
+          </SoftBox>
+        )}
+        <Grid container spacing={2}>
+          {Object.entries(permissionsByModule).map(([moduleName, modulePerms]) => {
+            const allActive = modulePerms.every((p) => perms.has(p.code));
+            const someActive = modulePerms.some((p) => perms.has(p.code));
+            return (
+              <Grid item xs={12} sm={6} key={moduleName}>
+                <SoftBox sx={{ border: "1px solid #e9ecef", borderRadius: 2, overflow: "hidden" }}>
+                  {/* Module header */}
+                  <SoftBox
+                    display="flex" alignItems="center" justifyContent="space-between"
+                    px={1.5} py={1} sx={{ background: allActive ? "#f0faff" : "#f8f9fa", cursor: isOwner ? "default" : "pointer" }}
+                    onClick={() => toggleModule(moduleName)}
+                  >
+                    <SoftTypography variant="caption" fontWeight="bold" color={allActive ? "info" : "secondary"}>
+                      {moduleName}
+                    </SoftTypography>
                     <Checkbox
                       size="small"
-                      checked={perms.has(p.key)}
-                      onChange={() => toggle(p.key)}
-                      disabled={user.role === "owner"}
+                      checked={allActive}
+                      indeterminate={!allActive && someActive}
+                      disabled={isOwner}
+                      sx={{ p: 0, color: "#17c1e8", "&.Mui-checked": { color: "#17c1e8" }, "&.MuiCheckbox-indeterminate": { color: "#17c1e8" } }}
                     />
-                  }
-                  label={<SoftTypography variant="caption" color="text">{p.label}</SoftTypography>}
-                  sx={{ display: "flex", mb: 0.5 }}
-                />
-              ))}
-            </Grid>
-          ))}
+                  </SoftBox>
+                  {/* Permissions */}
+                  <SoftBox px={1.5} py={0.5}>
+                    {modulePerms.map((p) => (
+                      <FormControlLabel
+                        key={p.code}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={perms.has(p.code)}
+                            onChange={() => toggle(p.code)}
+                            disabled={isOwner}
+                            sx={{ "&.Mui-checked": { color: "#17c1e8" } }}
+                          />
+                        }
+                        label={
+                          <SoftBox>
+                            <SoftTypography variant="caption" color="text">{p.label}</SoftTypography>
+                            {p.description && (
+                              <SoftTypography variant="caption" color="secondary" display="block" sx={{ fontSize: "10px" }}>
+                                {p.description}
+                              </SoftTypography>
+                            )}
+                          </SoftBox>
+                        }
+                        sx={{ display: "flex", mb: 0.3, mr: 0 }}
+                      />
+                    ))}
+                  </SoftBox>
+                </SoftBox>
+              </Grid>
+            );
+          })}
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" onClick={onClose}>حفظ الصلاحيات</SoftButton>
+        <SoftButton variant="gradient" color="info" size="small" onClick={() => { onSave && onSave(user, perms); onClose(); }}>
+          حفظ الصلاحيات
+        </SoftButton>
       </DialogActions>
     </Dialog>
   );
 }
 
-// ─── Add/Edit User Dialog ─────────────────────────────────────────────────────
-function UserFormDialog({ open, user, onClose }) {
+// ─── User Form Dialog ─────────────────────────────────────────────────────────
+function UserFormDialog({ open, user, onClose, onSave }) {
+  const isEdit = Boolean(user);
+  const [showPass, setShowPass] = useState(false);
+  const [form, setForm] = useState(() => user ? { ...user } : {
+    name: "", email: "", phone: "", role: "salesperson", status: "active",
+    assignedWilaya: "", maxDiscountPct: 0, canViewAllOrders: false, lang: "ar", notes: "",
+    password: "",
+  });
+
+  const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
+
+  const handleSave = () => {
+    if (!form.name.trim() || !form.email.trim()) return;
+    onSave && onSave({ ...form, id: user?.id || Date.now(), lastLogin: user?.lastLogin || "—", ordersCount: user?.ordersCount || 0, customPermissions: user?.customPermissions || [] });
+    onClose();
+  };
+
+  const rc = roleConfig[form.role] || roleConfig.salesperson;
+  const isSalesperson = form.role === "salesperson";
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{user ? "تعديل المستخدم" : "إضافة مستخدم جديد"}</DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 0.5 }}>
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      <DialogTitle sx={{ pb: 1 }}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+          <SoftBox>
+            <SoftTypography variant="h6" fontWeight="bold">{isEdit ? "تعديل المستخدم" : "إضافة مستخدم جديد"}</SoftTypography>
+            <SoftTypography variant="caption" color="secondary">
+              {isEdit ? `تعديل بيانات ${user.name}` : "ملء البيانات الأساسية ثم حفظ الصلاحيات"}
+            </SoftTypography>
+          </SoftBox>
+          <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
+        </SoftBox>
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        <Grid container spacing={2}>
+          {/* ── الهوية ── */}
           <Grid item xs={12}>
-            <TextField fullWidth label="الاسم الكامل *" size="small" defaultValue={user?.name || ""} />
+            <SoftTypography variant="caption" fontWeight="bold" color="secondary">الهوية</SoftTypography>
+            <Divider sx={{ mt: 0.5, mb: 1.5 }} />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField fullWidth size="small" label="الاسم الكامل *" value={form.name}
+              onChange={(e) => set("name", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="البريد الإلكتروني *" size="small" defaultValue={user?.email || ""} />
+            <TextField fullWidth size="small" label="البريد الإلكتروني *" value={form.email}
+              onChange={(e) => set("email", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="رقم الهاتف" size="small" defaultValue={user?.phone || ""} />
+            <TextField fullWidth size="small" label="رقم الهاتف" value={form.phone}
+              onChange={(e) => set("phone", e.target.value)} />
+          </Grid>
+
+          {/* ── الدور والحالة ── */}
+          <Grid item xs={12}>
+            <SoftTypography variant="caption" fontWeight="bold" color="secondary">الدور والصلاحيات</SoftTypography>
+            <Divider sx={{ mt: 0.5, mb: 1.5 }} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth select label="الدور *" size="small" defaultValue={user?.role || "salesperson"}>
-              {Object.entries(roleConfig).map(([key, cfg]) => (
-                <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
-              ))}
-            </TextField>
+            <FormControl size="small" fullWidth>
+              <InputLabel>الدور *</InputLabel>
+              <Select value={form.role} label="الدور *" onChange={(e) => set("role", e.target.value)}>
+                {Object.entries(roleConfig).map(([key, cfg]) => (
+                  <MenuItem key={key} value={key}>
+                    <SoftBox display="flex" alignItems="center" gap={1}>
+                      <Chip label={cfg.label} size="small" sx={{ height: 18, fontSize: 10, background: cfg.bg, color: cfg.color }} />
+                    </SoftBox>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </Grid>
-          {!user && (
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="كلمة المرور *" type="password" size="small" />
-            </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>الحالة</InputLabel>
+              <Select value={form.status} label="الحالة" onChange={(e) => set("status", e.target.value)}>
+                <MenuItem value="active">نشط</MenuItem>
+                <MenuItem value="inactive">معطل</MenuItem>
+                <MenuItem value="suspended">موقوف</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* ── إعدادات خاصة بالبائع ── */}
+          {isSalesperson && (
+            <>
+              <Grid item xs={12}>
+                <SoftTypography variant="caption" fontWeight="bold" color="secondary">إعدادات البائع</SoftTypography>
+                <Divider sx={{ mt: 0.5, mb: 1.5 }} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl size="small" fullWidth>
+                  <InputLabel>الولاية المُسندة</InputLabel>
+                  <Select value={form.assignedWilaya} label="الولاية المُسندة"
+                    onChange={(e) => set("assignedWilaya", e.target.value)}>
+                    <MenuItem value="">— كل الولايات —</MenuItem>
+                    {WILAYAS.map((w) => (
+                      <MenuItem key={w.code} value={w.name}>{w.code} - {w.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <SoftBox>
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+                    الحد الأقصى للخصم: {form.maxDiscountPct}%
+                  </SoftTypography>
+                  <Slider
+                    value={form.maxDiscountPct}
+                    onChange={(_, v) => set("maxDiscountPct", v)}
+                    min={0} max={30} step={1}
+                    marks={[{ value: 0, label: "0%" }, { value: 15, label: "15%" }, { value: 30, label: "30%" }]}
+                    sx={{ color: rc.color, mt: 1 }}
+                  />
+                </SoftBox>
+              </Grid>
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch checked={form.canViewAllOrders}
+                      onChange={(e) => set("canViewAllOrders", e.target.checked)} color="info" />
+                  }
+                  label={
+                    <SoftBox>
+                      <SoftTypography variant="caption" fontWeight="medium">يرى كل الطلبيات</SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block">
+                        افتراضياً يرى فقط طلبياته الشخصية
+                      </SoftTypography>
+                    </SoftBox>
+                  }
+                />
+              </Grid>
+            </>
           )}
-          {user && (
-            <Grid item xs={12} sm={6}>
-              <TextField fullWidth label="كلمة مرور جديدة (اختياري)" type="password" size="small" />
-            </Grid>
-          )}
+
+          {/* ── التفضيلات ── */}
+          <Grid item xs={12}>
+            <SoftTypography variant="caption" fontWeight="bold" color="secondary">التفضيلات والأمان</SoftTypography>
+            <Divider sx={{ mt: 0.5, mb: 1.5 }} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>لغة الواجهة</InputLabel>
+              <Select value={form.lang} label="لغة الواجهة" onChange={(e) => set("lang", e.target.value)}>
+                <MenuItem value="ar">العربية</MenuItem>
+                <MenuItem value="fr">Français</MenuItem>
+                <MenuItem value="en">English</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth size="small"
+              label={isEdit ? "كلمة مرور جديدة (اتركها فارغة إن لم تريد التغيير)" : "كلمة المرور *"}
+              type={showPass ? "text" : "password"}
+              value={form.password || ""}
+              onChange={(e) => set("password", e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><LockIcon fontSize="small" sx={{ color: "#94a3b8" }} /></InputAdornment>,
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton size="small" onClick={() => setShowPass(!showPass)}>
+                      {showPass ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField fullWidth size="small" label="ملاحظات داخلية" multiline rows={2}
+              value={form.notes} onChange={(e) => set("notes", e.target.value)}
+              placeholder="ملاحظات خاصة بهذا المستخدم (لا تظهر للمستخدم)" />
+          </Grid>
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" onClick={onClose}>
-          {user ? "حفظ التعديلات" : "إضافة المستخدم"}
+        <SoftButton variant="gradient" color="info" size="small"
+          disabled={!form.name.trim() || !form.email.trim()}
+          onClick={handleSave}>
+          {isEdit ? "حفظ التعديلات" : "إضافة المستخدم"}
         </SoftButton>
       </DialogActions>
     </Dialog>
@@ -217,26 +382,45 @@ function UserFormDialog({ open, user, onClose }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function Users() {
+  const [users, setUsers] = useState(initialUsers);
   const [search, setSearch] = useState("");
-  const [formDialog, setFormDialog] = useState(null); // null | user | true(new)
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [formDialog, setFormDialog] = useState(null);
   const [permDialog, setPermDialog] = useState(null);
 
-  const filtered = mockUsers.filter(
-    (u) =>
-      u.name.includes(search) ||
-      u.email.includes(search) ||
-      roleConfig[u.role]?.label.includes(search)
-  );
+  const filtered = users.filter((u) => {
+    const matchSearch = u.name.includes(search) || u.email.includes(search) || (roleConfig[u.role]?.label || "").includes(search);
+    const matchRole = roleFilter === "all" || u.role === roleFilter;
+    return matchSearch && matchRole;
+  });
+
+  const upsertUser = (u) => {
+    setUsers((prev) =>
+      prev.some((x) => x.id === u.id) ? prev.map((x) => x.id === u.id ? u : x) : [...prev, u]
+    );
+  };
+
+  const toggleStatus = (userId) => {
+    setUsers((prev) => prev.map((u) =>
+      u.id === userId ? { ...u, status: u.status === "active" ? "inactive" : "active" } : u
+    ));
+  };
+
+  const savePermissions = (user, perms) => {
+    const roleBase = new Set(roleDefaultPermissions[user.role] || []);
+    const custom = [...perms].filter((c) => !roleBase.has(c));
+    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, customPermissions: custom } : u));
+  };
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
         {/* Header */}
-        <SoftBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <SoftBox mb={3} display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
           <SoftBox>
             <SoftTypography variant="h4" fontWeight="bold">المستخدمون</SoftTypography>
-            <SoftTypography variant="body2" color="text">إدارة حسابات المستخدمين والصلاحيات</SoftTypography>
+            <SoftTypography variant="body2" color="text">إدارة حسابات المستخدمين، الأدوار، والصلاحيات الدقيقة</SoftTypography>
           </SoftBox>
           <SoftButton variant="gradient" color="info" startIcon={<AddIcon />} onClick={() => setFormDialog(true)}>
             إضافة مستخدم
@@ -246,10 +430,13 @@ function Users() {
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
           {Object.entries(roleConfig).map(([role, cfg]) => (
-            <Grid item xs={6} sm={3} key={role}>
-              <Card sx={{ p: 2, textAlign: "center" }}>
-                <SoftTypography variant="h3" fontWeight="bold" sx={{ color: cfg.color }}>
-                  {mockUsers.filter(u => u.role === role).length}
+            <Grid item xs={6} sm={4} md={2} key={role}>
+              <Card
+                sx={{ p: 2, textAlign: "center", cursor: "pointer", border: roleFilter === role ? `2px solid ${cfg.color}` : "1px solid #e9ecef", transition: "all 0.15s" }}
+                onClick={() => setRoleFilter(roleFilter === role ? "all" : role)}
+              >
+                <SoftTypography variant="h4" fontWeight="bold" sx={{ color: cfg.color }}>
+                  {users.filter((u) => u.role === role).length}
                 </SoftTypography>
                 <SoftTypography variant="caption" color="text">{cfg.label}</SoftTypography>
               </Card>
@@ -259,23 +446,33 @@ function Users() {
 
         <Card>
           <SoftBox p={2}>
-            <TextField
-              size="small"
-              placeholder="بحث بالاسم، البريد، أو الدور..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
-              }}
-              sx={{ width: 300, mb: 2 }}
-            />
+            {/* Search + filter */}
+            <SoftBox display="flex" gap={1.5} mb={2} flexWrap="wrap">
+              <TextField
+                size="small" placeholder="بحث بالاسم أو البريد..."
+                value={search} onChange={(e) => setSearch(e.target.value)}
+                InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+                sx={{ width: 260 }}
+              />
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} displayEmpty>
+                  <MenuItem value="all">كل الأدوار</MenuItem>
+                  {Object.entries(roleConfig).map(([k, v]) => (
+                    <MenuItem key={k} value={k}>{v.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <SoftTypography variant="caption" color="secondary" sx={{ alignSelf: "center" }}>
+                {filtered.length} مستخدم
+              </SoftTypography>
+            </SoftBox>
 
             <SoftBox sx={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#f8f9fa" }}>
-                    {["المستخدم", "الدور", "الحالة", "آخر دخول", "الطلبيات", "إجراءات"].map((h) => (
-                      <th key={h} style={{ padding: "10px 14px", textAlign: "right" }}>
+                    {["المستخدم", "الدور", "الولاية", "خصم أقصى", "الحالة", "آخر دخول", "الطلبيات", "إجراءات"].map((h) => (
+                      <th key={h} style={{ padding: "10px 14px", textAlign: "right", whiteSpace: "nowrap" }}>
                         <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
                       </th>
                     ))}
@@ -283,34 +480,46 @@ function Users() {
                 </thead>
                 <tbody>
                   {filtered.map((user, i) => {
-                    const rc = roleConfig[user.role] || { label: user.role, color: "#8392ab" };
+                    const rc = roleConfig[user.role] || { label: user.role, color: "#8392ab", bg: "#f1f5f9" };
                     const colorIdx = user.id % avatarColors.length;
+                    const effectivePerms = getUserPermissions(user);
+                    const hasCustom = (user.customPermissions || []).length > 0;
                     return (
-                      <tr
-                        key={user.id}
-                        style={{
-                          borderBottom: "1px solid #f0f2f5",
-                          background: i % 2 === 0 ? "#fff" : "#fafbfc",
-                          opacity: user.status === "inactive" ? 0.6 : 1,
-                        }}
-                      >
+                      <tr key={user.id} style={{
+                        borderBottom: "1px solid #f0f2f5",
+                        background: i % 2 === 0 ? "#fff" : "#fafbfc",
+                        opacity: user.status === "inactive" ? 0.55 : 1,
+                      }}>
                         <td style={{ padding: "10px 14px" }}>
                           <SoftBox display="flex" alignItems="center" gap={1.5}>
-                            <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 36, height: 36, fontSize: 13 }}>
+                            <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 36, height: 36, fontSize: 13, fontWeight: 700 }}>
                               {user.name[0]}
                             </Avatar>
                             <SoftBox>
-                              <SoftTypography variant="button" fontWeight="medium">{user.name}</SoftTypography>
+                              <SoftBox display="flex" alignItems="center" gap={0.5}>
+                                <SoftTypography variant="button" fontWeight="medium">{user.name}</SoftTypography>
+                                {hasCustom && (
+                                  <Tooltip title={`${effectivePerms.size} صلاحية (مخصصة)`}>
+                                    <Chip label="مخصص" size="small" sx={{ height: 16, fontSize: 9, background: "#fff3e0", color: "#fb8c00" }} />
+                                  </Tooltip>
+                                )}
+                              </SoftBox>
                               <SoftTypography variant="caption" color="secondary" display="block">{user.email}</SoftTypography>
+                              <SoftTypography variant="caption" color="secondary" display="block">{user.phone}</SoftTypography>
                             </SoftBox>
                           </SoftBox>
                         </td>
                         <td style={{ padding: "10px 14px" }}>
-                          <Chip
-                            label={rc.label}
-                            size="small"
-                            sx={{ height: 22, fontSize: 11, background: `${rc.color}22`, color: rc.color, fontWeight: "bold" }}
-                          />
+                          <Chip label={rc.label} size="small"
+                            sx={{ height: 22, fontSize: 11, fontWeight: 700, background: rc.bg, color: rc.color }} />
+                        </td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <SoftTypography variant="caption" color="text">{user.assignedWilaya || "—"}</SoftTypography>
+                        </td>
+                        <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                          <SoftTypography variant="caption" fontWeight="bold" sx={{ color: user.maxDiscountPct > 0 ? "#fb8c00" : "#8392ab" }}>
+                            {user.maxDiscountPct}%
+                          </SoftTypography>
                         </td>
                         <td style={{ padding: "10px 14px" }}>
                           <SoftBadge
@@ -329,25 +538,21 @@ function Users() {
                         </td>
                         <td style={{ padding: "10px 14px" }}>
                           <SoftBox display="flex" gap={0.5}>
-                            <Tooltip title="تعديل">
+                            <Tooltip title="تعديل البيانات">
                               <IconButton size="small" onClick={() => setFormDialog(user)}>
                                 <EditIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="الصلاحيات">
+                            <Tooltip title={`الصلاحيات (${effectivePerms.size})`}>
                               <IconButton size="small" color="primary" onClick={() => setPermDialog(user)}>
                                 <SecurityIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title={user.status === "active" ? "تعطيل" : "تفعيل"}>
-                              <IconButton
-                                size="small"
+                            <Tooltip title={user.status === "active" ? "تعطيل الحساب" : "تفعيل الحساب"}>
+                              <IconButton size="small"
                                 color={user.status === "active" ? "error" : "success"}
-                              >
-                                {user.status === "active"
-                                  ? <BlockIcon fontSize="small" />
-                                  : <CheckCircleIcon fontSize="small" />
-                                }
+                                onClick={() => toggleStatus(user.id)}>
+                                {user.status === "active" ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
                               </IconButton>
                             </Tooltip>
                           </SoftBox>
@@ -366,9 +571,13 @@ function Users() {
         open={!!formDialog}
         user={typeof formDialog === "object" ? formDialog : null}
         onClose={() => setFormDialog(null)}
+        onSave={(u) => { upsertUser(u); setFormDialog(null); }}
       />
-      <PermissionsDialog user={permDialog} onClose={() => setPermDialog(null)} />
-
+      <PermissionsDialog
+        user={permDialog}
+        onClose={() => setPermDialog(null)}
+        onSave={savePermissions}
+      />
       <Footer />
     </DashboardLayout>
   );

@@ -11,6 +11,7 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Divider from "@mui/material/Divider";
 import Chip from "@mui/material/Chip";
+import Avatar from "@mui/material/Avatar";
 import LinearProgress from "@mui/material/LinearProgress";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -39,6 +40,7 @@ import Footer from "examples/Footer";
 import { useI18n } from "i18n";
 import { WILAYAS } from "data/wilayas";
 import { categoryConfig, mockNotificationTypes, severityConfig } from "data/mock/notificationsMock";
+import { currentUser, getUserPermissions, permissionsByModule, roleConfig } from "data/mock/usersMock";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -551,10 +553,108 @@ function RoadInvoiceSettings() {
   );
 }
 
+// ─── My Permissions Tab ───────────────────────────────────────────────────────
+function MyPermissionsSettings() {
+  const user = currentUser;
+  const perms = getUserPermissions(user);
+  const rc = roleConfig[user.role] || roleConfig.viewer;
+  const totalAll = Object.values(permissionsByModule).reduce((s, arr) => s + arr.length, 0);
+  const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
+  const colorIdx = user.id % avatarColors.length;
+
+  return (
+    <SoftBox>
+      {/* Current user banner */}
+      <SoftBox
+        display="flex" alignItems="center" gap={2} p={2} mb={3}
+        sx={{ background: `${rc.color}0e`, borderRadius: 2, border: `1px solid ${rc.color}30` }}
+      >
+        <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 48, height: 48, fontSize: 18, fontWeight: 800, borderRadius: 2 }}>
+          {user.name[0]}
+        </Avatar>
+        <SoftBox flex={1}>
+          <SoftBox display="flex" alignItems="center" gap={1}>
+            <SoftTypography variant="h6" fontWeight="bold">{user.name}</SoftTypography>
+            <Chip label={rc.label} size="small"
+              sx={{ height: 20, fontSize: 10, fontWeight: 700, background: rc.bg, color: rc.color }} />
+          </SoftBox>
+          <SoftTypography variant="caption" color="secondary">{user.email}</SoftTypography>
+        </SoftBox>
+        <SoftBox textAlign="center">
+          <SoftTypography variant="h4" fontWeight="bold" sx={{ color: rc.color }}>{perms.size}</SoftTypography>
+          <SoftTypography variant="caption" color="secondary">صلاحية من {totalAll}</SoftTypography>
+        </SoftBox>
+      </SoftBox>
+
+      {/* Bar */}
+      <SoftBox mb={0.5} display="flex" justifyContent="space-between">
+        <SoftTypography variant="caption" color="secondary">تغطية الصلاحيات</SoftTypography>
+        <SoftTypography variant="caption" fontWeight="bold">{Math.round((perms.size / totalAll) * 100)}%</SoftTypography>
+      </SoftBox>
+      <LinearProgress
+        variant="determinate"
+        value={(perms.size / totalAll) * 100}
+        sx={{ height: 6, borderRadius: 3, bgcolor: "#e9ecef", mb: 3, "& .MuiLinearProgress-bar": { background: rc.color } }}
+      />
+
+      {/* Permissions by module */}
+      <SectionHeader title="الصلاحيات الممنوحة لك" description="هذه الصلاحيات محددة من قِبل المسؤول بناءً على دورك في النظام" />
+      <Grid container spacing={2}>
+        {Object.entries(permissionsByModule).map(([moduleName, modulePerms]) => {
+          const granted = modulePerms.filter((p) => perms.has(p.code));
+          const denied  = modulePerms.filter((p) => !perms.has(p.code));
+          return (
+            <Grid item xs={12} sm={6} key={moduleName}>
+              <SoftBox sx={{ border: "1px solid #e9ecef", borderRadius: 2, overflow: "hidden" }}>
+                <SoftBox display="flex" justifyContent="space-between" alignItems="center"
+                  px={1.5} py={1} sx={{ background: granted.length > 0 ? "#f0faff" : "#f8f9fa" }}>
+                  <SoftTypography variant="caption" fontWeight="bold" color={granted.length > 0 ? "info" : "secondary"}>
+                    {moduleName}
+                  </SoftTypography>
+                  <SoftBox display="flex" gap={0.5}>
+                    {granted.length > 0 && (
+                      <Chip label={`✓ ${granted.length}`} size="small"
+                        sx={{ height: 18, fontSize: 9, fontWeight: 700, background: "#e3f8fd", color: "#17c1e8" }} />
+                    )}
+                    {denied.length > 0 && (
+                      <Chip label={`✗ ${denied.length}`} size="small"
+                        sx={{ height: 18, fontSize: 9, fontWeight: 700, background: "#f1f5f9", color: "#94a3b8" }} />
+                    )}
+                  </SoftBox>
+                </SoftBox>
+                <SoftBox px={1.5} py={0.8} display="flex" flexDirection="column" gap={0.4}>
+                  {modulePerms.map((p) => {
+                    const has = perms.has(p.code);
+                    return (
+                      <SoftBox key={p.code} display="flex" alignItems="center" gap={0.8}
+                        sx={{ opacity: has ? 1 : 0.4 }}>
+                        <CheckCircleIcon sx={{ fontSize: 13, color: has ? "#82d616" : "#cbd5e1", flexShrink: 0 }} />
+                        <SoftTypography variant="caption" color={has ? "text" : "secondary"}>{p.label}</SoftTypography>
+                      </SoftBox>
+                    );
+                  })}
+                </SoftBox>
+              </SoftBox>
+            </Grid>
+          );
+        })}
+      </Grid>
+
+      <SoftBox mt={3} p={2} sx={{ background: "#fffbeb", borderRadius: 2, border: "1px solid #fbbf2433" }}>
+        <SoftTypography variant="caption" color="secondary">
+          💡 لتغيير صلاحياتك، تواصل مع مسؤول النظام أو انتقل إلى{" "}
+          <strong>المستخدمون ← تعديل صلاحياتك</strong>
+        </SoftTypography>
+      </SoftBox>
+    </SoftBox>
+  );
+}
+
 function Settings() {
   const [tab, setTab] = useState(0);
 
   const tabs = [
+    { label: "صلاحياتي",            icon: <SecurityIcon fontSize="small" /> },
     { label: "عام",                 icon: <SettingsIcon fontSize="small" /> },
     { label: "الذكاء الاصطناعي",   icon: <AutoAwesomeIcon fontSize="small" /> },
     { label: "فواتير الطريق",       icon: <LocalShippingIcon fontSize="small" /> },
@@ -594,11 +694,12 @@ function Settings() {
           </SoftBox>
 
           <SoftBox p={3}>
-            {tab === 0 && <GeneralSettings />}
-            {tab === 1 && <AISettings />}
-            {tab === 2 && <RoadInvoiceSettings />}
-            {tab === 3 && <NotificationsSettings />}
-            {tab === 4 && <SystemInfo />}
+            {tab === 0 && <MyPermissionsSettings />}
+            {tab === 1 && <GeneralSettings />}
+            {tab === 2 && <AISettings />}
+            {tab === 3 && <RoadInvoiceSettings />}
+            {tab === 4 && <NotificationsSettings />}
+            {tab === 5 && <SystemInfo />}
           </SoftBox>
         </Card>
       </SoftBox>

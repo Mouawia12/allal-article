@@ -20,6 +20,7 @@ import App from "App";
 
 // Soft UI Dashboard React Context Provider
 import { SoftUIControllerProvider } from "context";
+import { DarkModeProvider } from "context/DarkModeContext";
 import { I18nProvider } from "i18n";
 
 const rawBasename = process.env.PUBLIC_URL || "";
@@ -29,9 +30,11 @@ const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <BrowserRouter basename={basename}>
     <SoftUIControllerProvider>
-      <I18nProvider>
-        <App />
-      </I18nProvider>
+      <DarkModeProvider>
+        <I18nProvider>
+          <App />
+        </I18nProvider>
+      </DarkModeProvider>
     </SoftUIControllerProvider>
   </BrowserRouter>
 );

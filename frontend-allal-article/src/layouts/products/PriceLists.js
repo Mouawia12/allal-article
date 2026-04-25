@@ -1,7 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState } from "react";
 
+import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
+import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -15,7 +17,9 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
+import GroupIcon from "@mui/icons-material/Group";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import SearchIcon from "@mui/icons-material/Search";
 
@@ -32,6 +36,19 @@ import {
   priceSourceLabels,
   resolveProductPrice,
 } from "data/mock/pricingInventoryMock";
+import {
+  mockSuppliers,
+} from "data/mock/suppliersMock";
+
+// ─── Mock entities for assignment ────────────────────────────────────────────
+const mockCustomersList = [
+  { id: 1, name: "شركة الرياض للمقاولات",   wilaya: "وهران" },
+  { id: 2, name: "مؤسسة البناء الحديث",     wilaya: "الجزائر" },
+  { id: 3, name: "شركة الإنشاءات المتحدة", wilaya: "سطيف" },
+  { id: 4, name: "مجموعة الخليج للتطوير",  wilaya: "قسنطينة" },
+  { id: 5, name: "شركة الأفق للتجارة",     wilaya: "وهران" },
+  { id: 6, name: "مؤسسة النجاح التجارية",  wilaya: "الجلفة" },
+];
 
 const priceProducts = [
   { id: 1, code: "BRG-010-50", name: "برغي M10 × 50mm", category: "مسامير وبراغي", unit: "قطعة", price: 12 },
@@ -50,16 +67,19 @@ const priceProducts = [
   { id: "TLS-DRL-001", code: "TLS-DRL-001", name: "مثقاب كهربائي", category: "مشتريات", unit: "قطعة", price: 14500 },
 ];
 
-const typeLabels = {
-  sales: "بيع",
-  purchase: "شراء",
-  both: "بيع وشراء",
-};
+const typeLabels = { sales: "بيع", purchase: "شراء", both: "بيع وشراء" };
+
+const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
+
+function getInitials(name) {
+  return name.split(" ").slice(0, 2).map((w) => w[0]).join("");
+}
 
 function clonePriceLists() {
   return initialPriceLists.map((list) => ({
     ...list,
     items: [...(list.items || [])],
+    assignedIds: [...(list.assignedIds || [])],
   }));
 }
 
@@ -67,16 +87,185 @@ function getListItem(list, product) {
   return (list.items || []).find((item) => String(item.productKey) === String(product.code || product.id));
 }
 
+// ─── Assign Entities Dialog ───────────────────────────────────────────────────
+function AssignEntitiesDialog({ open, onClose, priceList, onSave }) {
+  const isPurchase = priceList?.type === "purchase";
+  const entities = isPurchase ? mockSuppliers : mockCustomersList;
+
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(() => priceList?.assignedIds || []);
+
+  // Sync when priceList changes
+  const [lastListId, setLastListId] = useState(null);
+  if (open && priceList && priceList.id !== lastListId) {
+    setSelected(priceList.assignedIds || []);
+    setLastListId(priceList.id);
+  }
+
+  const filtered = entities.filter((e) => {
+    const q = search.trim();
+    if (!q) return true;
+    return (
+      e.name.includes(q) ||
+      (e.wilaya || "").includes(q) ||
+      (e.category || "").includes(q)
+    );
+  });
+
+  const toggle = (id) =>
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+
+  const toggleAll = () => {
+    const allFilteredIds = filtered.map((e) => e.id);
+    const allSelected = allFilteredIds.every((id) => selected.includes(id));
+    if (allSelected) {
+      setSelected((prev) => prev.filter((id) => !allFilteredIds.includes(id)));
+    } else {
+      setSelected((prev) => [...new Set([...prev, ...allFilteredIds])]);
+    }
+  };
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((e) => selected.includes(e.id));
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ pb: 1 }}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+          <SoftBox>
+            <SoftTypography variant="h6" fontWeight="bold">
+              {isPurchase ? "تحديد الموردين المرتبطين" : "تحديد الزبائن المرتبطين"}
+            </SoftTypography>
+            <SoftTypography variant="caption" color="secondary">
+              قائمة: {priceList?.name}
+            </SoftTypography>
+          </SoftBox>
+          <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
+        </SoftBox>
+      </DialogTitle>
+
+      <DialogContent dividers sx={{ p: 2 }}>
+        <SoftBox
+          p={1.5} mb={2}
+          sx={{ background: "#f0faff", borderRadius: 1.5, border: "1px solid #17c1e822" }}
+        >
+          <SoftTypography variant="caption" color="secondary">
+            {isPurchase ? "الموردون" : "الزبائن"} المحددون سيخضعون تلقائياً لأسعار هذه القائمة عند اختيارهم في الطلبيات.
+            من لم يُحدَّد يبقى على الأسعار الأساسية.
+          </SoftTypography>
+        </SoftBox>
+
+        <TextField
+          fullWidth size="small"
+          placeholder={isPurchase ? "بحث في الموردين..." : "بحث في الزبائن..."}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+          sx={{ mb: 1.5 }}
+        />
+
+        {/* Select all row */}
+        <SoftBox
+          display="flex" alignItems="center" gap={1} px={1} py={0.8} mb={1}
+          sx={{ borderBottom: "1px solid #e9ecef", cursor: "pointer" }}
+          onClick={toggleAll}
+        >
+          <Checkbox
+            checked={allFilteredSelected}
+            indeterminate={!allFilteredSelected && filtered.some((e) => selected.includes(e.id))}
+            size="small"
+            sx={{ p: 0, color: "#17c1e8", "&.Mui-checked": { color: "#17c1e8" }, "&.MuiCheckbox-indeterminate": { color: "#17c1e8" } }}
+          />
+          <SoftTypography variant="caption" fontWeight="bold" color="secondary">
+            {allFilteredSelected ? "إلغاء تحديد الكل" : "تحديد الكل"}
+            {search && ` (${filtered.length} نتيجة)`}
+          </SoftTypography>
+        </SoftBox>
+
+        <SoftBox display="flex" flexDirection="column" gap={0.8} sx={{ maxHeight: 360, overflowY: "auto" }}>
+          {filtered.map((entity) => {
+            const isSelected = selected.includes(entity.id);
+            const colorIdx = (typeof entity.id === "number" ? entity.id : entity.id.toString().charCodeAt(0)) % avatarColors.length;
+            return (
+              <SoftBox
+                key={entity.id}
+                onClick={() => toggle(entity.id)}
+                display="flex" alignItems="center" gap={1.5}
+                px={1.5} py={1}
+                sx={{
+                  border: isSelected ? "2px solid #17c1e8" : "1px solid #e9ecef",
+                  borderRadius: 1.5,
+                  cursor: "pointer",
+                  background: isSelected ? "#f0faff" : "#fff",
+                  transition: "all 0.15s",
+                  "&:hover": { borderColor: "#17c1e8", background: "#f0faff" },
+                }}
+              >
+                <Checkbox
+                  checked={isSelected}
+                  size="small"
+                  sx={{ p: 0, color: "#17c1e8", "&.Mui-checked": { color: "#17c1e8" } }}
+                />
+                <Avatar sx={{ bgcolor: avatarColors[colorIdx], width: 32, height: 32, fontSize: 12, fontWeight: "bold", flexShrink: 0 }}>
+                  {getInitials(entity.name)}
+                </Avatar>
+                <SoftBox minWidth={0}>
+                  <SoftTypography variant="caption" fontWeight="bold" noWrap display="block">
+                    {entity.name}
+                  </SoftTypography>
+                  <SoftTypography variant="caption" color="secondary" noWrap display="block">
+                    {entity.wilaya || entity.category || "—"}
+                  </SoftTypography>
+                </SoftBox>
+                {isSelected && (
+                  <Chip
+                    size="small"
+                    label="مربوط"
+                    sx={{ ml: "auto", height: 20, fontSize: 10, background: "#17c1e822", color: "#17c1e8", flexShrink: 0 }}
+                  />
+                )}
+              </SoftBox>
+            );
+          })}
+          {filtered.length === 0 && (
+            <SoftTypography variant="body2" color="secondary" textAlign="center" py={3}>
+              لا توجد نتائج
+            </SoftTypography>
+          )}
+        </SoftBox>
+      </DialogContent>
+
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <SoftTypography variant="caption" color="secondary" flex={1}>
+          {selected.length} {isPurchase ? "مورد" : "زبون"} محدد
+        </SoftTypography>
+        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
+        <SoftButton
+          variant="gradient" color="info" size="small"
+          onClick={() => { onSave(selected); onClose(); }}
+        >
+          حفظ التحديد
+        </SoftButton>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 function PriceLists() {
   const [lists, setLists] = useState(clonePriceLists);
   const [selectedId, setSelectedId] = useState("AHMED");
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [assignDialog, setAssignDialog] = useState(false);
   const [listForm, setListForm] = useState({ name: "", type: "sales", code: "" });
 
   const selectedList = lists.find((list) => list.id === selectedId) || lists[0];
   const customCount = selectedList.items.filter((item) => Number(item.unitPrice || 0) > 0).length;
   const fallbackCount = priceProducts.length - customCount;
+  const assignedCount = (selectedList.assignedIds || []).length;
+  const isPurchase = selectedList.type === "purchase";
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -95,7 +284,6 @@ function PriceLists() {
     setLists((current) =>
       current.map((list) => {
         if (list.id !== selectedList.id) return list;
-
         const productKey = product.code || product.id;
         const exists = list.items.some((item) => String(item.productKey) === String(productKey));
         const nextItems = exists
@@ -103,9 +291,16 @@ function PriceLists() {
               String(item.productKey) === String(productKey) ? { ...item, unitPrice: numeric } : item
             )
           : [...list.items, { productKey, unitPrice: numeric }];
-
         return { ...list, items: nextItems, updatedAt: "2026-04-22" };
       })
+    );
+  };
+
+  const saveAssignedIds = (ids) => {
+    setLists((current) =>
+      current.map((list) =>
+        list.id === selectedId ? { ...list, assignedIds: ids } : list
+      )
     );
   };
 
@@ -129,11 +324,20 @@ function PriceLists() {
       isActive: true,
       updatedAt: "2026-04-22",
       items: [],
+      assignedIds: [],
     };
     setLists((current) => [nextList, ...current]);
     setSelectedId(id);
     setDialogOpen(false);
   };
+
+  // Resolve assigned entity names for display
+  const assignedEntities = useMemo(() => {
+    const ids = selectedList.assignedIds || [];
+    if (ids.length === 0) return [];
+    const pool = isPurchase ? mockSuppliers : mockCustomersList;
+    return ids.map((id) => pool.find((e) => e.id === id)).filter(Boolean);
+  }, [selectedList, isPurchase]);
 
   return (
     <DashboardLayout>
@@ -175,13 +379,18 @@ function PriceLists() {
           </Grid>
           <Grid item xs={6} md={3}>
             <Card sx={{ p: 2, textAlign: "center" }}>
-              <SoftTypography variant="h3" color="secondary" fontWeight="bold">{typeLabels[selectedList.type]}</SoftTypography>
-              <SoftTypography variant="caption" color="text">نوع القائمة الحالية</SoftTypography>
+              <SoftTypography variant="h3" color={assignedCount > 0 ? "info" : "secondary"} fontWeight="bold">
+                {assignedCount}
+              </SoftTypography>
+              <SoftTypography variant="caption" color="text">
+                {isPurchase ? "مورد" : "زبون"} مربوط بالقائمة
+              </SoftTypography>
             </Card>
           </Grid>
         </Grid>
 
         <Grid container spacing={3}>
+          {/* ── Left: List selector ── */}
           <Grid item xs={12} lg={4}>
             <Card sx={{ p: 2.5 }}>
               <SoftBox display="flex" alignItems="center" gap={1} mb={2}>
@@ -189,47 +398,62 @@ function PriceLists() {
                 <SoftTypography variant="h6" fontWeight="bold">القوائم</SoftTypography>
               </SoftBox>
               <SoftBox display="flex" flexDirection="column" gap={1.5}>
-                {lists.map((list) => (
-                  <SoftBox
-                    key={list.id}
-                    onClick={() => setSelectedId(list.id)}
-                    p={1.5}
-                    sx={{
-                      border: selectedId === list.id ? "2px solid #17c1e8" : "1px solid #e9ecef",
-                      borderRadius: 2,
-                      cursor: "pointer",
-                      background: selectedId === list.id ? "#f0faff" : "#fff",
-                    }}
-                  >
-                    <SoftBox display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                      <SoftBox>
-                        <SoftTypography variant="button" fontWeight="bold">{list.name}</SoftTypography>
-                        <SoftTypography variant="caption" color="secondary" display="block">
-                          {list.code} · {typeLabels[list.type]}
-                        </SoftTypography>
+                {lists.map((list) => {
+                  const count = (list.assignedIds || []).length;
+                  return (
+                    <SoftBox
+                      key={list.id}
+                      onClick={() => setSelectedId(list.id)}
+                      p={1.5}
+                      sx={{
+                        border: selectedId === list.id ? "2px solid #17c1e8" : "1px solid #e9ecef",
+                        borderRadius: 2,
+                        cursor: "pointer",
+                        background: selectedId === list.id ? "#f0faff" : "#fff",
+                      }}
+                    >
+                      <SoftBox display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                        <SoftBox minWidth={0}>
+                          <SoftTypography variant="button" fontWeight="bold">{list.name}</SoftTypography>
+                          <SoftTypography variant="caption" color="secondary" display="block">
+                            {list.code} · {typeLabels[list.type]}
+                          </SoftTypography>
+                        </SoftBox>
+                        <SoftBox display="flex" flexDirection="column" alignItems="flex-end" gap={0.5} flexShrink={0}>
+                          <SoftBadge
+                            variant="gradient"
+                            color={list.isDefault ? "success" : "info"}
+                            size="xs"
+                            badgeContent={list.isDefault ? "افتراضية" : "نشطة"}
+                            container
+                          />
+                          {count > 0 && (
+                            <Chip
+                              size="small"
+                              icon={<GroupIcon sx={{ fontSize: "12px !important" }} />}
+                              label={count}
+                              sx={{ height: 20, fontSize: 10, background: "#17c1e811", color: "#17c1e8" }}
+                            />
+                          )}
+                        </SoftBox>
                       </SoftBox>
-                      <SoftBadge
-                        variant="gradient"
-                        color={list.isDefault ? "success" : "info"}
-                        size="xs"
-                        badgeContent={list.isDefault ? "افتراضية" : "نشطة"}
-                        container
-                      />
+                      <SoftTypography variant="caption" color="text" display="block" mt={1}>
+                        {list.description}
+                      </SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block" mt={0.5}>
+                        آخر تعديل: {list.updatedAt}
+                      </SoftTypography>
                     </SoftBox>
-                    <SoftTypography variant="caption" color="text" display="block" mt={1}>
-                      {list.description}
-                    </SoftTypography>
-                    <SoftTypography variant="caption" color="secondary" display="block" mt={0.5}>
-                      آخر تعديل: {list.updatedAt}
-                    </SoftTypography>
-                  </SoftBox>
-                ))}
+                  );
+                })}
               </SoftBox>
             </Card>
           </Grid>
 
+          {/* ── Right: Price table + assignment ── */}
           <Grid item xs={12} lg={8}>
             <Card sx={{ p: 2.5 }}>
+              {/* Header */}
               <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={2} flexWrap="wrap" mb={2}>
                 <SoftBox>
                   <SoftTypography variant="h6" fontWeight="bold">{selectedList.name}</SoftTypography>
@@ -237,16 +461,68 @@ function PriceLists() {
                     اترك السعر فارغاً أو 0 ليستخدم النظام السعر الرئيسي للصنف
                   </SoftTypography>
                 </SoftBox>
-                <TextField
-                  size="small"
-                  value={search}
-                  placeholder="بحث بالصنف أو الكود..."
-                  onChange={(event) => setSearch(event.target.value)}
-                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-                  sx={{ width: { xs: "100%", md: 300 } }}
-                />
+                <SoftBox display="flex" gap={1} flexWrap="wrap" alignItems="center">
+                  <Tooltip title={isPurchase ? "تحديد الموردين الذين تنطبق عليهم هذه القائمة" : "تحديد الزبائن الذين تنطبق عليهم هذه القائمة"}>
+                    <SoftButton
+                      variant={assignedCount > 0 ? "gradient" : "outlined"}
+                      color="info"
+                      size="small"
+                      startIcon={<GroupIcon />}
+                      onClick={() => setAssignDialog(true)}
+                    >
+                      {isPurchase ? "الموردون" : "الزبائن"}
+                      {assignedCount > 0 && (
+                        <Chip
+                          size="small"
+                          label={assignedCount}
+                          sx={{ mr: 0.5, height: 18, fontSize: 10, background: "rgba(255,255,255,0.3)", color: "inherit" }}
+                        />
+                      )}
+                    </SoftButton>
+                  </Tooltip>
+                  <TextField
+                    size="small"
+                    value={search}
+                    placeholder="بحث بالصنف أو الكود..."
+                    onChange={(event) => setSearch(event.target.value)}
+                    InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+                    sx={{ width: { xs: "100%", sm: 240 } }}
+                  />
+                </SoftBox>
               </SoftBox>
 
+              {/* Assigned entities chips */}
+              {assignedEntities.length > 0 && (
+                <SoftBox mb={2} display="flex" gap={0.8} flexWrap="wrap" alignItems="center">
+                  <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+                    {isPurchase ? "موردون مرتبطون:" : "زبائن مرتبطون:"}
+                  </SoftTypography>
+                  {assignedEntities.slice(0, 6).map((e) => (
+                    <Chip
+                      key={e.id}
+                      size="small"
+                      label={e.name}
+                      sx={{ height: 22, fontSize: 11, background: "#17c1e811", color: "#0d7fa8" }}
+                    />
+                  ))}
+                  {assignedEntities.length > 6 && (
+                    <Chip
+                      size="small"
+                      label={`+${assignedEntities.length - 6} أخرى`}
+                      sx={{ height: 22, fontSize: 11, background: "#e9ecef", color: "#8392ab" }}
+                    />
+                  )}
+                  <SoftButton
+                    variant="text" color="info" size="small"
+                    sx={{ fontSize: 11, py: 0, minHeight: "unset", textDecoration: "underline" }}
+                    onClick={() => setAssignDialog(true)}
+                  >
+                    تعديل
+                  </SoftButton>
+                </SoftBox>
+              )}
+
+              {/* Products table */}
               <SoftBox sx={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -316,15 +592,14 @@ function PriceLists() {
         </Grid>
       </SoftBox>
 
+      {/* New price list dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>قائمة أسعار جديدة</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={8}>
               <TextField
-                fullWidth
-                size="small"
-                label="اسم القائمة"
+                fullWidth size="small" label="اسم القائمة"
                 value={listForm.name}
                 onChange={(event) => setListForm((form) => ({ ...form, name: event.target.value }))}
                 placeholder="مثال: أسعار أحمد"
@@ -332,9 +607,7 @@ function PriceLists() {
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField
-                fullWidth
-                size="small"
-                label="الكود"
+                fullWidth size="small" label="الكود"
                 value={listForm.code}
                 onChange={(event) => setListForm((form) => ({ ...form, code: event.target.value }))}
                 placeholder="اختياري"
@@ -342,10 +615,7 @@ function PriceLists() {
             </Grid>
             <Grid item xs={12}>
               <TextField
-                fullWidth
-                select
-                size="small"
-                label="نوع القائمة"
+                fullWidth select size="small" label="نوع القائمة"
                 value={listForm.type}
                 onChange={(event) => setListForm((form) => ({ ...form, type: event.target.value }))}
               >
@@ -357,14 +627,22 @@ function PriceLists() {
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <SoftButton key="cancel" variant="outlined" color="secondary" size="small" onClick={() => setDialogOpen(false)}>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setDialogOpen(false)}>
             إلغاء
           </SoftButton>
-          <SoftButton key="create" variant="gradient" color="info" size="small" disabled={!listForm.name.trim()} onClick={saveNewList}>
+          <SoftButton variant="gradient" color="info" size="small" disabled={!listForm.name.trim()} onClick={saveNewList}>
             إنشاء القائمة
           </SoftButton>
         </DialogActions>
       </Dialog>
+
+      {/* Assign entities dialog */}
+      <AssignEntitiesDialog
+        open={assignDialog}
+        onClose={() => setAssignDialog(false)}
+        priceList={selectedList}
+        onSave={saveAssignedIds}
+      />
 
       <Footer />
     </DashboardLayout>

@@ -34,11 +34,9 @@ import TranslateIcon from "@mui/icons-material/Translate";
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-import SoftButton from "components/SoftButton";
 
 // Soft UI Dashboard React examples
 import SidenavCollapse from "examples/Sidenav/SidenavCollapse";
-import SidenavCard from "examples/Sidenav/SidenavCard";
 
 // Custom styles for the Sidenav
 import SidenavRoot from "examples/Sidenav/SidenavRoot";
@@ -81,6 +79,10 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, route, href }) => {
     let returnValue;
 
+    // A route is active if its key matches the first path segment (handles /orders/123 → orders)
+    // OR if the pathname exactly matches the route (handles /accounting/accounts-tree)
+    const isActive = key === collapseName || (route ? pathname === route : false);
+
     if (type === "collapse") {
       returnValue = href ? (
         <Link
@@ -94,7 +96,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             color={color}
             name={name}
             icon={icon}
-            active={key === collapseName}
+            active={isActive}
             noCollapse={noCollapse}
           />
         </Link>
@@ -105,7 +107,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             key={key}
             name={name}
             icon={icon}
-            active={key === collapseName}
+            active={isActive}
             noCollapse={noCollapse}
           />
         </NavLink>
@@ -150,14 +152,38 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             <Icon sx={{ fontWeight: "bold" }}>close</Icon>
           </SoftTypography>
         </SoftBox>
-        <SoftBox component={NavLink} to="/" display="flex" alignItems="center">
+        <SoftBox component={NavLink} to="/" display="flex" alignItems="center" justifyContent="center" sx={{ textDecoration: "none" }}>
           {brand && <SoftBox component="img" src={brand} alt="Soft UI Logo" width="2rem" />}
           <SoftBox
-            width={!brandName && "100%"}
-            sx={(theme) => sidenavLogoLabel(theme, { miniSidenav })}
+            width="100%"
+            sx={(theme) => ({
+              ...sidenavLogoLabel(theme, { miniSidenav }),
+              ml: 0,
+              textAlign: "center",
+              wordSpacing: 0,
+            })}
           >
-            <SoftTypography component="h6" variant="button" fontWeight="medium">
-              {brandName}
+            <SoftTypography
+              component="h6"
+              variant="button"
+              fontWeight="bold"
+              sx={{
+                display: "inline-flex",
+                alignItems: "baseline",
+                gap: 0.5,
+                m: 0,
+                fontSize: "1.08rem",
+                lineHeight: 1,
+                letterSpacing: 0,
+                textTransform: "lowercase",
+              }}
+            >
+              <SoftBox component="span" sx={{ color: "#344767", fontWeight: 800 }}>
+                group
+              </SoftBox>
+              <SoftBox component="span" sx={{ color: "#17c1e8", fontWeight: 900 }}>
+                allal
+              </SoftBox>
             </SoftTypography>
           </SoftBox>
         </SoftBox>
@@ -204,20 +230,6 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             </Menu>
           </SoftBox>
         )}
-        <SidenavCard />
-        <SoftBox mt={2}>
-          <SoftButton
-            component="a"
-            href="https://creative-tim.com/product/soft-ui-dashboard-pro-react"
-            target="_blank"
-            rel="noreferrer"
-            variant="gradient"
-            color={color}
-            fullWidth
-          >
-            upgrade to pro
-          </SoftButton>
-        </SoftBox>
       </SoftBox>
     </SidenavRoot>
   );

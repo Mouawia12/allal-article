@@ -46,6 +46,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 
+
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const mockCustomers = [
   {

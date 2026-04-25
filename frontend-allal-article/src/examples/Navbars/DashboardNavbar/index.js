@@ -31,6 +31,8 @@ import Badge from "@mui/material/Badge";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import Icon from "components/AppIcon";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
@@ -57,6 +59,7 @@ import {
   setMiniSidenav,
   setOpenConfigurator,
 } from "context";
+import { useDarkMode } from "context/DarkModeContext";
 import { useI18n } from "i18n";
 import {
   categoryConfig,
@@ -71,6 +74,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
   const { locale, languages, setLocale, t } = useI18n();
+  const { darkMode, toggleDarkMode } = useDarkMode();
   const { pathname } = useLocation();
   const route = pathname.split("/").slice(1);
   const favoritesActive = pathname === "/products/favorites";
@@ -267,6 +271,29 @@ function DashboardNavbar({ absolute, light, isMini }) {
                   >
                     favorite
                   </Icon>
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={darkMode ? "الوضع المضيء" : "الوضع الليلي"}>
+                <IconButton
+                  size="small"
+                  color="inherit"
+                  sx={navbarIconButton}
+                  onClick={toggleDarkMode}
+                  aria-label={darkMode ? "الوضع المضيء" : "الوضع الليلي"}
+                >
+                  {darkMode ? (
+                    <LightModeIcon
+                      sx={{ fontSize: "1.25rem !important", color: "#fbcf33", transition: "color 0.2s" }}
+                    />
+                  ) : (
+                    <DarkModeIcon
+                      sx={({ palette: { dark: d, white: w } }) => ({
+                        fontSize: "1.25rem !important",
+                        color: light ? w.main : d.main,
+                        transition: "color 0.2s",
+                      })}
+                    />
+                  )}
                 </IconButton>
               </Tooltip>
               <IconButton

@@ -38,14 +38,14 @@ const salesLineData = {
 
 const reportsBarData = {
   chart: {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-    datasets: { label: "Sales", data: [450, 200, 100, 220, 500, 100] },
+    labels: ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"],
+    datasets: { label: "المبيعات", data: [450, 200, 100, 220, 500, 100] },
   },
   items: [
-    { icon: { color: "info", component: "library_books" }, label: "Users", progress: { content: "37K", percentage: 60 } },
-    { icon: { color: "error", component: "touch_app" }, label: "Clicks", progress: { content: "2M", percentage: 80 } },
-    { icon: { color: "primary", component: "payment" }, label: "Sales", progress: { content: "$435,000", percentage: 30 } },
-    { icon: { color: "warning", component: "extension" }, label: "Items", progress: { content: "43,123", percentage: 50 } },
+    { icon: { color: "info", component: "library_books" }, label: "الطلبيات", progress: { content: "256", percentage: 60 } },
+    { icon: { color: "success", component: "check_circle" }, label: "المؤكدة", progress: { content: "198", percentage: 77 } },
+    { icon: { color: "primary", component: "payment" }, label: "المبيعات", progress: { content: "1.17M دج", percentage: 30 } },
+    { icon: { color: "warning", component: "inventory_2" }, label: "الأصناف", progress: { content: "16", percentage: 50 } },
   ],
 };
 

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
+import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -13,6 +14,8 @@ import FormControl from "@mui/material/FormControl";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import InputLabel from "@mui/material/InputLabel";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Table from "@mui/material/Table";
@@ -25,9 +28,11 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import SaveIcon from "@mui/icons-material/Save";
+import TuneIcon from "@mui/icons-material/Tune";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import SoftBox from "components/SoftBox";
@@ -278,6 +283,9 @@ export default function AdminNewOrder() {
   const [notes, setNotes] = useState("");
   const salesPriceLists = getPriceListsFor("sales");
   const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
+  const [settingsAnchor, setSettingsAnchor] = useState(null);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const selectedPriceList = salesPriceLists.find((l) => l.id === selectedPriceListId) || salesPriceLists[0];
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
   const qtyRefs = useRef({});
@@ -440,6 +448,8 @@ export default function AdminNewOrder() {
                   onChange={(_, v) => {
                     setCustomer(v);
                     setCustomerInfoOpen(false);
+                    // auto-apply customer's linked price list, fallback to MAIN
+                    setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
                   }}
                   getOptionLabel={(o) => o.name}
                   filterOptions={(opts, { inputValue }) => {
@@ -448,13 +458,22 @@ export default function AdminNewOrder() {
                   }}
                   renderOption={(props, option) => {
                     const debt = getCustomerDebt(option);
-
                     return (
                       <li {...props} key={option.id}>
                         <SoftBox>
-                          <SoftTypography variant="button" fontWeight="medium" display="block" lineHeight={1.3}>
-                            {option.name}
-                          </SoftTypography>
+                          <SoftBox display="flex" alignItems="center" gap={1}>
+                            <SoftTypography variant="button" fontWeight="medium" lineHeight={1.3}>
+                              {option.name}
+                            </SoftTypography>
+                            {option.defaultPriceListId && (
+                              <Chip
+                                label={salesPriceLists.find((l) => l.id === option.defaultPriceListId)?.name || option.defaultPriceListId}
+                                size="small"
+                                color="info"
+                                sx={{ height: 16, fontSize: 9, "& .MuiChip-label": { px: 0.5 } }}
+                              />
+                            )}
+                          </SoftBox>
                           <SoftTypography variant="caption" color="secondary">
                             {option.wilaya} · {option.phone}
                             {debt > 0 && (
@@ -497,46 +516,160 @@ export default function AdminNewOrder() {
                     {customer ? <VisibilityIcon fontSize="small" /> : <PersonAddIcon fontSize="small" />}
                   </IconButton>
                 </Tooltip>
+                <Tooltip title="الإعدادات المتقدمة">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => setSettingsAnchor(e.currentTarget)}
+                    sx={{
+                      width: 40,
+                      border: "1px solid #e9ecef",
+                      borderRadius: 1,
+                      color: selectedPriceListId !== "MAIN" ? "#17c1e8" : "#344767",
+                    }}
+                  >
+                    <TuneIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
               </SoftBox>
-              {customer && (
-                <SoftBox mt={1} display="flex" gap={1} flexWrap="wrap">
-                  <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
-                    {customer.wilaya}
-                  </SoftTypography>
-                  <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
-                    {customer.phone}
-                  </SoftTypography>
-                  {customerDebt > 0 && (
-                    <SoftTypography
-                      variant="caption"
-                      sx={{ background: "#fff0f0", color: "#ea0606", px: 1, py: 0.3, borderRadius: 1, fontWeight: 600 }}
-                    >
-                      رصيد: {customerDebt.toLocaleString()} دج
+
+              {/* Customer tags + active price list */}
+              <SoftBox mt={1} display="flex" gap={1} flexWrap="wrap" alignItems="center">
+                {customer && (
+                  <>
+                    <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
+                      {customer.wilaya}
                     </SoftTypography>
+                    <SoftTypography variant="caption" sx={{ background: "#f0f4ff", px: 1, py: 0.3, borderRadius: 1 }}>
+                      {customer.phone}
+                    </SoftTypography>
+                    {customerDebt > 0 && (
+                      <SoftTypography
+                        variant="caption"
+                        sx={{ background: "#fff0f0", color: "#ea0606", px: 1, py: 0.3, borderRadius: 1, fontWeight: 600 }}
+                      >
+                        رصيد: {customerDebt.toLocaleString()} دج
+                      </SoftTypography>
+                    )}
+                  </>
+                )}
+                <SoftBox display="flex" alignItems="center" gap={0.5} ml={customer ? "auto" : 0}>
+                  <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10 }}>
+                    الأسعار:
+                  </SoftTypography>
+                  <Chip
+                    label={selectedPriceList?.name || "السعر الرئيسي"}
+                    size="small"
+                    color={selectedPriceListId !== "MAIN" ? "info" : "default"}
+                    variant={selectedPriceListId !== "MAIN" ? "filled" : "outlined"}
+                    sx={{ height: 18, fontSize: 9, "& .MuiChip-label": { px: 0.75 } }}
+                  />
+                  {customer?.defaultPriceListId && customer.defaultPriceListId === selectedPriceListId && (
+                    <SoftTypography variant="caption" color="success" sx={{ fontSize: 9 }}>تلقائي</SoftTypography>
                   )}
                 </SoftBox>
-              )}
-            </SoftBox>
+              </SoftBox>
 
-            <SoftBox minWidth={220}>
-              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
-                قائمة الأسعار
-              </SoftTypography>
-              <FormControl size="small" fullWidth>
-                <InputLabel>قائمة الأسعار</InputLabel>
-                <Select
-                  value={selectedPriceListId}
-                  label="قائمة الأسعار"
-                  onChange={(event) => setSelectedPriceListId(event.target.value)}
+              {/* Settings Menu */}
+              <Menu
+                anchorEl={settingsAnchor}
+                open={Boolean(settingsAnchor)}
+                onClose={() => setSettingsAnchor(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+                PaperProps={{ sx: { minWidth: 200, mt: 0.5 } }}
+              >
+                <MenuItem
+                  onClick={() => { setSettingsAnchor(null); setAdvancedSettingsOpen(true); }}
+                  sx={{ gap: 1 }}
                 >
-                  {salesPriceLists.map((list) => (
-                    <MenuItem key={list.id} value={list.id}>{list.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <SoftTypography variant="caption" color="secondary" display="block" mt={0.7}>
-                الأصناف غير المسعرة أو سعرها 0 تأخذ السعر الرئيسي.
-              </SoftTypography>
+                  <ListItemIcon sx={{ minWidth: "auto" }}>
+                    <TuneIcon fontSize="small" sx={{ color: "#17c1e8" }} />
+                  </ListItemIcon>
+                  <SoftTypography variant="caption" fontWeight="medium">الإعدادات المتقدمة</SoftTypography>
+                </MenuItem>
+              </Menu>
+
+              {/* Advanced Settings Dialog */}
+              <Dialog
+                open={advancedSettingsOpen}
+                onClose={() => setAdvancedSettingsOpen(false)}
+                maxWidth="xs"
+                fullWidth
+              >
+                <DialogTitle>
+                  <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                    <SoftBox display="flex" alignItems="center" gap={1}>
+                      <TuneIcon sx={{ color: "#17c1e8", fontSize: 20 }} />
+                      <SoftTypography variant="h6" fontWeight="bold">الإعدادات المتقدمة</SoftTypography>
+                    </SoftBox>
+                    <IconButton size="small" onClick={() => setAdvancedSettingsOpen(false)}>
+                      <CloseIcon />
+                    </IconButton>
+                  </SoftBox>
+                </DialogTitle>
+                <DialogContent dividers>
+                  <SoftTypography variant="caption" fontWeight="bold" color="secondary" display="block" mb={1}>
+                    قائمة الأسعار
+                  </SoftTypography>
+                  <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
+                    <InputLabel>قائمة الأسعار</InputLabel>
+                    <Select
+                      value={selectedPriceListId}
+                      label="قائمة الأسعار"
+                      onChange={(e) => setSelectedPriceListId(e.target.value)}
+                    >
+                      {salesPriceLists.map((list) => (
+                        <MenuItem key={list.id} value={list.id}>
+                          <SoftTypography variant="caption" fontWeight="medium">{list.name}</SoftTypography>
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {selectedPriceList?.description && (
+                    <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
+                      {selectedPriceList.description}
+                    </SoftTypography>
+                  )}
+                  <SoftTypography variant="caption" color="secondary" display="block" mb={2} sx={{ fontStyle: "italic" }}>
+                    الأصناف غير المسعرة في القائمة تأخذ السعر الرئيسي تلقائياً.
+                  </SoftTypography>
+
+                  {/* Customer link info */}
+                  {customer && (
+                    <SoftBox
+                      p={1.5}
+                      sx={{
+                        background: customer.defaultPriceListId ? "#f0fff4" : "#f8f9fa",
+                        borderRadius: 1.5,
+                        border: `1px solid ${customer.defaultPriceListId ? "#66BB6A33" : "#e9ecef"}`,
+                      }}
+                    >
+                      <SoftTypography variant="caption" fontWeight="bold" display="block" mb={0.5}>
+                        {customer.name}
+                      </SoftTypography>
+                      {customer.defaultPriceListId ? (
+                        <SoftTypography variant="caption" color="success">
+                          مربوط تلقائياً بـ «{salesPriceLists.find((l) => l.id === customer.defaultPriceListId)?.name}»
+                        </SoftTypography>
+                      ) : (
+                        <SoftTypography variant="caption" color="secondary">
+                          لا توجد قائمة أسعار مرتبطة — يخضع للأسعار الرئيسية
+                        </SoftTypography>
+                      )}
+                    </SoftBox>
+                  )}
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                  <SoftButton
+                    variant="gradient"
+                    color="info"
+                    size="small"
+                    onClick={() => setAdvancedSettingsOpen(false)}
+                  >
+                    تأكيد
+                  </SoftButton>
+                </DialogActions>
+              </Dialog>
             </SoftBox>
 
             {/* Notes */}

@@ -13,6 +13,8 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import IconButton from "@mui/material/IconButton";
 import Autocomplete from "@mui/material/Autocomplete";
+import Menu from "@mui/material/Menu";
+import ListItemIcon from "@mui/material/ListItemIcon";
 import Divider from "@mui/material/Divider";
 import Badge from "@mui/material/Badge";
 import Tooltip from "@mui/material/Tooltip";
@@ -52,6 +54,7 @@ import GridViewIcon from "@mui/icons-material/GridView";
 import ListIcon from "@mui/icons-material/List";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
+import TuneIcon from "@mui/icons-material/Tune";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -116,6 +119,7 @@ export const mockCustomers = [
     openingBalance: 500000,
     status: "active",
     shippingRoute: "وهران - الساحل",
+    defaultPriceListId: "WHOLESALE",
     orders: [
       { id: "ORD-001", date: "2024-01-22", amount: 2500000, paid: 2500000, status: "paid" },
       { id: "ORD-002", date: "2024-01-15", amount: 4800000, paid: 2400000, status: "partial" },
@@ -143,6 +147,7 @@ export const mockCustomers = [
     openingBalance: 0,
     status: "active",
     shippingRoute: "الجزائر - وسط",
+    defaultPriceListId: "SEMI_WHOLESALE",
     orders: [
       { id: "ORD-010", date: "2024-01-16", amount: 3500000, paid: 3500000, status: "paid" },
       { id: "ORD-011", date: "2024-01-05", amount: 5250000, paid: 5250000, status: "paid" },
@@ -165,6 +170,7 @@ export const mockCustomers = [
     openingBalance: 1000000,
     status: "active",
     shippingRoute: "سطيف - الشرق",
+    defaultPriceListId: "AHMED",
     orders: [
       { id: "ORD-020", date: "2024-01-17", amount: 10000000, paid: 0, status: "unpaid" },
       { id: "ORD-021", date: "2024-01-10", amount: 10000000, paid: 5000000, status: "partial" },
@@ -1149,6 +1155,8 @@ function NewOrder() {
   const [customers, setCustomers] = useState(mockCustomers);
   const [successDialog, setSuccessDialog] = useState(false);
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
+  const [settingsAnchor, setSettingsAnchor] = useState(null);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   const normalizeQty = (value) => {
@@ -1654,144 +1662,298 @@ function NewOrder() {
 
           {/* ──────────────────────────────── RIGHT: Cart Panel ── */}
           <Grid item xs={12} lg={4}>
-            <Card sx={{ p: 3, position: "sticky", top: 20 }}>
-              <SoftBox display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+            <Card sx={{ position: "sticky", top: 20, overflow: "hidden" }}>
+
+              {/* ── Header ── */}
+              <SoftBox
+                display="flex" alignItems="center" justifyContent="space-between"
+                px={2.5} py={1.75}
+                sx={{ borderBottom: "1px solid #f0f2f5" }}
+              >
                 <SoftBox display="flex" alignItems="center" gap={1}>
-                  <ShoppingCartIcon sx={{ color: "#17c1e8" }} />
-                  <SoftTypography variant="h6" fontWeight="bold">
+                  <ShoppingCartIcon sx={{ color: "#17c1e8", fontSize: 20 }} />
+                  <SoftTypography variant="h6" fontWeight="bold" sx={{ fontSize: "1rem" }}>
                     السلة
                   </SoftTypography>
-                </SoftBox>
-                <SoftBadge
-                  variant="gradient"
-                  color="info"
-                  size="sm"
-                  badgeContent={`${cartCount} صنف`}
-                  container
-                />
-              </SoftBox>
-
-              {/* Customer */}
-              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
-                الزبون *
-              </SoftTypography>
-              <SoftBox display="flex" gap={1} mb={2}>
-                <Autocomplete
-                  options={customers}
-                  getOptionLabel={(o) => o.name}
-                  value={customer}
-                  onChange={(_, v) => setCustomer(v)}
-                  renderInput={(params) => (
-                    <TextField {...params} size="small" placeholder="اختر الزبون..." />
+                  {cartCount > 0 && (
+                    <SoftBox
+                      sx={{
+                        background: "#17c1e8",
+                        color: "#fff",
+                        borderRadius: "50%",
+                        width: 20, height: 20,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 11, fontWeight: "bold",
+                      }}
+                    >
+                      {cartCount}
+                    </SoftBox>
                   )}
-                  size="small"
-                  sx={{ flex: 1 }}
-                />
-                <Tooltip title={customer ? "عرض بيانات الزبون" : "إضافة زبون جديد"}>
-                  <IconButton
-                    size="small"
-                    onClick={() => customer ? setCustomerInfoOpen(true) : setNewCustomerDialog(true)}
-                    sx={{
-                      border: `1px solid ${customer ? "#17c1e8" : "#e9ecef"}`,
-                      borderRadius: 1,
-                      color: customer ? "#17c1e8" : "inherit",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    {customer
-                      ? <VisibilityIcon fontSize="small" />
-                      : <PersonAddIcon fontSize="small" />
-                    }
-                  </IconButton>
-                </Tooltip>
+                </SoftBox>
+                {cartCount > 0 && (
+                  <SoftTypography variant="caption" fontWeight="bold" color="info">
+                    {formatDZD(cartAmount)} دج
+                  </SoftTypography>
+                )}
               </SoftBox>
 
-              <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
-                قائمة الأسعار
-              </SoftTypography>
-              <FormControl size="small" fullWidth sx={{ mb: 1 }}>
-                <InputLabel>قائمة الأسعار</InputLabel>
-                <Select
-                  value={selectedPriceListId}
-                  label="قائمة الأسعار"
-                  onChange={(event) => setSelectedPriceListId(event.target.value)}
-                >
-                  {salesPriceLists.map((list) => (
-                    <MenuItem key={list.id} value={list.id}>
-                      {list.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
-                {selectedPriceList?.description}
-              </SoftTypography>
-
-              <Divider sx={{ my: 2 }} />
-
-              {/* Cart Items */}
-              {cartItems.length === 0 ? (
-                <SoftBox textAlign="center" py={4}>
-                  <ShoppingCartIcon sx={{ color: "#e0e0e0", fontSize: 48 }} />
-                  <SoftTypography variant="body2" color="secondary" mt={1}>
-                    السلة فارغة
-                  </SoftTypography>
-                  <SoftTypography variant="caption" color="secondary">
-                    اختر أصنافاً من القائمة
-                  </SoftTypography>
+              <SoftBox px={2.5} pt={2} pb={1.5}>
+                {/* ── Customer + actions ── */}
+                <SoftBox display="flex" gap={1} mb={1}>
+                  <Autocomplete
+                    options={customers}
+                    getOptionLabel={(o) => o.name}
+                    value={customer}
+                    onChange={(_, v) => {
+                      setCustomer(v);
+                      // auto-apply customer's linked price list, fallback to MAIN
+                      setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} size="small" label="الزبون *" placeholder="اختر الزبون..." />
+                    )}
+                    size="small"
+                    sx={{ flex: 1 }}
+                  />
+                  <Tooltip title={customer ? "عرض بيانات الزبون" : "إضافة زبون جديد"}>
+                    <IconButton
+                      size="small"
+                      onClick={() => customer ? setCustomerInfoOpen(true) : setNewCustomerDialog(true)}
+                      sx={{
+                        border: `1px solid ${customer ? "#17c1e8" : "#e9ecef"}`,
+                        borderRadius: 1,
+                        color: customer ? "#17c1e8" : "inherit",
+                        transition: "all 0.2s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {customer ? <VisibilityIcon fontSize="small" /> : <PersonAddIcon fontSize="small" />}
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="الإعدادات المتقدمة">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => setSettingsAnchor(e.currentTarget)}
+                      sx={{
+                        border: "1px solid #e9ecef",
+                        borderRadius: 1,
+                        flexShrink: 0,
+                        color: selectedPriceListId !== "MAIN" ? "#17c1e8" : "inherit",
+                      }}
+                    >
+                      <TuneIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </SoftBox>
-              ) : (
-                <SoftBox maxHeight={350} sx={{ overflowY: "auto" }}>
-                  {cartItems.map(({ product, qty, willShip }) => {
-                    const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
-                    const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
 
-                    return (
-                    <SoftBox key={product.id} mb={1.5}>
+                {/* Active price list indicator */}
+                <SoftBox display="flex" alignItems="center" gap={0.5}>
+                  <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10 }}>
+                    قائمة الأسعار:
+                  </SoftTypography>
+                  <Chip
+                    label={selectedPriceList?.name || "السعر الرئيسي"}
+                    size="small"
+                    color={selectedPriceListId !== "MAIN" ? "info" : "default"}
+                    variant={selectedPriceListId !== "MAIN" ? "filled" : "outlined"}
+                    sx={{ height: 18, fontSize: 9, "& .MuiChip-label": { px: 0.75 } }}
+                  />
+                  {customer?.defaultPriceListId && customer.defaultPriceListId === selectedPriceListId && (
+                    <SoftTypography variant="caption" color="success" sx={{ fontSize: 9 }}>
+                      · تلقائي
+                    </SoftTypography>
+                  )}
+                </SoftBox>
+
+                {/* Settings menu */}
+                <Menu
+                  anchorEl={settingsAnchor}
+                  open={Boolean(settingsAnchor)}
+                  onClose={() => setSettingsAnchor(null)}
+                  anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                  transformOrigin={{ vertical: "top", horizontal: "right" }}
+                  PaperProps={{ sx: { minWidth: 200, mt: 0.5 } }}
+                >
+                  <MenuItem
+                    onClick={() => { setSettingsAnchor(null); setAdvancedSettingsOpen(true); }}
+                    sx={{ gap: 1 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: "auto" }}>
+                      <TuneIcon fontSize="small" sx={{ color: "#17c1e8" }} />
+                    </ListItemIcon>
+                    <SoftTypography variant="caption" fontWeight="medium">
+                      الإعدادات المتقدمة
+                    </SoftTypography>
+                  </MenuItem>
+                </Menu>
+
+                {/* Advanced Settings Dialog */}
+                <Dialog
+                  open={advancedSettingsOpen}
+                  onClose={() => setAdvancedSettingsOpen(false)}
+                  maxWidth="xs"
+                  fullWidth
+                >
+                  <DialogTitle>
+                    <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                      <SoftBox display="flex" alignItems="center" gap={1}>
+                        <TuneIcon sx={{ color: "#17c1e8", fontSize: 20 }} />
+                        <SoftTypography variant="h6" fontWeight="bold">الإعدادات المتقدمة</SoftTypography>
+                      </SoftBox>
+                      <IconButton size="small" onClick={() => setAdvancedSettingsOpen(false)}>
+                        <CloseIcon />
+                      </IconButton>
+                    </SoftBox>
+                  </DialogTitle>
+                  <DialogContent dividers>
+                    <SoftTypography variant="caption" fontWeight="bold" color="secondary" display="block" mb={1}>
+                      قائمة الأسعار
+                    </SoftTypography>
+                    <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
+                      <InputLabel>قائمة الأسعار</InputLabel>
+                      <Select
+                        value={selectedPriceListId}
+                        label="قائمة الأسعار"
+                        onChange={(e) => setSelectedPriceListId(e.target.value)}
+                      >
+                        {salesPriceLists.map((list) => (
+                          <MenuItem key={list.id} value={list.id}>
+                            <SoftBox>
+                              <SoftTypography variant="caption" fontWeight="medium" display="block">
+                                {list.name}
+                              </SoftTypography>
+                            </SoftBox>
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    {selectedPriceList?.description && (
+                      <SoftTypography variant="caption" color="secondary" display="block" mb={2}>
+                        {selectedPriceList.description}
+                      </SoftTypography>
+                    )}
+
+                    {/* Customer link info */}
+                    {customer && (
                       <SoftBox
                         p={1.5}
                         sx={{
-                          background: "#f8f9fa",
-                          borderRadius: 2,
-                          border: "1px solid #e9ecef",
+                          background: customer.defaultPriceListId ? "#f0fff4" : "#f8f9fa",
+                          borderRadius: 1.5,
+                          border: `1px solid ${customer.defaultPriceListId ? "#66BB6A33" : "#e9ecef"}`,
                         }}
                       >
-                        <SoftBox display="flex" justifyContent="space-between" alignItems="flex-start">
-                          <SoftBox flex={1}>
-                            <SoftTypography variant="caption" fontWeight="bold" lineHeight={1.3}>
+                        <SoftTypography variant="caption" fontWeight="bold" display="block" mb={0.5}>
+                          {customer.name}
+                        </SoftTypography>
+                        {customer.defaultPriceListId ? (
+                          <SoftTypography variant="caption" color="success">
+                            مربوط تلقائياً بـ «{salesPriceLists.find(l => l.id === customer.defaultPriceListId)?.name}»
+                          </SoftTypography>
+                        ) : (
+                          <SoftTypography variant="caption" color="secondary">
+                            لا توجد قائمة أسعار مرتبطة — يخضع للأسعار الرئيسية
+                          </SoftTypography>
+                        )}
+                      </SoftBox>
+                    )}
+                  </DialogContent>
+                  <DialogActions sx={{ p: 2 }}>
+                    <SoftButton
+                      variant="gradient"
+                      color="info"
+                      size="small"
+                      onClick={() => setAdvancedSettingsOpen(false)}
+                    >
+                      تأكيد
+                    </SoftButton>
+                  </DialogActions>
+                </Dialog>
+              </SoftBox>
+
+              {/* ── Cart Items ── */}
+              <SoftBox
+                sx={{
+                  borderTop: "1px solid #f0f2f5",
+                  borderBottom: "1px solid #f0f2f5",
+                  minHeight: 80,
+                  maxHeight: 340,
+                  overflowY: "auto",
+                }}
+              >
+                {cartItems.length === 0 ? (
+                  <SoftBox textAlign="center" py={4}>
+                    <ShoppingCartIcon sx={{ color: "#e9ecef", fontSize: 40 }} />
+                    <SoftTypography variant="caption" color="secondary" display="block" mt={1}>
+                      السلة فارغة — اختر أصنافاً من اليمين
+                    </SoftTypography>
+                  </SoftBox>
+                ) : (
+                  <SoftBox px={2.5} py={1}>
+                    {cartItems.map(({ product, qty, willShip }, index) => {
+                      const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
+                      const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
+
+                      return (
+                        <SoftBox
+                          key={product.id}
+                          py={1.25}
+                          sx={{
+                            borderBottom: index < cartItems.length - 1 ? "1px solid #f4f6f8" : "none",
+                            "&:hover .cart-delete-btn": { opacity: 1 },
+                          }}
+                        >
+                          {/* Row 1: name · total · delete */}
+                          <SoftBox display="flex" alignItems="center" justifyContent="space-between" gap={1}>
+                            <SoftTypography
+                              variant="caption"
+                              fontWeight="bold"
+                              sx={{ flex: 1, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            >
                               {product.name}
                             </SoftTypography>
-                            <SoftTypography variant="caption" color="secondary" display="block">
-                              {product.code}
-                            </SoftTypography>
-                            <SoftTypography variant="caption" color="info" fontWeight="bold" display="block">
-                              {formatDZD(priceInfo.unitPrice)} دج · {priceInfo.sourceLabel}
-                            </SoftTypography>
+                            <SoftBox display="flex" alignItems="center" gap={0.5} flexShrink={0}>
+                              <SoftTypography variant="caption" fontWeight="bold" color="info" sx={{ whiteSpace: "nowrap" }}>
+                                {formatDZD(lineTotal)} دج
+                              </SoftTypography>
+                              <IconButton
+                                size="small"
+                                className="cart-delete-btn"
+                                onClick={() => removeFromCart(product.id)}
+                                sx={{
+                                  p: 0.25,
+                                  opacity: 0.3,
+                                  transition: "opacity 0.15s",
+                                  color: "#ea0606",
+                                  "&:hover": { opacity: 1, background: "#fff5f5" },
+                                }}
+                              >
+                                <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </SoftBox>
                           </SoftBox>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => removeFromCart(product.id)}
-                          >
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </SoftBox>
 
-                        <SoftBox display="flex" alignItems="center" justifyContent="space-between" mt={1}>
-                          {/* Qty Controls */}
-                          <SoftBox>
-                            <SoftBox display="flex" alignItems="center" gap={0.5}>
+                          {/* Row 2: code · price · qty controls · ship */}
+                          <SoftBox display="flex" alignItems="center" gap={0.75} mt={0.5} flexWrap="wrap">
+                            <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10, whiteSpace: "nowrap" }}>
+                              {product.code} · {formatDZD(priceInfo.unitPrice)} دج
+                            </SoftTypography>
+                            <SoftBox display="flex" alignItems="center" gap={0.25} ml="auto">
                               <IconButton
                                 size="small"
                                 onClick={() => setCart(prev => ({
                                   ...prev,
                                   [product.id]: { ...prev[product.id], qty: Math.max(1, qty - 1) }
                                 }))}
-                                sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
+                                sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
                               >
-                                <RemoveIcon fontSize="small" />
+                                <RemoveIcon sx={{ fontSize: 11 }} />
                               </IconButton>
-                              <SoftTypography variant="button" fontWeight="bold" minWidth={40} textAlign="center">
+                              <SoftTypography
+                                variant="caption"
+                                fontWeight="bold"
+                                sx={{ minWidth: 28, textAlign: "center", fontSize: 12, lineHeight: 1 }}
+                              >
                                 {qty}
                               </SoftTypography>
                               <IconButton
@@ -1800,111 +1962,97 @@ function NewOrder() {
                                   ...prev,
                                   [product.id]: { ...prev[product.id], qty: qty + 1 }
                                 }))}
-                                sx={{ border: "1px solid #e0e0e0", p: 0.3 }}
+                                sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
                               >
-                                <AddIcon fontSize="small" />
+                                <AddIcon sx={{ fontSize: 11 }} />
                               </IconButton>
-                              <SoftTypography variant="caption" color="secondary" ml={0.5}>
+                              <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10, mx: 0.25 }}>
                                 {product.unit}
                               </SoftTypography>
+                              <Tooltip title={willShip ? "سيتم الشحن" : "استلام مباشر"}>
+                                <Chip
+                                  size="small"
+                                  icon={<LocalShippingIcon sx={{ fontSize: "11px !important" }} />}
+                                  label={willShip ? "شحن" : "مباشر"}
+                                  color={willShip ? "info" : "default"}
+                                  onClick={() => toggleWillShip(product.id)}
+                                  sx={{ cursor: "pointer", height: 18, fontSize: 9, "& .MuiChip-label": { px: 0.5 } }}
+                                />
+                              </Tooltip>
                             </SoftBox>
-                            {/* Packages count */}
-                            {product.unitsPerPackage > 0 && (
-                              <SoftTypography variant="caption" sx={{ color: "#7928ca", fontWeight: "bold", display: "block", mt: 0.3 }}>
-                                = {calcPackages(qty, product)} {product.packageUnit}
-                              </SoftTypography>
-                            )}
                           </SoftBox>
 
-                          {/* Ship Toggle */}
-                          <SoftBox textAlign="left">
-                            <Tooltip title={willShip ? "سيتم الشحن" : "استلام مباشر"}>
-                              <Chip
-                                size="small"
-                                icon={<LocalShippingIcon fontSize="small" />}
-                                label={willShip ? "شحن" : "مباشر"}
-                                color={willShip ? "info" : "default"}
-                                onClick={() => toggleWillShip(product.id)}
-                                sx={{ cursor: "pointer", height: 22, fontSize: 10 }}
-                              />
-                            </Tooltip>
-                            <SoftTypography variant="caption" fontWeight="bold" display="block" mt={0.5}>
-                              {formatDZD(lineTotal)} دج
+                          {/* Row 3 (optional): package count */}
+                          {product.unitsPerPackage > 0 && (
+                            <SoftTypography variant="caption" sx={{ color: "#7928ca", fontSize: 9, display: "block", mt: 0.25 }}>
+                              = {calcPackages(qty, product)} {product.packageUnit}
                             </SoftTypography>
-                          </SoftBox>
+                          )}
                         </SoftBox>
-                      </SoftBox>
-                    </SoftBox>
-                    );
-                  })}
-                </SoftBox>
-              )}
-
-              <Divider sx={{ my: 2 }} />
-
-              {/* Notes */}
-              <TextField
-                fullWidth
-                size="small"
-                multiline
-                rows={2}
-                label="ملاحظات"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                sx={{ mb: 2 }}
-              />
-
-              {/* Summary */}
-              {cartItems.length > 0 && (
-                <SoftBox mb={2} p={1.5} sx={{ background: "#f0f7ff", borderRadius: 2 }}>
-                  <SoftBox display="flex" justifyContent="space-between">
-                    <SoftTypography variant="caption" color="text">إجمالي الأصناف:</SoftTypography>
-                    <SoftTypography variant="caption" fontWeight="bold">{cartItems.length}</SoftTypography>
+                      );
+                    })}
                   </SoftBox>
-                  <SoftBox display="flex" justifyContent="space-between">
-                    <SoftTypography variant="caption" color="text">إجمالي الوحدات:</SoftTypography>
-                    <SoftTypography variant="caption" fontWeight="bold">
-                      {cartItems.reduce((s, i) => s + i.qty, 0)}
+                )}
+              </SoftBox>
+
+              <SoftBox px={2.5} pt={1.5} pb={2}>
+                {/* ── Notes ── */}
+                <TextField
+                  fullWidth
+                  size="small"
+                  multiline
+                  rows={1}
+                  label="ملاحظات"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  sx={{ mb: 1.5 }}
+                />
+
+                {/* ── Summary + Actions ── */}
+                {cartItems.length > 0 && (
+                  <SoftBox
+                    display="flex" justifyContent="space-between" alignItems="center"
+                    mb={1.5} px={1.5} py={1}
+                    sx={{ background: "#f0f7ff", borderRadius: 1.5 }}
+                  >
+                    <SoftTypography variant="caption" color="secondary">
+                      {cartItems.length} صنف · {cartItems.reduce((s, i) => s + i.qty, 0)} وحدة
                     </SoftTypography>
-                  </SoftBox>
-                  <SoftBox display="flex" justifyContent="space-between" mt={0.5}>
-                    <SoftTypography variant="caption" color="text">إجمالي المبلغ:</SoftTypography>
-                    <SoftTypography variant="caption" fontWeight="bold" color="info">
+                    <SoftTypography variant="button" fontWeight="bold" color="info">
                       {formatDZD(cartAmount)} دج
                     </SoftTypography>
                   </SoftBox>
+                )}
+
+                <SoftBox display="flex" flexDirection="column" gap={1}>
+                  <SoftButton
+                    variant="gradient"
+                    color="info"
+                    fullWidth
+                    startIcon={<SendIcon />}
+                    disabled={cartItems.length === 0 || !customer}
+                    onClick={() => handleSubmit(false)}
+                  >
+                    إرسال للإدارة
+                  </SoftButton>
+                  <SoftButton
+                    variant="outlined"
+                    color="secondary"
+                    fullWidth
+                    startIcon={<SaveIcon />}
+                    disabled={cartItems.length === 0}
+                    onClick={() => handleSubmit(true)}
+                  >
+                    حفظ كمسودة
+                  </SoftButton>
                 </SoftBox>
-              )}
 
-              {/* Action Buttons */}
-              <SoftBox display="flex" flexDirection="column" gap={1}>
-                <SoftButton
-                  variant="gradient"
-                  color="info"
-                  fullWidth
-                  startIcon={<SendIcon />}
-                  disabled={cartItems.length === 0 || !customer}
-                  onClick={() => handleSubmit(false)}
-                >
-                  إرسال الطلبية للإدارة
-                </SoftButton>
-                <SoftButton
-                  variant="outlined"
-                  color="secondary"
-                  fullWidth
-                  startIcon={<SaveIcon />}
-                  disabled={cartItems.length === 0}
-                  onClick={() => handleSubmit(true)}
-                >
-                  حفظ كمسودة
-                </SoftButton>
+                {!customer && cartItems.length > 0 && (
+                  <SoftTypography variant="caption" color="error" textAlign="center" display="block" mt={1}>
+                    * يجب اختيار الزبون أولاً
+                  </SoftTypography>
+                )}
               </SoftBox>
-
-              {!customer && cartItems.length > 0 && (
-                <SoftTypography variant="caption" color="error" textAlign="center" display="block" mt={1}>
-                  * يجب اختيار الزبون أولاً
-                </SoftTypography>
-              )}
             </Card>
           </Grid>
         </Grid>

@@ -51,7 +51,6 @@ import Shop from "examples/Icons/Shop";
 import Office from "examples/Icons/Office";
 import SettingsIcon from "examples/Icons/Settings";
 import Document from "examples/Icons/Document";
-import SpaceShip from "examples/Icons/SpaceShip";
 import CustomerSupport from "examples/Icons/CustomerSupport";
 import CreditCard from "examples/Icons/CreditCard";
 import Cube from "examples/Icons/Cube";
@@ -240,22 +239,14 @@ const routes = [
     noCollapse: true,
   },
   {
-    type: "collapse",
-    name: "تسجيل الدخول",
     key: "sign-in",
     route: "/authentication/sign-in",
-    icon: <Document size="12px" />,
     component: <SignIn />,
-    noCollapse: true,
   },
   {
-    type: "collapse",
-    name: "إنشاء حساب",
     key: "sign-up",
     route: "/authentication/sign-up",
-    icon: <SpaceShip size="12px" />,
     component: <SignUp />,
-    noCollapse: true,
   },
 
   // ─── Accounting module ──────────────────────────────────
