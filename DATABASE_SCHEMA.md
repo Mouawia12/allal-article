@@ -1,6 +1,6 @@
 # مخطط قاعدة البيانات — ALLAL-ARTICLE
 
-> آخر تحديث: 2026-04-22
+> آخر تحديث: 2026-04-26
 > قاعدة البيانات المعتمدة: PostgreSQL
 > الباك إند المستقبلي: Spring Boot 3.x + Java 21
 > الميغريشن: Flyway
@@ -1005,8 +1005,9 @@ public_id               uuid not null default gen_random_uuid(),
 sku                     varchar(100) not null,
 name                    varchar(200) not null,
 category_id             bigint references categories(id),
-unit_name               varchar(50),
+base_unit_id            bigint references product_units_catalog(id),
 barcode                 varchar(100),
+has_variants            boolean not null default false,
 weight_per_unit         numeric(14,3),
 units_per_package       numeric(14,3) not null default 1,
 package_unit            varchar(50) default 'علبة',
@@ -1023,6 +1024,86 @@ updated_at              timestamptz not null default now(),
 deleted_at              timestamptz,
 unique (public_id),
 unique (sku)
+```
+
+#### `product_units_catalog`
+
+وحدات القياس التي يعرّفها المشترك — مشتركة بين كل الأصناف في نفس الـ schema.
+
+```sql
+id              bigint generated always as identity primary key,
+name            varchar(80) not null,
+symbol          varchar(20),
+is_system       boolean not null default false,   -- لا يمكن حذف وحدات النظام
+created_at      timestamptz not null default now(),
+unique (name)
+```
+
+#### `product_extra_units`
+
+وحدات إضافية لصنف معين مع معامل التحويل من الوحدة الأساسية.
+
+```sql
+id                  bigint generated always as identity primary key,
+product_id          bigint not null references products(id) on delete cascade,
+unit_id             bigint not null references product_units_catalog(id),
+conversion_factor   numeric(14,6) not null default 1,   -- 1 كرطون = 100 قطعة → factor=100
+price_amount        numeric(14,2),
+barcode             varchar(100),
+is_base             boolean not null default false,
+sort_order          integer not null default 0,
+created_at          timestamptz not null default now(),
+unique (product_id, unit_id)
+```
+
+#### `product_attribute_types`
+
+أنواع خصائص المتغيرات (اللون، المقاس، ...) — مشتركة على مستوى المشترك.
+
+```sql
+id          bigint generated always as identity primary key,
+name        varchar(80) not null,
+values_json jsonb not null default '[]',   -- ["أحمر","أزرق",...]
+created_at  timestamptz not null default now(),
+unique (name)
+```
+
+#### `product_variants`
+
+متغيرات الصنف — كل تركيبة من قيم الخصائص = متغير مستقل بمخزون وسعر وباركود.
+
+```sql
+id              bigint generated always as identity primary key,
+public_id       uuid not null default gen_random_uuid(),
+product_id      bigint not null references products(id) on delete cascade,
+sku             varchar(120) not null,
+barcode         varchar(100),
+attrs_json      jsonb not null default '{}',   -- {"اللون":"أحمر","المقاس":"L"}
+price_amount    numeric(14,2),
+stock_qty       numeric(14,3) not null default 0,
+status          varchar(30) not null default 'active',
+created_at      timestamptz not null default now(),
+updated_at      timestamptz not null default now(),
+unique (public_id),
+unique (product_id, sku)
+```
+
+```sql
+create index idx_product_variants_product  on product_variants(product_id);
+create index idx_product_variants_barcode  on product_variants(barcode) where barcode is not null;
+create index idx_product_variants_attrs    on product_variants using gin(attrs_json);
+```
+
+#### `categories`
+
+تصنيفات الأصناف قابلة للتخصيص من قِبَل المشترك.
+
+```sql
+id          bigint generated always as identity primary key,
+name        varchar(120) not null,
+color       varchar(20),
+created_at  timestamptz not null default now(),
+unique (name)
 ```
 
 #### `product_favorites`
@@ -1889,6 +1970,9 @@ code                varchar(60) not null unique,       -- dz_scf_trading
 name_ar             varchar(160) not null,
 name_fr             varchar(160),
 country_code        varchar(2) not null default 'DZ',
+code_scheme         varchar(40) not null default '4_digit_grouped',
+code_length         smallint not null default 4,
+code_pattern        varchar(120) not null default '^[0-9]{4}$',
 is_default          boolean not null default false,
 version             integer not null default 1,
 created_at          timestamptz not null default now()
@@ -1896,37 +1980,76 @@ created_at          timestamptz not null default now()
 account_template_items:
 id                  bigint generated always as identity primary key,
 template_id          bigint not null references account_templates(id),
-code                varchar(30) not null,
+code                varchar(30) not null,              -- 1000, 1001, 1010...
 name_ar             varchar(200) not null,
 name_fr             varchar(200),
 parent_code         varchar(30),
 classification      varchar(30) not null,
+financial_statement varchar(40),                       -- balance_sheet, income_statement
 normal_balance      varchar(10) not null,
 is_postable         boolean not null default true,
 is_control          boolean not null default false,
 requires_subledger  boolean not null default false,
 subledger_type      varchar(30),                       -- customer, supplier, employee, tax, bank
 report_section      varchar(60),                       -- current_assets, revenue, cogs...
+statement_line_code varchar(60),                       -- BS.CURRENT_ASSETS.CASH, IS.REVENUE.SALES...
+statement_sort_order integer not null default 0,
 cash_flow_section   varchar(60),                       -- operating, investing, financing
 sort_order          integer not null default 0,
 unique (template_id, code)
 ```
+
+#### `chart_template_deployments`
+
+يسجل هل تم زرع قالب شجرة الحسابات للمشترك — ومتى — وأي إصدار — ومن نفّذ العملية.
+جدول واحد لكل مشترك (schema per tenant)، يحتوي على سجل واحد نشط أو عدة سجلات إذا تم ترقية القالب.
+
+```sql
+id                  bigint generated always as identity primary key,
+template_id         bigint not null references account_templates(id),
+template_version    integer not null,
+status              varchar(30) not null default 'draft',
+                    -- draft, in_progress, completed, failed, upgraded
+deployed_at         timestamptz,
+deployed_by         bigint references users(id),
+accounts_created    integer not null default 0,
+health_check_json   jsonb,                             -- نتائج فحص الصحة قبل الزرع
+notes               text,
+created_at          timestamptz not null default now()
+```
+
+قاعدة: يمنع وجود أكثر من سجل `status = completed` في نفس الوقت لنفس المشترك — يمكن إضافة constraint أو تحقق في طبقة التطبيق.
+
+سياسة الكود المعتمدة في القالب الافتراضي:
+
+- `code_scheme = 4_digit_grouped`
+- `code_length = 4`
+- `code_pattern = ^[0-9]{4}$`
+- أمثلة: `1000` أصول، `1001` حساب فرعي مباشر، `1010` مجموعة فرعية، `1011` حساب قابل للترحيل.
+- لا تعتمد العلاقات على الكود وحده؛ العلاقة الرسمية دائماً عبر `parent_id` بعد الزرع.
 
 #### `accounts`
 
 ```sql
 id                  bigint generated always as identity primary key,
 public_id           uuid not null default gen_random_uuid(),
-code                varchar(30) not null unique,
+code                varchar(30) not null unique,       -- 1000, 1001, 1010...
 name_ar             varchar(200) not null,
 name_fr             varchar(200),
 parent_id           bigint references accounts(id),
 account_class_id    bigint references account_classes(id),
+template_item_id    bigint references account_template_items(id),
+template_version    integer,
+is_template_locked  boolean not null default false,
+is_custom           boolean not null default false,
 level               smallint not null default 1,
 path                varchar(500),
 classification      varchar(30) not null,              -- asset, liability, equity, revenue, expense
+financial_statement varchar(40),                       -- balance_sheet, income_statement
 normal_balance      varchar(10) not null,              -- debit, credit
 report_section      varchar(60),
+statement_line_code varchar(60),
+statement_sort_order integer not null default 0,
 cash_flow_section   varchar(60),
 is_postable         boolean not null default true,
 is_control          boolean not null default false,
@@ -1935,7 +2058,10 @@ subledger_type      varchar(30),                       -- customer, supplier, em
 is_reconcilable     boolean not null default false,
 allow_manual_posting boolean not null default true,
 currency            varchar(3) not null default 'DZD',
-status              varchar(30) not null default 'active',
+status              varchar(30) not null default 'active', -- active, inactive, locked, archived
+locked_reason       text,
+locked_at           timestamptz,
+locked_by           bigint references users(id),
 sort_order          integer not null default 0,
 created_by          bigint references users(id),
 updated_by          bigint references users(id),
@@ -1943,18 +2069,32 @@ created_at          timestamptz not null default now(),
 updated_at          timestamptz not null default now(),
 deleted_at          timestamptz,
 unique (public_id),
+check (code ~ '^[0-9]{4,6}$'),
 check (not is_postable or level >= 2),
-check (not requires_subledger or subledger_type is not null)
+check (not requires_subledger or subledger_type is not null),
+check (status in ('active', 'inactive', 'locked', 'archived'))
 ```
 
 فهارس أساسية:
 
 ```sql
 create index idx_accounts_parent on accounts(parent_id);
+create index idx_accounts_template_item on accounts(template_item_id);
 create index idx_accounts_classification on accounts(classification);
 create index idx_accounts_path on accounts(path);
 create index idx_accounts_report_section on accounts(report_section);
+create index idx_accounts_statement_line on accounts(statement_line_code);
 ```
+
+قواعد خدمة شجرة الحسابات:
+
+- يمنع حذف حساب له قيود، أرصدة، أو استعمال في إعدادات الربط؛ يستعمل `status = archived` أو `inactive`.
+- يمنع تغيير `code`, `classification`, `normal_balance`, أو `requires_subledger` لحساب له قيود مرحلة إلا عبر عملية إدارية مسجلة في Audit Log.
+- يمنع جعل حساب لديه أبناء `is_postable = true`.
+- يمنع الترحيل على حساب `inactive`, `locked`, أو `archived`.
+- يمنع الترحيل اليدوي إذا `allow_manual_posting = false`.
+- الحساب الرقابي يجب أن يكون `is_control = true`, `requires_subledger = true`, و`subledger_type` غير فارغ.
+- التقارير المالية تعتمد على `financial_statement`, `report_section`, `statement_line_code`, و`statement_sort_order`، وليس على الاسم أو الكود فقط.
 
 #### `subledger_entities`
 
@@ -1980,12 +2120,14 @@ unique (subledger_type, entity_type, entity_id)
 ```sql
 journal_books:
 id                  bigint generated always as identity primary key,
-code                varchar(40) not null unique,       -- sales, purchase, cash, bank, inventory, manual
+code                varchar(40) not null unique,       -- sales, purchases, cash, bank, inventory, manual, opening, closing
 name_ar             varchar(120) not null,
-book_type           varchar(40) not null,
+book_type           varchar(40) not null,              -- sales, purchases, cash, bank, inventory, manual, opening, closing
 default_prefix      varchar(20) not null,
+year_format         varchar(20) not null default 'YYYY', -- YYYY أو YY للترقيم السنوي
 allows_manual       boolean not null default true,
 requires_approval   boolean not null default false,
+is_system           boolean not null default false,    -- true = دفتر نظام لا يتغير نوعه
 is_active           boolean not null default true,
 created_at          timestamptz not null default now()
 
@@ -2082,11 +2224,16 @@ primary key (journal_item_id, dimension_id)
 ```sql
 tax_codes:
 id                  bigint generated always as identity primary key,
-code                varchar(40) not null unique,       -- vat_19_sales
+code                varchar(40) not null unique,       -- TVA-19, TAP, IBS
 name_ar             varchar(120) not null,
-tax_type            varchar(30) not null,              -- vat, stamp, withholding
+tax_type            varchar(30) not null,              -- vat, tap, ibs, stamp, withholding
 direction           varchar(20) not null,              -- sale, purchase, both
-is_active           boolean not null default true
+is_price_inclusive  boolean not null default false,    -- السعر شامل الضريبة أم لا (على مستوى الكود)
+is_active           boolean not null default true,
+created_at          timestamptz not null default now()
+
+-- ملاحظة: is_price_inclusive يُحفظ على مستوى الكود لأن الواجهة تتعامل معه هكذا.
+-- is_inclusive في tax_rates يُستخدم فقط إذا كانت الأسعار تختلف بين الفترات.
 
 tax_rates:
 id                  bigint generated always as identity primary key,
@@ -2094,7 +2241,8 @@ tax_code_id          bigint not null references tax_codes(id),
 rate_percent        numeric(8,4) not null,
 valid_from          date not null,
 valid_to            date,
-is_inclusive        boolean not null default false
+is_inclusive        boolean not null default false,    -- override للفترة إن احتجت
+created_at          timestamptz not null default now()
 
 tax_code_accounts:
 tax_code_id          bigint not null references tax_codes(id),
@@ -2170,9 +2318,12 @@ created_at          timestamptz not null default now(),
 unique (fiscal_year_id, control_account_id, subledger_entity_id)
 
 account_balances:
+id                  bigint generated always as identity primary key,
 account_id          bigint not null references accounts(id),
 fiscal_year_id      bigint not null references fiscal_years(id),
 period_id           bigint references accounting_periods(id),
+-- period_id = NULL → رصيد السنة الكاملة (year-level)
+-- period_id = <id> → رصيد الفترة الشهرية (period-level)
 opening_debit       numeric(18,4) not null default 0,
 opening_credit      numeric(18,4) not null default 0,
 period_debit        numeric(18,4) not null default 0,
@@ -2180,7 +2331,13 @@ period_credit       numeric(18,4) not null default 0,
 closing_debit       numeric(18,4) not null default 0,
 closing_credit      numeric(18,4) not null default 0,
 last_recomputed_at  timestamptz,
-primary key (account_id, fiscal_year_id, period_id)
+-- لا نضع period_id داخل PK لأنه nullable؛ نستخدم UNIQUE بدلاً من ذلك:
+unique (account_id, fiscal_year_id, period_id)
+-- ملاحظة: PostgreSQL يسمح بتعدد NULLs في UNIQUE العادي.
+-- إذا أردنا منع تكرار السنة الكاملة (period_id IS NULL) نضيف:
+-- create unique index idx_account_balances_year
+--   on account_balances (account_id, fiscal_year_id)
+--   where period_id is null;
 ```
 
 #### `reconciliation_matches` و `reconciliation_items`
@@ -2190,11 +2347,19 @@ reconciliation_matches:
 id                  bigint generated always as identity primary key,
 public_id           uuid not null default gen_random_uuid(),
 reconciliation_type varchar(30) not null,              -- customer, supplier, bank
-status              varchar(30) not null default 'matched',
+subledger_entity_id bigint references subledger_entities(id),  -- الطرف المطابَق (زبون/مورد)
+bank_account_id     bigint references bank_accounts(id),       -- للمطابقة البنكية
+fiscal_year_id      bigint references fiscal_years(id),
+status              varchar(30) not null default 'matched',     -- matched, partial, disputed
 matched_at          timestamptz not null default now(),
 matched_by          bigint references users(id),
 notes               text,
-unique (public_id)
+unique (public_id),
+check (
+  (reconciliation_type in ('customer','supplier') and subledger_entity_id is not null)
+  or
+  (reconciliation_type = 'bank' and bank_account_id is not null)
+)
 
 reconciliation_items:
 id                  bigint generated always as identity primary key,
@@ -2204,24 +2369,43 @@ amount              numeric(18,4) not null,
 side                varchar(10) not null               -- debit, credit
 ```
 
+فهارس أساسية:
+
+```sql
+create index idx_recon_matches_entity on reconciliation_matches(subledger_entity_id)
+  where subledger_entity_id is not null;
+create index idx_recon_matches_bank on reconciliation_matches(bank_account_id)
+  where bank_account_id is not null;
+create index idx_recon_matches_fy on reconciliation_matches(fiscal_year_id);
+```
+
 #### `bank_accounts`, `cash_boxes`, `payment_methods`
 
 ```sql
 bank_accounts:
 id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
 name                varchar(160) not null,
 bank_name           varchar(160),
 account_number      varchar(80),
 iban                varchar(80),
+currency            varchar(3) not null default 'DZD',
 ledger_account_id   bigint not null references accounts(id),
-is_active           boolean not null default true
+last_reconciled_at  timestamptz,
+is_active           boolean not null default true,
+created_at          timestamptz not null default now(),
+unique (public_id)
 
 cash_boxes:
 id                  bigint generated always as identity primary key,
+public_id           uuid not null default gen_random_uuid(),
 name                varchar(120) not null,
+currency            varchar(3) not null default 'DZD',
 ledger_account_id   bigint not null references accounts(id),
 responsible_user_id bigint references users(id),
-is_active           boolean not null default true
+is_active           boolean not null default true,
+created_at          timestamptz not null default now(),
+unique (public_id)
 
 payment_methods:
 id                  bigint generated always as identity primary key,

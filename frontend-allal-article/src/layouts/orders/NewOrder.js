@@ -90,8 +90,17 @@ const mockProducts = [
   { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
   { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
   { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", color: "#A8E6CF", weightPerUnit: 0.45,  unitsPerPackage: 10,  packageUnit: "علبة"  },
-  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون", image: demoBuildingSuppliesImage },
-  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         stock: 60,   unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون" },
+  { id: 13, name: "دهان كلاسيك 4L", code: "DHN-CLS-4", category: "دهانات", stock: 240, unit: "علبة", color: "#DDA0DD",
+    weightPerUnit: 4.5, unitsPerPackage: 4, packageUnit: "كرطون", image: demoBuildingSuppliesImage,
+    hasVariants: true,
+    variants: [
+      { id: "DHN-WHT-4", sku: "DHN-WHT-4", attrs: { اللون: "أبيض"  }, barcode: "6193001000001", price: 3200, stock: 80 },
+      { id: "DHN-GRY-4", sku: "DHN-GRY-4", attrs: { اللون: "رمادي" }, barcode: "6193001000002", price: 3050, stock: 60 },
+      { id: "DHN-BEI-4", sku: "DHN-BEI-4", attrs: { اللون: "بيج"   }, barcode: "6193001000003", price: 3200, stock: 55 },
+      { id: "DHN-WHI-4", sku: "DHN-WHI-4", attrs: { اللون: "عاجي"  }, barcode: "6193001000004", price: 3200, stock: 45 },
+    ],
+  },
+  { id: 14, name: "دهان رمادي 4L", code: "DHN-GRY-4", category: "دهانات", stock: 60, unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5, unitsPerPackage: 4, packageUnit: "كرطون" },
   { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  color: "#B0C4DE", weightPerUnit: 0.15,  unitsPerPackage: 24,  packageUnit: "كرطون" },
   { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", color: "#F4A460", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة"  },
 ];
@@ -1221,24 +1230,29 @@ function NewOrder() {
   }, [newCustomerDialog, qtyDialog, selectedProductId, successDialog]);
 
   const openAddDialog = (product) => {
-    setQtyDialog({ product, isEdit: false });
+    const step = product.hasVariants && product.variants?.length ? "variant" : "quantity";
+    setQtyDialog({ product, isEdit: false, step, selectedVariant: null });
     setQtyInput("1");
     setReplaceQtyOnNextDigit(true);
   };
 
   const openEditDialog = (product) => {
-    setQtyDialog({ product, isEdit: true });
+    setQtyDialog({ product, isEdit: true, step: "quantity", selectedVariant: cart[product.id]?.variant ?? null });
     setQtyInput(String(cart[product.id]?.qty || 1));
     setReplaceQtyOnNextDigit(true);
   };
 
   const confirmQty = (rawQty = qtyInput) => {
     if (!qtyDialog) return;
+    if (qtyDialog.step === "variant") return; // should not be called before variant is picked
+    if (qtyDialog.product.hasVariants && !qtyDialog.selectedVariant) return;
     const nextQty = Math.max(1, Number(normalizeQty(rawQty)));
-
+    const cartKey = qtyDialog.product.hasVariants
+      ? `${qtyDialog.product.id}__${qtyDialog.selectedVariant.id}`
+      : qtyDialog.product.id;
     setCart((prev) => ({
       ...prev,
-      [qtyDialog.product.id]: { product: qtyDialog.product, qty: nextQty, willShip: true },
+      [cartKey]: { product: qtyDialog.product, qty: nextQty, willShip: true, variant: qtyDialog.selectedVariant },
     }));
     setQtyInput(String(nextQty));
     setQtyDialog(null);
@@ -2063,11 +2077,63 @@ function NewOrder() {
         {qtyDialog && (
           <>
             <DialogTitle>
-              {qtyDialog.isEdit ? "تعديل الكمية" : "إضافة للسلة"}
+              {qtyDialog.step === "variant" ? "اختر المتغير" : (qtyDialog.isEdit ? "تعديل الكمية" : "إضافة للسلة")}
             </DialogTitle>
             <DialogContent>
+              {/* ── Variant Step ── */}
+              {qtyDialog.step === "variant" && (
+                <>
+                  <SoftTypography variant="button" fontWeight="bold" display="block" mb={2}>
+                    {qtyDialog.product.name}
+                  </SoftTypography>
+                  <SoftTypography variant="caption" color="secondary" display="block" mb={1.5}>
+                    اختر المتغير المطلوب للمتابعة
+                  </SoftTypography>
+                  <SoftBox display="flex" flexDirection="column" gap={1}>
+                    {qtyDialog.product.variants.map((v) => {
+                      const isSelected = qtyDialog.selectedVariant?.id === v.id;
+                      const attrStr = Object.entries(v.attrs).map(([k, val]) => `${k}: ${val}`).join(" | ");
+                      return (
+                        <SoftBox
+                          key={v.id}
+                          onClick={() => setQtyDialog((p) => ({ ...p, selectedVariant: v, step: "quantity" }))}
+                          sx={{
+                            border: `2px solid ${isSelected ? "#17c1e8" : "#e9ecef"}`,
+                            borderRadius: 2, p: 1.5, cursor: "pointer",
+                            background: isSelected ? "#f0f7ff" : "#fff",
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            "&:hover": { borderColor: "#17c1e8", background: "#f0f7ff" },
+                          }}
+                        >
+                          <SoftBox>
+                            <SoftTypography variant="caption" fontWeight="bold" display="block">{attrStr}</SoftTypography>
+                            <SoftTypography variant="caption" color="secondary" sx={{ fontFamily: "monospace" }}>{v.sku}</SoftTypography>
+                          </SoftBox>
+                          <SoftBox textAlign="right">
+                            <SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>
+                              {new Intl.NumberFormat("ar-DZ").format(v.price)} دج
+                            </SoftTypography>
+                            <SoftTypography variant="caption" color="secondary" display="block">
+                              مخزون: {v.stock}
+                            </SoftTypography>
+                          </SoftBox>
+                        </SoftBox>
+                      );
+                    })}
+                  </SoftBox>
+                </>
+              )}
+
+              {/* ── Quantity Step ── */}
+              {qtyDialog.step === "quantity" && (
+              <SoftBox>
               <SoftTypography variant="button" fontWeight="bold" display="block" mb={2}>
                 {qtyDialog.product.name}
+                {qtyDialog.selectedVariant && (
+                  <SoftTypography variant="caption" color="info" display="block" mt={0.3}>
+                    {Object.entries(qtyDialog.selectedVariant.attrs).map(([k, v]) => `${k}: ${v}`).join(" | ")}
+                  </SoftTypography>
+                )}
               </SoftTypography>
               <SoftBox display="flex" alignItems="center" justifyContent="center" gap={2} my={2}>
                 <IconButton
@@ -2175,6 +2241,8 @@ function NewOrder() {
                   {resolveProductPrice(qtyDialog.product, selectedPriceListId, "sales").sourceLabel}
                 </SoftTypography>
               </SoftBox>
+              </SoftBox>
+              )}
             </DialogContent>
             <DialogActions sx={{ p: 2, gap: 1 }}>
               <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setQtyDialog(null)}>

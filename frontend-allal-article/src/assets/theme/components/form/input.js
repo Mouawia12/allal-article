@@ -30,9 +30,19 @@ const input = {
       padding: `${pxToRem(8)} ${pxToRem(28)} ${pxToRem(8)} ${pxToRem(12)} !important`,
       border: `${borderWidth[1]} solid ${inputColors.borderColor.main}`,
       borderRadius: `${borderRadius.md} !important`,
+      transition: "border-color 150ms ease, box-shadow 150ms ease",
 
       "& fieldset": {
         border: "none",
+      },
+
+      "&:hover": {
+        borderColor: "#adb5bd",
+      },
+
+      // When it wraps a Select, show pointer cursor on the whole field
+      "&:has(.MuiSelect-select)": {
+        cursor: "pointer",
       },
     },
 

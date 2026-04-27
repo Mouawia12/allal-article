@@ -35,13 +35,15 @@ const menu = {
   styleOverrides: {
     paper: {
       minWidth: pxToRem(160),
-      boxShadow: lg,
-      padding: `${pxToRem(16)} ${pxToRem(8)}`,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+      padding: `${pxToRem(6)} ${pxToRem(6)}`,
       fontSize: size.sm,
       color: text.main,
-      textAlign: "left",
+      textAlign: "right",
       backgroundColor: `${white.main} !important`,
-      borderRadius: borderRadius.md,
+      borderRadius: pxToRem(12),
+      border: "1px solid #f0f2f5",
+      marginTop: pxToRem(4),
     },
   },
 };

@@ -1,7 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
-import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
@@ -10,24 +9,25 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
-import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
+
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AddIcon from "@mui/icons-material/Add";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined";
 import SearchIcon from "@mui/icons-material/Search";
-import TuneIcon from "@mui/icons-material/Tune";
 import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
 import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
 
@@ -38,101 +38,137 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { buildTree, classificationLabels, fmt, mockAccounts, mockFiscalYears } from "./mockData";
+import {
+  ACCOUNT_DEPARTMENTS,
+  ACCOUNT_LISTS,
+  ACCOUNT_SIDES,
+  ACCOUNT_TYPES,
+  buildAccountTreeV2,
+  flattenV2,
+  fmt,
+  isDuplicateCode,
+  mockAccountsV2,
+  mockFiscalYears,
+  suggestChildCode,
+} from "./mockData";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const CLASSIFICATIONS = ["الكل", "asset", "liability", "equity", "revenue", "expense"];
+let nextId = 1000;
+const newId = () => ++nextId;
 
-function suggestChildCode(parent, siblings) {
-  if (!parent) return "";
-  if (siblings.length === 0) return parent.code + "1";
-  const nums = siblings.map((s) => {
-    const rest = s.code.slice(parent.code.length);
-    return parseInt(rest, 10) || 0;
-  });
-  return parent.code + (Math.max(...nums) + 1);
-}
+// "1101 # عقارات ومباني"
+const displayCode = (a) => `${a.code} # ${a.nameAr}`;
 
-function flattenTree(nodes, result = []) {
-  nodes.forEach((n) => {
-    result.push(n);
-    if (n.children?.length) flattenTree(n.children, result);
-  });
-  return result;
-}
+const isPostable = (a) => a.type === 3;
 
 // ─── Tree Node ────────────────────────────────────────────────────────────────
 function TreeNode({ node, depth, expanded, selected, onToggle, onSelect, onAddChild, onEdit }) {
   const hasChildren = node.children?.length > 0;
-  const isExpanded = expanded[node.id] ?? depth < 1;
-  const isSelected = selected?.id === node.id;
-  const cls = classificationLabels[node.classification];
+  const isOpen      = expanded[node.id] ?? depth < 1;
+  const isSel       = selected?.id === node.id;
+  const listMeta    = ACCOUNT_LISTS[node.list];
+  const typeMeta    = ACCOUNT_TYPES[node.type];
 
   return (
     <SoftBox>
       <SoftBox
+        className="tree-row"
         display="flex"
         alignItems="center"
         onClick={() => onSelect(node)}
         sx={{
-          pl: `${8 + depth * 20}px`,
-          pr: 1,
-          py: 0.6,
+          pl: `${6 + depth * 20}px`,
+          pr: 0.5,
+          py: 0.55,
           cursor: "pointer",
-          borderRadius: 1,
-          borderRight: isSelected ? "3px solid #17c1e8" : "3px solid transparent",
-          background: isSelected ? "#e3f8fd" : "transparent",
-          "&:hover": { background: isSelected ? "#e3f8fd" : "#f4f6f8" },
-          transition: "all .15s",
+          borderRadius: "6px",
+          borderRight: `3px solid ${isSel ? listMeta.color : "transparent"}`,
+          background: isSel ? `${listMeta.color}14` : "transparent",
+          "&:hover": { background: isSel ? `${listMeta.color}14` : "#f4f6f8" },
+          "&:hover .row-actions": { opacity: 1 },
+          transition: "background 0.12s",
         }}
       >
-        {/* Toggle */}
+        {/* Expand toggle */}
         <IconButton
           size="small"
           onClick={(e) => { e.stopPropagation(); onToggle(node.id); }}
-          sx={{ p: 0.2, mr: 0.3, visibility: hasChildren ? "visible" : "hidden" }}
+          sx={{ p: 0.2, mr: 0.2, flexShrink: 0, visibility: hasChildren ? "visible" : "hidden" }}
         >
-          {isExpanded ? <ExpandMoreIcon sx={{ fontSize: 16 }} /> : <ChevronRightIcon sx={{ fontSize: 16 }} />}
+          {isOpen
+            ? <ExpandMoreIcon sx={{ fontSize: 15, color: "#8392ab" }} />
+            : <ChevronRightIcon sx={{ fontSize: 15, color: "#8392ab" }} />}
         </IconButton>
+
+        {/* Type dot */}
+        <SoftBox
+          sx={{
+            width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+            background: typeMeta.color, mr: 0.8,
+            opacity: node.is_active ? 1 : 0.35,
+          }}
+        />
 
         {/* Code */}
         <SoftTypography
           variant="caption"
           fontWeight="bold"
-          sx={{ minWidth: 36, color: cls?.color ?? "#344767", letterSpacing: 0.3, mr: 0.8 }}
+          sx={{
+            minWidth: 42, mr: 0.5, flexShrink: 0,
+            fontFamily: "monospace", fontSize: "12px",
+            color: node.is_active ? listMeta.color : "#adb5bd",
+            opacity: node.is_active ? 1 : 0.6,
+          }}
         >
           {node.code}
+        </SoftTypography>
+
+        {/* Separator # */}
+        <SoftTypography variant="caption" sx={{ color: "#ced4da", mr: 0.5, flexShrink: 0, fontSize: "11px" }}>
+          #
         </SoftTypography>
 
         {/* Name */}
         <SoftTypography
           variant="caption"
-          fontWeight={!node.isPostable ? "bold" : "regular"}
-          sx={{ flex: 1, color: node.isActive ? "#344767" : "#adb5bd", textDecoration: node.isActive ? "none" : "line-through" }}
+          fontWeight={node.type <= 1 ? "bold" : "regular"}
+          sx={{
+            flex: 1, color: node.is_active ? "#344767" : "#adb5bd",
+            textDecoration: node.is_active ? "none" : "line-through",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}
         >
           {node.nameAr}
-          {node.isControl && (
-            <Chip label="رقابي" size="small" sx={{ ml: 0.8, fontSize: 9, height: 16, background: "#fff3e0", color: "#fb8c00" }} />
-          )}
         </SoftTypography>
 
-        {/* Balance */}
-        {node.totalBalance > 0 && (
-          <SoftTypography variant="caption" fontWeight="medium" sx={{ color: "#344767", mr: 1, fontSize: 11 }}>
+        {/* Balance (leaf only) */}
+        {isPostable(node) && node.totalBalance > 0 && (
+          <SoftTypography
+            variant="caption"
+            sx={{ color: "#67748e", fontSize: "10px", mr: 1, flexShrink: 0, fontFamily: "monospace" }}
+          >
             {fmt(node.totalBalance)}
           </SoftTypography>
         )}
 
-        {/* Actions */}
-        <SoftBox display="flex" gap={0} onClick={(e) => e.stopPropagation()} sx={{ opacity: 0, ".MuiBox-root:hover > &": { opacity: 1 } }}>
+        {/* Row actions — visible on hover */}
+        <SoftBox
+          className="row-actions"
+          display="flex"
+          gap={0}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ opacity: 0, transition: "opacity 0.15s", flexShrink: 0 }}
+        >
           <Tooltip title="إضافة حساب فرعي">
-            <IconButton size="small" onClick={() => onAddChild(node)} sx={{ p: 0.3 }}>
-              <AddIcon sx={{ fontSize: 14, color: "#17c1e8" }} />
+            <IconButton size="small" onClick={() => onAddChild(node)}
+              sx={{ p: 0.3, color: listMeta.color }}>
+              <AddIcon sx={{ fontSize: 13 }} />
             </IconButton>
           </Tooltip>
           <Tooltip title="تعديل">
-            <IconButton size="small" onClick={() => onEdit(node)} sx={{ p: 0.3 }}>
-              <EditIcon sx={{ fontSize: 14, color: "#8392ab" }} />
+            <IconButton size="small" onClick={() => onEdit(node)}
+              sx={{ p: 0.3, color: "#8392ab" }}>
+              <EditIcon sx={{ fontSize: 13 }} />
             </IconButton>
           </Tooltip>
         </SoftBox>
@@ -140,85 +176,138 @@ function TreeNode({ node, depth, expanded, selected, onToggle, onSelect, onAddCh
 
       {/* Children */}
       {hasChildren && (
-        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-          {node.children.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              expanded={expanded}
-              selected={selected}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              onAddChild={onAddChild}
-              onEdit={onEdit}
-            />
-          ))}
+        <Collapse in={isOpen} timeout="auto" unmountOnExit>
+          <SoftBox sx={{ borderRight: `1px solid ${listMeta.color}28`, ml: `${14 + depth * 20}px` }}>
+            {node.children.map((child) => (
+              <TreeNode
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                expanded={expanded}
+                selected={selected}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                onAddChild={onAddChild}
+                onEdit={onEdit}
+              />
+            ))}
+          </SoftBox>
         </Collapse>
       )}
     </SoftBox>
   );
 }
 
-// ─── Account Detail Panel ─────────────────────────────────────────────────────
-function AccountDetail({ account, onEdit, onAddChild }) {
+// ─── Detail Panel ─────────────────────────────────────────────────────────────
+function AccountDetail({ account, allAccounts, onEdit, onAddChild }) {
   if (!account) {
     return (
-      <SoftBox display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100%" minHeight={300} color="#8392ab">
-        <AccountTreeIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
-        <SoftTypography variant="caption" color="secondary">اختر حساباً من الشجرة لعرض تفاصيله</SoftTypography>
+      <SoftBox
+        display="flex" flexDirection="column"
+        alignItems="center" justifyContent="center"
+        height="100%" minHeight={300} gap={1.5}
+      >
+        <AccountTreeIcon sx={{ fontSize: 52, color: "#d2d6da" }} />
+        <SoftTypography variant="caption" color="secondary">
+          اختر حساباً من الشجرة لعرض تفاصيله
+        </SoftTypography>
       </SoftBox>
     );
   }
 
-  const cls = classificationLabels[account.classification];
-  const rows = [
-    { label: "الكود",         value: account.code },
-    { label: "الاسم",         value: account.nameAr },
-    { label: "المستوى",       value: account.level },
-    { label: "التصنيف",       value: <Chip label={cls?.label} size="small" sx={{ background: cls?.bg, color: cls?.color, fontWeight: 600 }} /> },
-    { label: "الطبيعة",       value: account.normalBalance === "debit" ? "مدين" : "دائن" },
-    { label: "ترحيل مسموح",  value: account.isPostable ? "✅ نعم" : "❌ لا (حساب أب)" },
-    { label: "رقابي",         value: account.isControl ? "نعم (sub-ledger)" : "لا" },
-    { label: "الحالة",        value: account.isActive ? <Chip label="نشط" size="small" color="success" /> : <Chip label="غير نشط" size="small" color="error" /> },
+  const listMeta  = ACCOUNT_LISTS[account.list];
+  const typeMeta  = ACCOUNT_TYPES[account.type];
+  const parent    = account.parent_id ? allAccounts.find((a) => a.id === account.parent_id) : null;
+
+  const fields = [
+    { label: "الكود",        value: <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 14 }}>{account.code}</span> },
+    { label: "الاسم",        value: account.nameAr },
+    { label: "النوع",        value: <Chip label={typeMeta.label} size="small" sx={{ background: typeMeta.bg, color: typeMeta.color, fontWeight: 600, fontSize: 11 }} /> },
+    { label: "القائمة",      value: <Chip label={listMeta.label} size="small" sx={{ background: listMeta.bg, color: listMeta.color, fontWeight: 600, fontSize: 11 }} /> },
+    { label: "الجهة",        value: ACCOUNT_DEPARTMENTS[account.department]?.label },
+    { label: "الطبيعة",      value: ACCOUNT_SIDES[account.side]?.label },
+    { label: "المستوى",      value: `المستوى ${account.level}` },
+    { label: "الحساب الأب",  value: parent ? <span style={{ fontFamily: "monospace", fontSize: 12 }}>{displayCode(parent)}</span> : "—" },
+    { label: "الحالة",       value: account.is_active
+        ? <Chip label="نشط" size="small" color="success" sx={{ fontSize: 11 }} />
+        : <Chip label="غير نشط" size="small" color="error" sx={{ fontSize: 11 }} /> },
   ];
 
   return (
-    <SoftBox p={2}>
-      <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <SoftTypography variant="h6" fontWeight="bold">{account.code} — {account.nameAr}</SoftTypography>
+    <SoftBox p={2.5}>
+      {/* Header */}
+      <SoftBox
+        display="flex" justifyContent="space-between" alignItems="flex-start"
+        mb={2} pb={2} sx={{ borderBottom: `2px solid ${listMeta.color}33` }}
+      >
+        <SoftBox>
+          <SoftBox display="flex" alignItems="center" gap={1} mb={0.5}>
+            <SoftTypography variant="h6" fontWeight="bold" sx={{ fontFamily: "monospace", color: listMeta.color }}>
+              {account.code}
+            </SoftTypography>
+            <SoftTypography variant="caption" sx={{ color: "#adb5bd" }}>#</SoftTypography>
+            <SoftTypography variant="h6" fontWeight="bold" sx={{ color: "#344767" }}>
+              {account.nameAr}
+            </SoftTypography>
+          </SoftBox>
+          <SoftBox display="flex" gap={0.8}>
+            <Chip label={typeMeta.label} size="small" sx={{ background: typeMeta.bg, color: typeMeta.color, fontSize: 10, height: 18 }} />
+            <Chip label={listMeta.label} size="small" sx={{ background: listMeta.bg, color: listMeta.color, fontSize: 10, height: 18 }} />
+            {!account.is_active && <Chip label="غير نشط" size="small" color="error" sx={{ fontSize: 10, height: 18 }} />}
+          </SoftBox>
+        </SoftBox>
         <SoftBox display="flex" gap={1}>
           <SoftButton size="small" variant="outlined" color="info" onClick={() => onAddChild(account)}>
-            <AddIcon sx={{ fontSize: 14, mr: 0.3 }} /> حساب فرعي
+            <AddIcon sx={{ fontSize: 13, mr: 0.3 }} /> فرعي
           </SoftButton>
           <SoftButton size="small" variant="outlined" color="secondary" onClick={() => onEdit(account)}>
-            <EditIcon sx={{ fontSize: 14, mr: 0.3 }} /> تعديل
+            <EditIcon sx={{ fontSize: 13, mr: 0.3 }} /> تعديل
           </SoftButton>
         </SoftBox>
       </SoftBox>
 
-      <Divider sx={{ mb: 2 }} />
+      {/* Fields */}
+      <Grid container spacing={0}>
+        {fields.map(({ label, value }) => (
+          <Grid item xs={6} key={label}>
+            <SoftBox display="flex" alignItems="center" mb={1.4} gap={1}>
+              <SoftTypography variant="caption" color="secondary" sx={{ minWidth: 80, flexShrink: 0 }}>
+                {label}
+              </SoftTypography>
+              <SoftTypography variant="caption" fontWeight="medium" component="div">
+                {value}
+              </SoftTypography>
+            </SoftBox>
+          </Grid>
+        ))}
+      </Grid>
 
-      {rows.map(({ label, value }) => (
-        <SoftBox key={label} display="flex" alignItems="center" mb={1.2}>
-          <SoftTypography variant="caption" color="secondary" sx={{ minWidth: 110 }}>{label}</SoftTypography>
-          <SoftTypography variant="caption" fontWeight="medium">{value}</SoftTypography>
-        </SoftBox>
-      ))}
-
-      {/* Balance card */}
-      {account.isPostable && (
-        <SoftBox mt={2} p={1.5} sx={{ background: "#f8f9fa", borderRadius: 2, border: "1px solid #eee" }}>
-          <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>الرصيد — السنة المالية 2025</SoftTypography>
-          <SoftTypography variant="h5" fontWeight="bold" sx={{ color: "#344767" }}>{fmt(account.balance)} دج</SoftTypography>
+      {/* Balance */}
+      {isPostable(account) && (
+        <SoftBox mt={2} p={2}
+          sx={{ background: `${listMeta.color}0d`, borderRadius: 2, border: `1px solid ${listMeta.color}33` }}>
+          <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>
+            الرصيد — {mockFiscalYears[0]?.name}
+          </SoftTypography>
+          <SoftTypography variant="h5" fontWeight="bold" sx={{ color: listMeta.color }}>
+            {fmt(account.balance ?? 0)} دج
+          </SoftTypography>
+          <SoftTypography variant="caption" color="secondary">
+            {ACCOUNT_SIDES[account.side]?.label}
+          </SoftTypography>
         </SoftBox>
       )}
 
-      {account.children?.length > 0 && (
-        <SoftBox mt={2} p={1.5} sx={{ background: "#f8f9fa", borderRadius: 2, border: "1px solid #eee" }}>
-          <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>الرصيد المجمع من الأبناء</SoftTypography>
-          <SoftTypography variant="h5" fontWeight="bold" sx={{ color: "#344767" }}>{fmt(account.totalBalance)} دج</SoftTypography>
-          <SoftTypography variant="caption" color="secondary">{account.children.length} حساب فرعي مباشر</SoftTypography>
+      {/* Group total */}
+      {!isPostable(account) && account.totalBalance > 0 && (
+        <SoftBox mt={2} p={2}
+          sx={{ background: "#f8f9fa", borderRadius: 2, border: "1px solid #e9ecef" }}>
+          <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>
+            الرصيد المجمع ({account.children?.length ?? 0} حساب فرعي مباشر)
+          </SoftTypography>
+          <SoftTypography variant="h5" fontWeight="bold" sx={{ color: "#344767" }}>
+            {fmt(account.totalBalance)} دج
+          </SoftTypography>
         </SoftBox>
       )}
     </SoftBox>
@@ -226,76 +315,240 @@ function AccountDetail({ account, onEdit, onAddChild }) {
 }
 
 // ─── Account Form Dialog ──────────────────────────────────────────────────────
-function AccountFormDialog({ open, onClose, editAccount, parentAccount, allAccounts }) {
-  const isEdit = !!editAccount;
-  const siblings = useMemo(() => {
-    if (isEdit) return [];
-    return allAccounts.filter((a) => a.parentId === parentAccount?.id);
-  }, [isEdit, parentAccount, allAccounts]);
+function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, allAccounts }) {
+  const isEdit    = !!editAccount;
+  const siblings  = useMemo(
+    () => !isEdit ? allAccounts.filter((a) => a.parent_id === (parentAccount?.id ?? null)) : [],
+    [isEdit, parentAccount, allAccounts]
+  );
+  const suggested = useMemo(
+    () => !isEdit ? suggestChildCode(parentAccount ?? null, siblings) : "",
+    [isEdit, parentAccount, siblings]
+  );
 
-  const [form, setForm] = useState({
-    code: isEdit ? editAccount?.code : suggestChildCode(parentAccount, siblings),
-    nameAr: isEdit ? editAccount?.nameAr : "",
-    classification: isEdit ? editAccount?.classification : (parentAccount?.classification ?? "asset"),
-    normalBalance: isEdit ? editAccount?.normalBalance : (parentAccount?.normalBalance ?? "debit"),
-    isPostable: isEdit ? editAccount?.isPostable : true,
-    isActive: isEdit ? editAccount?.isActive : true,
+  const initForm = () => ({
+    code:       isEdit ? editAccount.code       : suggested,
+    nameAr:     isEdit ? editAccount.nameAr     : "",
+    type:       isEdit ? editAccount.type        : (parentAccount ? Math.min(parentAccount.type + 1, 3) : 0),
+    list:       isEdit ? editAccount.list        : (parentAccount?.list       ?? 1),
+    department: isEdit ? editAccount.department  : (parentAccount?.department ?? 1),
+    side:       isEdit ? editAccount.side        : (parentAccount?.side       ?? 1),
+    is_active:  isEdit ? editAccount.is_active   : true,
   });
+
+  const [form, setForm]       = useState(initForm);
+  const [touched, setTouched] = useState(false);
+
+  // Reset when dialog reopens
+  useMemo(() => { if (open) { setForm(initForm()); setTouched(false); } }, [open]); // eslint-disable-line
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
+  // Validation
+  const codeEmpty     = !form.code.trim();
+  const codeDuplicate = isDuplicateCode(form.code.trim(), allAccounts, isEdit ? editAccount.id : null);
+  const nameEmpty     = !form.nameAr.trim();
+  const codeError     = touched && (codeEmpty ? "الكود مطلوب" : codeDuplicate ? "الكود موجود مسبقاً" : "");
+  const nameError     = touched && nameEmpty ? "الاسم مطلوب" : "";
+  const hasError      = codeEmpty || codeDuplicate || nameEmpty;
+
+  const handleSave = () => {
+    setTouched(true);
+    if (hasError) return;
+
+    const parentId = isEdit ? editAccount.parent_id : (parentAccount?.id ?? null);
+    const level    = isEdit ? editAccount.level : ((parentAccount?.level ?? 0) + 1);
+
+    onSave({
+      ...(isEdit ? editAccount : {}),
+      id:          isEdit ? editAccount.id : newId(),
+      code:        form.code.trim(),
+      nameAr:      form.nameAr.trim(),
+      parent_id:   parentId,
+      parent_code: isEdit ? editAccount.parent_code : (parentAccount?.code ?? null),
+      level,
+      type:        form.type,
+      list:        form.list,
+      department:  form.department,
+      side:        form.side,
+      is_active:   form.is_active,
+      balance:     isEdit ? (editAccount.balance ?? 0) : 0,
+    });
+  };
+
+  // Fields inherited from parent (shown with indicator)
+  const inherited = !isEdit && parentAccount
+    ? { list: true, department: true, side: true }
+    : {};
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <SoftTypography variant="h6" fontWeight="bold">
-          {isEdit ? "تعديل الحساب" : parentAccount ? `حساب فرعي تحت: ${parentAccount.nameAr}` : "حساب رئيسي جديد"}
-        </SoftTypography>
+      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pb: 1 }}>
+        <SoftBox>
+          <SoftTypography variant="h6" fontWeight="bold">
+            {isEdit ? "تعديل الحساب" : parentAccount ? "حساب فرعي جديد" : "حساب رئيسي جديد"}
+          </SoftTypography>
+          {parentAccount && !isEdit && (
+            <SoftTypography variant="caption" color="secondary">
+              تحت: <strong style={{ fontFamily: "monospace" }}>{displayCode(parentAccount)}</strong>
+            </SoftTypography>
+          )}
+        </SoftBox>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
+
       <DialogContent dividers>
         <Grid container spacing={2} mt={0}>
+
+          {/* Code */}
           <Grid item xs={4}>
-            <TextField fullWidth size="small" label="الكود *" value={form.code} onChange={(e) => set("code", e.target.value)} />
+            <TextField
+              fullWidth size="small" label="الكود *"
+              value={form.code}
+              onChange={(e) => set("code", e.target.value)}
+              error={!!codeError}
+              helperText={codeError || " "}
+              InputProps={{
+                endAdornment: !isEdit && form.code === suggested && (
+                  <InputAdornment position="end">
+                    <Tooltip title="كود مُقترح تلقائياً">
+                      <LightbulbOutlinedIcon sx={{ fontSize: 14, color: "#fb8c00" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ "& input": { fontFamily: "monospace", fontWeight: 700 } }}
+            />
           </Grid>
+
+          {/* Name */}
           <Grid item xs={8}>
-            <TextField fullWidth size="small" label="اسم الحساب *" value={form.nameAr} onChange={(e) => set("nameAr", e.target.value)} />
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth size="small">
-              <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">التصنيف</SoftTypography>
-              <Select value={form.classification} onChange={(e) => set("classification", e.target.value)}>
-                {["asset","liability","equity","revenue","expense"].map((c) => (
-                  <MenuItem key={c} value={c}>{classificationLabels[c]?.label}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth size="small">
-              <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">الطبيعة</SoftTypography>
-              <Select value={form.normalBalance} onChange={(e) => set("normalBalance", e.target.value)}>
-                <MenuItem value="debit">مدين</MenuItem>
-                <MenuItem value="credit">دائن</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={6}>
-            <FormControlLabel
-              control={<Switch checked={form.isPostable} onChange={(e) => set("isPostable", e.target.checked)} />}
-              label={<SoftTypography variant="caption">يسمح بالترحيل (leaf)</SoftTypography>}
+            <TextField
+              fullWidth size="small" label="اسم الحساب *"
+              value={form.nameAr}
+              onChange={(e) => set("nameAr", e.target.value)}
+              error={!!nameError}
+              helperText={nameError || " "}
             />
           </Grid>
+
+          {/* Type */}
           <Grid item xs={6}>
-            <FormControlLabel
-              control={<Switch checked={form.isActive} onChange={(e) => set("isActive", e.target.checked)} color="success" />}
-              label={<SoftTypography variant="caption">نشط</SoftTypography>}
-            />
+            <TextField
+              fullWidth select size="small" label="النوع"
+              value={form.type}
+              onChange={(e) => set("type", Number(e.target.value))}
+            >
+              {Object.entries(ACCOUNT_TYPES).map(([k, v]) => (
+                <MenuItem key={k} value={Number(k)}>{v.label}</MenuItem>
+              ))}
+            </TextField>
           </Grid>
+
+          {/* List */}
+          <Grid item xs={6}>
+            <TextField
+              fullWidth select size="small"
+              label={<SoftBox component="span" display="flex" alignItems="center" gap={0.5}>
+                القائمة {inherited.list && <Chip label="موروث" size="small" sx={{ height: 14, fontSize: 9, background: "#fff3e0", color: "#fb8c00" }} />}
+              </SoftBox>}
+              value={form.list}
+              onChange={(e) => set("list", Number(e.target.value))}
+            >
+              {Object.entries(ACCOUNT_LISTS).map(([k, v]) => (
+                <MenuItem key={k} value={Number(k)}>{v.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {/* Department */}
+          <Grid item xs={6}>
+            <TextField
+              fullWidth select size="small"
+              label={<SoftBox component="span" display="flex" alignItems="center" gap={0.5}>
+                الجهة {inherited.department && <Chip label="موروث" size="small" sx={{ height: 14, fontSize: 9, background: "#fff3e0", color: "#fb8c00" }} />}
+              </SoftBox>}
+              value={form.department}
+              onChange={(e) => set("department", Number(e.target.value))}
+            >
+              {Object.entries(ACCOUNT_DEPARTMENTS).map(([k, v]) => (
+                <MenuItem key={k} value={Number(k)}>{v.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {/* Side */}
+          <Grid item xs={6}>
+            <TextField
+              fullWidth select size="small"
+              label={<SoftBox component="span" display="flex" alignItems="center" gap={0.5}>
+                الطبيعة {inherited.side && <Chip label="موروث" size="small" sx={{ height: 14, fontSize: 9, background: "#fff3e0", color: "#fb8c00" }} />}
+              </SoftBox>}
+              value={form.side}
+              onChange={(e) => set("side", Number(e.target.value))}
+            >
+              {Object.entries(ACCOUNT_SIDES).map(([k, v]) => (
+                <MenuItem key={k} value={Number(k)}>{v.label}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {/* Level (read-only info) */}
+          <Grid item xs={6}>
+            <SoftBox px={1.5} py={1}
+              sx={{ background: "#f8f9fa", borderRadius: 1.5, border: "1px solid #e9ecef" }}>
+              <SoftTypography variant="caption" color="secondary" display="block" sx={{ fontSize: 10, mb: 0.2 }}>
+                المستوى (محسوب تلقائياً)
+              </SoftTypography>
+              <SoftTypography variant="caption" fontWeight="bold">
+                المستوى {isEdit ? editAccount.level : ((parentAccount?.level ?? 0) + 1)}
+              </SoftTypography>
+            </SoftBox>
+          </Grid>
+
+          {/* Active switch */}
+          <Grid item xs={6}>
+            <SoftBox display="flex" alignItems="center" height="100%" pt={0.5}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={form.is_active}
+                    onChange={(e) => set("is_active", e.target.checked)}
+                    color="success" size="small"
+                  />
+                }
+                label={
+                  <SoftTypography variant="caption" fontWeight="medium">
+                    {form.is_active ? "نشط" : "غير نشط"}
+                  </SoftTypography>
+                }
+                sx={{ m: 0, gap: 0.8 }}
+              />
+            </SoftBox>
+          </Grid>
+
+          {/* Duplicate warning */}
+          {touched && codeDuplicate && (
+            <Grid item xs={12}>
+              <SoftBox display="flex" alignItems="center" gap={1} p={1}
+                sx={{ background: "#ffeaea", borderRadius: 1.5, border: "1px solid #ea060622" }}>
+                <ErrorOutlineIcon sx={{ fontSize: 16, color: "#ea0606" }} />
+                <SoftTypography variant="caption" sx={{ color: "#ea0606" }}>
+                  الكود <strong>{form.code}</strong> مستخدم مسبقاً — يجب أن يكون فريداً داخل الدليل
+                </SoftTypography>
+              </SoftBox>
+            </Grid>
+          )}
         </Grid>
       </DialogContent>
+
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="text" color="secondary" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" onClick={onClose}>
+        <SoftButton
+          variant="gradient" color="info"
+          onClick={handleSave}
+          startIcon={<CheckCircleOutlineIcon />}
+        >
           {isEdit ? "حفظ التعديلات" : "إضافة الحساب"}
         </SoftButton>
       </DialogActions>
@@ -305,48 +558,61 @@ function AccountFormDialog({ open, onClose, editAccount, parentAccount, allAccou
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AccountsTree() {
-  const [search, setSearch] = useState("");
-  const [clsFilter, setClsFilter] = useState("الكل");
+  const [accounts, setAccounts]   = useState(mockAccountsV2);
+  const [search, setSearch]       = useState("");
+  const [listFilter, setListFilter] = useState(0);   // 0 = all
   const [showInactive, setShowInactive] = useState(false);
-  const [expanded, setExpanded] = useState({});
-  const [selected, setSelected] = useState(null);
-  const [dialog, setDialog] = useState(null); // { mode: 'add'|'edit', parent?, account? }
-  const [activeFY] = useState(mockFiscalYears[0]);
+  const [expanded, setExpanded]   = useState({});
+  const [selected, setSelected]   = useState(null);
+  const [dialog, setDialog]       = useState(null);   // { mode, parent?, account? }
+  const [activeFY]                = useState(mockFiscalYears[0]);
 
-  const allAccounts = mockAccounts;
+  // ── Save handler ──────────────────────────────────────────────────────────
+  const handleSave = (saved) => {
+    setAccounts((prev) => {
+      const exists = prev.some((a) => a.id === saved.id);
+      return exists
+        ? prev.map((a) => (a.id === saved.id ? saved : a))
+        : [...prev, saved];
+    });
+    setSelected(saved);
+    setDialog(null);
+  };
 
-  // Filter flat list then build tree
+  // ── Filtered flat list ────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let list = allAccounts;
-    if (clsFilter !== "الكل") list = list.filter((a) => a.classification === clsFilter);
-    if (!showInactive) list = list.filter((a) => a.isActive);
+    let list = accounts;
+    if (!showInactive) list = list.filter((a) => a.is_active);
+    if (listFilter)    list = list.filter((a) => a.list === listFilter);
+
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       const matched = new Set();
-      const addParents = (id) => {
+      const addAncestors = (id) => {
         if (!id || matched.has(id)) return;
         matched.add(id);
-        const p = allAccounts.find((a) => a.id === id);
-        if (p) addParents(p.parentId);
+        const p = accounts.find((a) => a.id === id);
+        if (p) addAncestors(p.parent_id);
       };
-      list.forEach((a) => {
-        if (a.nameAr.includes(q) || a.code.includes(q)) addParents(a.id);
+      accounts.forEach((a) => {
+        if (a.nameAr.includes(q) || a.code.includes(q)) addAncestors(a.id);
       });
-      list = allAccounts.filter((a) => matched.has(a.id));
+      list = list.filter((a) => matched.has(a.id));
     }
     return list;
-  }, [allAccounts, clsFilter, showInactive, search]);
+  }, [accounts, search, listFilter, showInactive]);
 
-  const tree = useMemo(() => buildTree(filtered), [filtered]);
-  const flatAll = useMemo(() => flattenTree(buildTree(allAccounts)), [allAccounts]);
+  const tree    = useMemo(() => buildAccountTreeV2(filtered),  [filtered]);
+  const flatAll = useMemo(() => flattenV2(buildAccountTreeV2(accounts)), [accounts]);
 
-  const toggleNode = (id) => setExpanded((p) => ({ ...p, [id]: !((p[id] ?? true)) }));
-  const expandAll = () => {
-    const m = {};
-    flatAll.forEach((n) => { m[n.id] = true; });
-    setExpanded(m);
-  };
+  // ── Expand / collapse ─────────────────────────────────────────────────────
+  const toggleNode  = (id) => setExpanded((p) => ({ ...p, [id]: !(p[id] ?? true) }));
+  const expandAll   = () => { const m = {}; flatAll.forEach((n) => { m[n.id] = true; }); setExpanded(m); };
   const collapseAll = () => setExpanded({});
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const totalActive = accounts.filter((a) => a.is_active).length;
+  const totalLeaf   = accounts.filter((a) => a.is_active && isPostable(a)).length;
 
   return (
     <DashboardLayout>
@@ -354,87 +620,136 @@ export default function AccountsTree() {
       <SoftBox py={3}>
 
         {/* ── Header ── */}
-        <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={2}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="flex-start" mb={3} flexWrap="wrap" gap={2}>
           <SoftBox>
             <SoftTypography variant="h5" fontWeight="bold">شجرة الحسابات</SoftTypography>
             <SoftTypography variant="caption" color="secondary">
-              {activeFY.name} · {allAccounts.filter((a) => a.isActive).length} حساب نشط
+              {activeFY?.name} · {totalActive} حساب نشط · {totalLeaf} حساب ترحيل
             </SoftTypography>
           </SoftBox>
-          <SoftButton variant="gradient" color="info" size="small" onClick={() => setDialog({ mode: "add", parent: null })}>
+          <SoftButton
+            variant="gradient" color="info" size="small"
+            onClick={() => setDialog({ mode: "add", parent: null })}
+          >
             <AddIcon sx={{ mr: 0.5, fontSize: 16 }} /> حساب رئيسي
           </SoftButton>
         </SoftBox>
 
-        <Grid container spacing={2}>
-          {/* ── Left: Tree ── */}
-          <Grid item xs={12} md={5}>
-            <Card sx={{ height: "100%", minHeight: 600 }}>
-              {/* Search + filters */}
-              <SoftBox p={2} borderBottom="1px solid #eee">
+        <Grid container spacing={2.5}>
+          {/* ── Left: Tree panel ── */}
+          <Grid item xs={12} md={5} lg={4}>
+            <Card sx={{ height: "100%", minHeight: 620, display: "flex", flexDirection: "column" }}>
+
+              {/* Search & filters */}
+              <SoftBox p={2} sx={{ borderBottom: "1px solid #f0f2f5" }}>
                 <TextField
-                  fullWidth size="small" placeholder="بحث بالكود أو الاسم..."
-                  value={search} onChange={(e) => setSearch(e.target.value)}
-                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon sx={{ fontSize: 18, color: "#8392ab" }} /></InputAdornment> }}
+                  fullWidth size="small"
+                  placeholder="بحث بالكود أو الاسم..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   sx={{ mb: 1.5 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 16, color: "#8392ab" }} />
+                      </InputAdornment>
+                    ),
+                  }}
                 />
-                <SoftBox display="flex" gap={1} flexWrap="wrap" alignItems="center">
-                  <FormControl size="small" sx={{ minWidth: 110 }}>
-                    <Select value={clsFilter} onChange={(e) => setClsFilter(e.target.value)}>
-                      {CLASSIFICATIONS.map((c) => (
-                        <MenuItem key={c} value={c}>
-                          {c === "الكل" ? "كل التصنيفات" : classificationLabels[c]?.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <FormControlLabel
-                    control={<Switch size="small" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />}
-                    label={<SoftTypography variant="caption">غير نشط</SoftTypography>}
-                    sx={{ m: 0 }}
+
+                {/* List filter chips */}
+                <SoftBox display="flex" gap={0.6} flexWrap="wrap" alignItems="center">
+                  <Chip
+                    label="الكل"
+                    size="small"
+                    onClick={() => setListFilter(0)}
+                    sx={{
+                      cursor: "pointer", height: 22, fontSize: "10px",
+                      background: listFilter === 0 ? "#344767" : "#e9ecef",
+                      color: listFilter === 0 ? "#fff" : "#67748e",
+                    }}
                   />
-                  <SoftBox ml="auto" display="flex" gap={0.5}>
-                    <Tooltip title="توسيع الكل"><IconButton size="small" onClick={expandAll}><UnfoldMoreIcon fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="طي الكل"><IconButton size="small" onClick={collapseAll}><UnfoldLessIcon fontSize="small" /></IconButton></Tooltip>
+                  {Object.entries(ACCOUNT_LISTS).map(([k, v]) => (
+                    <Chip
+                      key={k}
+                      label={v.label}
+                      size="small"
+                      onClick={() => setListFilter(listFilter === Number(k) ? 0 : Number(k))}
+                      sx={{
+                        cursor: "pointer", height: 22, fontSize: "10px",
+                        background: listFilter === Number(k) ? v.color : v.bg,
+                        color: listFilter === Number(k) ? "#fff" : v.color,
+                        transition: "all 0.15s",
+                      }}
+                    />
+                  ))}
+
+                  <SoftBox ml="auto" display="flex" gap={0.3} alignItems="center">
+                    <FormControlLabel
+                      control={<Switch size="small" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />}
+                      label={<SoftTypography variant="caption" sx={{ fontSize: "10px" }}>غير نشط</SoftTypography>}
+                      sx={{ m: 0, gap: 0.3 }}
+                    />
+                    <Tooltip title="توسيع الكل">
+                      <IconButton size="small" onClick={expandAll} sx={{ p: 0.3 }}>
+                        <UnfoldMoreIcon sx={{ fontSize: 15 }} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="طي الكل">
+                      <IconButton size="small" onClick={collapseAll} sx={{ p: 0.3 }}>
+                        <UnfoldLessIcon sx={{ fontSize: 15 }} />
+                      </IconButton>
+                    </Tooltip>
                   </SoftBox>
                 </SoftBox>
               </SoftBox>
 
-              {/* Tree */}
-              <SoftBox p={1} sx={{ overflowY: "auto", maxHeight: 520 }}>
+              {/* Tree list */}
+              <SoftBox flex={1} p={1} sx={{ overflowY: "auto" }}>
                 {tree.length === 0 ? (
-                  <SoftTypography variant="caption" color="secondary" sx={{ display: "block", textAlign: "center", py: 4 }}>
-                    لا توجد حسابات
+                  <SoftTypography variant="caption" color="secondary"
+                    sx={{ display: "block", textAlign: "center", py: 5 }}>
+                    لا توجد حسابات تطابق البحث
                   </SoftTypography>
-                ) : tree.map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    depth={0}
-                    expanded={expanded}
-                    selected={selected}
-                    onToggle={toggleNode}
-                    onSelect={setSelected}
-                    onAddChild={(n) => setDialog({ mode: "add", parent: n })}
-                    onEdit={(n) => setDialog({ mode: "edit", account: n })}
-                  />
-                ))}
+                ) : (
+                  tree.map((node) => (
+                    <TreeNode
+                      key={node.id}
+                      node={node}
+                      depth={0}
+                      expanded={expanded}
+                      selected={selected}
+                      onToggle={toggleNode}
+                      onSelect={setSelected}
+                      onAddChild={(n) => setDialog({ mode: "add", parent: n })}
+                      onEdit={(n) => setDialog({ mode: "edit", account: n })}
+                    />
+                  ))
+                )}
               </SoftBox>
 
-              {/* Legend */}
-              <SoftBox p={1.5} borderTop="1px solid #eee" display="flex" flexWrap="wrap" gap={1}>
-                {Object.entries(classificationLabels).map(([k, v]) => (
-                  <Chip key={k} label={v.label} size="small" sx={{ background: v.bg, color: v.color, fontSize: 10, height: 20 }} />
+              {/* Type legend */}
+              <SoftBox
+                px={2} py={1.2}
+                display="flex" flexWrap="wrap" gap={0.8}
+                sx={{ borderTop: "1px solid #f0f2f5" }}
+              >
+                {Object.entries(ACCOUNT_TYPES).map(([k, v]) => (
+                  <SoftBox key={k} display="flex" alignItems="center" gap={0.4}>
+                    <SoftBox sx={{ width: 7, height: 7, borderRadius: "50%", background: v.color, flexShrink: 0 }} />
+                    <SoftTypography variant="caption" sx={{ fontSize: "10px", color: "#8392ab" }}>{v.label}</SoftTypography>
+                  </SoftBox>
                 ))}
               </SoftBox>
             </Card>
           </Grid>
 
-          {/* ── Right: Detail ── */}
-          <Grid item xs={12} md={7}>
-            <Card sx={{ height: "100%", minHeight: 600 }}>
+          {/* ── Right: Detail panel ── */}
+          <Grid item xs={12} md={7} lg={8}>
+            <Card sx={{ height: "100%", minHeight: 620 }}>
               <AccountDetail
                 account={selected}
+                allAccounts={flatAll}
                 onEdit={(n) => setDialog({ mode: "edit", account: n })}
                 onAddChild={(n) => setDialog({ mode: "add", parent: n })}
               />
@@ -448,6 +763,7 @@ export default function AccountsTree() {
         <AccountFormDialog
           open={!!dialog}
           onClose={() => setDialog(null)}
+          onSave={handleSave}
           editAccount={dialog.mode === "edit" ? dialog.account : null}
           parentAccount={dialog.parent ?? null}
           allAccounts={flatAll}

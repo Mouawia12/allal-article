@@ -179,9 +179,9 @@
 | T11 | manufacturing_requests, manufacturing_request_materials, manufacturing_quality_checks, manufacturing_events, manufacturing_receipts | إدارة التصنيع بعد المنتجات والمخزون والطلبيات لأنها قد ترتبط ببيع أو بسد نقص مخزون |
 | T12 | suppliers, purchase_orders, purchase_order_items, purchase_returns, purchase_return_items | الموردين والمشتريات ومرتجعات الشراء وربط المورد بالشريك |
 | T13 | road_invoices, road_invoice_items, road_invoice_orders | فواتير الطريق |
-| T14 | accounting core: fiscal_years, periods, account_classes, account_templates, accounts, subledger_entities | نواة المحاسبة وشجرة الحسابات |
-| T15 | accounting operations: journal_books, sequences, journals, journal_items, dimensions | دفاتر اليومية والقيود والأبعاد |
-| T16 | accounting automation: tax_codes, accounting_settings, accounting_rules, opening_balances, reconciliation | الربط التلقائي والضرائب والمطابقة |
+| T14 | accounting core: fiscal_years, accounting_periods, account_classes, account_templates, account_template_items, chart_template_deployments, accounts, subledger_entities | نواة المحاسبة وشجرة الحسابات وتتبع الزرع |
+| T15 | accounting operations: journal_books (+ year_format, is_system), number_sequences, journals, journal_items, dimension_types, dimensions, journal_item_dimensions | دفاتر اليومية والقيود والأبعاد |
+| T16 | accounting automation: tax_codes (+ is_price_inclusive), tax_rates, tax_code_accounts, accounting_settings, accounting_rules, accounting_rule_items, opening_balances, subledger_opening_balances, account_balances (PK→id + partial unique index), reconciliation_matches (+ subledger_entity_id + bank_account_id + fiscal_year_id), reconciliation_items, bank_accounts (+ currency + last_reconciled_at + public_id), cash_boxes (+ currency + public_id), payment_methods, category_account_mappings, product_account_mappings, inventory_valuation_layers, year_close_runs | الربط التلقائي والضرائب والمطابقة والصندوق والبنك |
 | T17 | notification_types, notifications, notification_recipients, notification_templates, notification_actions, notification_escalations, notification_preferences, notification_rules, notification_retention_policies, notification_outbox | إشعارات المشترك |
 | T18 | resource_lock_policies, resource_locks, resource_lock_events | قفل التحرير ومنع التعديل المتزامن |
 | T19 | media_assets, ai_jobs, ai_job_items | وظائف مساندة |
@@ -1444,6 +1444,23 @@
 
 - `account_classes` وفق القالب المختار، ويفضل قالب `dz_scf_trading`.
 - `account_templates` و `account_template_items` لشجرة الحسابات الافتراضية.
+- قالب `dz_scf_trading` يجب أن يعتمد نظام كود رقمي واضح:
+  - `code_scheme = 4_digit_grouped`
+  - `code_length = 4`
+  - `code_pattern = ^[0-9]{4}$`
+  - أمثلة الجذور: `1000` أصول، `2000` خصوم، `3000` حقوق ملكية، `4000` إيرادات، `5000` مصروفات/أعباء.
+  - أمثلة الفروع: `1010` أصول ثابتة، `1011` مباني، `1100` مخزون، `1201` ذمم العملاء، `1301` صندوق.
+- عند زرع الشجرة في `accounts` يجب حفظ أصل الحساب:
+  - `template_item_id`
+  - `template_version`
+  - `is_template_locked`
+  - `is_custom = false`
+- كل `account_template_items` و`accounts` يجب أن تحتوي حقول التقارير:
+  - `financial_statement`
+  - `report_section`
+  - `statement_line_code`
+  - `statement_sort_order`
+  - `cash_flow_section`
 - `journal_books`: مبيعات، مشتريات، صندوق، بنك، مخزون، يدوي، افتتاح، إقفال.
 - `number_sequences` لكل دفتر حسب السنة.
 - `dimension_types`: مركز تكلفة، ولاية، بائع، مخزن، مسار شحن.

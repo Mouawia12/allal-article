@@ -21,6 +21,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import SettingsIcon from "@mui/icons-material/Settings";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 
@@ -341,13 +342,19 @@ function Products({
             <SoftTypography variant="h4" fontWeight="bold">{title}</SoftTypography>
             <SoftTypography variant="body2" color="text">{subtitle}</SoftTypography>
           </SoftBox>
-          <SoftBox display="flex" gap={1}>
+          <SoftBox display="flex" gap={1} alignItems="center">
             <SoftButton variant="outlined" color="info" size="small" startIcon={<PriceChangeIcon />} onClick={() => navigate("/products/price-lists")}>
               قوائم الأسعار
             </SoftButton>
             <SoftButton variant="outlined" color="secondary" size="small" startIcon={<CloudUploadIcon />}>
               استيراد
             </SoftButton>
+            <Tooltip title="إعدادات الأصناف">
+              <IconButton size="small" onClick={() => navigate("/products/settings")}
+                sx={{ border: "1px solid #e9ecef", borderRadius: "8px", p: "6px" }}>
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <SoftButton variant="gradient" color="info" startIcon={<AddIcon />} onClick={() => navigate("/products/new")}>
               إضافة صنف
             </SoftButton>

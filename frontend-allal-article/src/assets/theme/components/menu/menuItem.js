@@ -28,17 +28,29 @@ const { size } = typography;
 const menuItem = {
   styleOverrides: {
     root: {
-      minWidth: pxToRem(160),
+      minWidth: pxToRem(140),
       minHeight: "unset",
-      padding: `${pxToRem(4.8)} ${pxToRem(16)}`,
-      borderRadius: borderRadius.md,
+      padding: `${pxToRem(8)} ${pxToRem(12)}`,
+      borderRadius: pxToRem(8),
       fontSize: size.sm,
       color: text.main,
-      transition: "background-color 300ms ease, color 300ms ease",
+      transition: "background-color 150ms ease, color 150ms ease",
+      margin: `0 0 ${pxToRem(2)} 0`,
 
-      "&:hover, &:focus, &.Mui-selected, &.Mui-selected:hover, &.Mui-selected:focus": {
-        backgroundColor: light.main,
+      "&:hover, &:focus": {
+        backgroundColor: "#f0f7ff",
         color: dark.main,
+      },
+
+      "&.Mui-selected": {
+        backgroundColor: "#e8f4fd",
+        color: "#17c1e8",
+        fontWeight: 600,
+
+        "&:hover, &:focus": {
+          backgroundColor: "#d6eefb",
+          color: "#0ea5c9",
+        },
       },
     },
   },

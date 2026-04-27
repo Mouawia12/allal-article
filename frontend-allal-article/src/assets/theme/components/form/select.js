@@ -26,7 +26,9 @@ const select = {
     select: {
       display: "grid",
       alignItems: "center",
+      width: "100% !important",
       padding: `0 ${pxToRem(12)} !important`,
+      cursor: "pointer",
 
       "& .Mui-selected": {
         backgroundColor: transparent.main,
@@ -41,7 +43,18 @@ const select = {
     },
 
     icon: {
-      display: "none",
+      display: "block",
+      color: "#adb5bd",
+      fontSize: pxToRem(18),
+      top: "50%",
+      transform: "translateY(-50%)",
+      transition: "transform 200ms ease, color 200ms ease",
+      pointerEvents: "none",
+
+      "&.MuiSelect-iconOpen": {
+        transform: "translateY(-50%) rotate(180deg)",
+        color: "#17c1e8",
+      },
     },
   },
 };

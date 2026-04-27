@@ -37,9 +37,10 @@ export const mockAccounts = [
   { id: 102, code: "113", nameAr: "وسائل النقل",               parentId: 10,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 6000000  },
   { id: 110, code: "121", nameAr: "بضاعة للبيع",              parentId: 11,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 12800000 },
   { id: 120, code: "131", nameAr: "ذمم العملاء",               parentId: 12,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: false, isControl: true,  isActive: true,  balance: 18450000 },
-  { id: 121, code: "132", nameAr: "ذمم مدينة متنوعة",         parentId: 12,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 2100000  },
-  { id: 130, code: "141", nameAr: "الصندوق",                   parentId: 13,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 4250000  },
+  { id: 121, code: "132", nameAr: "ذمم مدينة متنوعة",         parentId: 12,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 2300000  },
+  { id: 130, code: "141", nameAr: "الصندوق الرئيسي",            parentId: 13,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 4250000  },
   { id: 131, code: "142", nameAr: "الحساب البنكي",             parentId: 13,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 9800000  },
+  { id: 132, code: "143", nameAr: "صندوق المبيعات",            parentId: 13,  level: 3, classification: "asset",     normalBalance: "debit",  isPostable: true,  isControl: false, isActive: true,  balance: 850000   },
   { id: 200, code: "211", nameAr: "قروض بنكية",               parentId: 20,  level: 3, classification: "liability",  normalBalance: "credit", isPostable: true,  isControl: false, isActive: true,  balance: 5000000  },
   { id: 210, code: "221", nameAr: "ذمم الموردين",              parentId: 21,  level: 3, classification: "liability",  normalBalance: "credit", isPostable: false, isControl: true,  isActive: true,  balance: 8200000  },
   { id: 211, code: "222", nameAr: "ذمم دائنة متنوعة",        parentId: 21,  level: 3, classification: "liability",  normalBalance: "credit", isPostable: true,  isControl: false, isActive: true,  balance: 1500000  },
@@ -180,4 +181,162 @@ export const journalSourceLabels = {
 export function fmt(n) {
   if (!n && n !== 0) return "—";
   return Number(n).toLocaleString("ar-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCHEMA V2 — شجرة الحسابات المحاسبية
+// ═══════════════════════════════════════════════════════════════════════════════
+// type:       0=Root(دليل)  1=General(رئيسي)  2=Branch(فرعي)  3=BranchLedger(أستاذ فرعي)
+// list:       1=Assets(أصول)  2=Discounts(خصومات)  3=Income(إيرادات)  4=Expenses(مصروفات)
+// department: 1=BalanceSheet(الميزانية)  2=IncomeStatement(قائمة الدخل)
+// side:       1=Debit(مدين)  2=Credit(دائن)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const ACCOUNT_TYPES = {
+  0: { label: "دليل",        color: "#344767", bg: "#e9ecef" },
+  1: { label: "رئيسي",      color: "#7928ca", bg: "#f3e8ff" },
+  2: { label: "فرعي",       color: "#17c1e8", bg: "#e3f8fd" },
+  3: { label: "أستاذ فرعي", color: "#82d616", bg: "#f0fde4" },
+};
+
+export const ACCOUNT_LISTS = {
+  1: { label: "أصول",    color: "#17c1e8", bg: "#e3f8fd" },
+  2: { label: "خصومات",  color: "#fb8c00", bg: "#fff3e0" },
+  3: { label: "إيرادات", color: "#82d616", bg: "#f0fde4" },
+  4: { label: "مصروفات", color: "#ea0606", bg: "#ffeaea" },
+};
+
+export const ACCOUNT_DEPARTMENTS = {
+  1: { label: "الميزانية العمومية" },
+  2: { label: "قائمة الدخل" },
+};
+
+export const ACCOUNT_SIDES = {
+  1: { label: "مدين" },
+  2: { label: "دائن" },
+};
+
+// ─── Flat data (schema V2) ────────────────────────────────────────────────────
+export const mockAccountsV2 = [
+  // Level 1 — Root
+  { id: 1,   code: "1000", nameAr: "الأصول",               parent_id: null, parent_code: null,   level: 1, type: 0, list: 1, department: 1, side: 1, is_active: true,  balance: 0        },
+  { id: 2,   code: "2000", nameAr: "الخصوم",               parent_id: null, parent_code: null,   level: 1, type: 0, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 3,   code: "3000", nameAr: "حقوق الملكية",          parent_id: null, parent_code: null,   level: 1, type: 0, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 4,   code: "4000", nameAr: "الإيرادات",             parent_id: null, parent_code: null,   level: 1, type: 0, list: 3, department: 2, side: 2, is_active: true,  balance: 0        },
+  { id: 5,   code: "5000", nameAr: "المصروفات",             parent_id: null, parent_code: null,   level: 1, type: 0, list: 4, department: 2, side: 1, is_active: true,  balance: 0        },
+
+  // Level 2 — General
+  { id: 10,  code: "1100", nameAr: "الأصول الثابتة",        parent_id: 1,  parent_code: "1000", level: 2, type: 1, list: 1, department: 1, side: 1, is_active: true,  balance: 0        },
+  { id: 11,  code: "1200", nameAr: "المخزونات",             parent_id: 1,  parent_code: "1000", level: 2, type: 1, list: 1, department: 1, side: 1, is_active: true,  balance: 0        },
+  { id: 12,  code: "1300", nameAr: "الذمم المدينة",          parent_id: 1,  parent_code: "1000", level: 2, type: 1, list: 1, department: 1, side: 1, is_active: true,  balance: 0        },
+  { id: 13,  code: "1400", nameAr: "الأصول السائلة",        parent_id: 1,  parent_code: "1000", level: 2, type: 1, list: 1, department: 1, side: 1, is_active: true,  balance: 0        },
+  { id: 20,  code: "2100", nameAr: "ديون طويلة الأجل",      parent_id: 2,  parent_code: "2000", level: 2, type: 1, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 21,  code: "2200", nameAr: "الذمم الدائنة",         parent_id: 2,  parent_code: "2000", level: 2, type: 1, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 30,  code: "3100", nameAr: "رأس المال",             parent_id: 3,  parent_code: "3000", level: 2, type: 1, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 31,  code: "3200", nameAr: "الأرباح والاحتياطيات",  parent_id: 3,  parent_code: "3000", level: 2, type: 1, list: 2, department: 1, side: 2, is_active: true,  balance: 0        },
+  { id: 40,  code: "4100", nameAr: "إيرادات المبيعات",      parent_id: 4,  parent_code: "4000", level: 2, type: 1, list: 3, department: 2, side: 2, is_active: true,  balance: 0        },
+  { id: 41,  code: "4200", nameAr: "إيرادات أخرى",          parent_id: 4,  parent_code: "4000", level: 2, type: 1, list: 3, department: 2, side: 2, is_active: true,  balance: 0        },
+  { id: 50,  code: "5100", nameAr: "تكلفة المبيعات",        parent_id: 5,  parent_code: "5000", level: 2, type: 1, list: 4, department: 2, side: 1, is_active: true,  balance: 0        },
+  { id: 51,  code: "5200", nameAr: "مصروفات تشغيلية",      parent_id: 5,  parent_code: "5000", level: 2, type: 1, list: 4, department: 2, side: 1, is_active: true,  balance: 0        },
+
+  // Level 3 — BranchLedger (postable, type=3) & Branch control (type=2)
+  { id: 100, code: "1101", nameAr: "عقارات ومباني",          parent_id: 10, parent_code: "1100", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 15000000 },
+  { id: 101, code: "1102", nameAr: "معدات وتجهيزات",         parent_id: 10, parent_code: "1100", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 8500000  },
+  { id: 102, code: "1103", nameAr: "وسائل النقل",             parent_id: 10, parent_code: "1100", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 6000000  },
+  { id: 110, code: "1201", nameAr: "بضاعة للبيع",            parent_id: 11, parent_code: "1200", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 12800000 },
+  { id: 120, code: "1301", nameAr: "ذمم العملاء",             parent_id: 12, parent_code: "1300", level: 3, type: 2, list: 1, department: 1, side: 1, is_active: true,  balance: 18450000 },
+  { id: 121, code: "1302", nameAr: "ذمم مدينة متنوعة",       parent_id: 12, parent_code: "1300", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 2300000  },
+  { id: 130, code: "1401", nameAr: "الصندوق الرئيسي",         parent_id: 13, parent_code: "1400", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 4250000  },
+  { id: 131, code: "1402", nameAr: "الحساب البنكي",           parent_id: 13, parent_code: "1400", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 9800000  },
+  { id: 132, code: "1403", nameAr: "صندوق المبيعات",          parent_id: 13, parent_code: "1400", level: 3, type: 3, list: 1, department: 1, side: 1, is_active: true,  balance: 850000   },
+  { id: 200, code: "2101", nameAr: "قروض بنكية",              parent_id: 20, parent_code: "2100", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: true,  balance: 5000000  },
+  { id: 210, code: "2201", nameAr: "ذمم الموردين",            parent_id: 21, parent_code: "2200", level: 3, type: 2, list: 2, department: 1, side: 2, is_active: true,  balance: 8200000  },
+  { id: 211, code: "2202", nameAr: "ذمم دائنة متنوعة",       parent_id: 21, parent_code: "2200", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: true,  balance: 1500000  },
+  { id: 212, code: "2203", nameAr: "ضرائب ورسوم",             parent_id: 21, parent_code: "2200", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: true,  balance: 620000   },
+  { id: 300, code: "3101", nameAr: "رأس المال المدفوع",       parent_id: 30, parent_code: "3100", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: true,  balance: 30000000 },
+  { id: 310, code: "3201", nameAr: "أرباح السنوات السابقة",  parent_id: 31, parent_code: "3200", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: true,  balance: 22380000 },
+  { id: 311, code: "3202", nameAr: "أرباح السنة الحالية",    parent_id: 31, parent_code: "3200", level: 3, type: 3, list: 2, department: 1, side: 2, is_active: false, balance: 0        },
+  { id: 400, code: "4101", nameAr: "مبيعات البضاعة",         parent_id: 40, parent_code: "4100", level: 3, type: 3, list: 3, department: 2, side: 2, is_active: true,  balance: 45600000 },
+  { id: 401, code: "4102", nameAr: "مردودات المبيعات",        parent_id: 40, parent_code: "4100", level: 3, type: 3, list: 3, department: 2, side: 1, is_active: true,  balance: 1200000  },
+  { id: 410, code: "4201", nameAr: "إيرادات متنوعة",         parent_id: 41, parent_code: "4200", level: 3, type: 3, list: 3, department: 2, side: 2, is_active: true,  balance: 850000   },
+  { id: 500, code: "5101", nameAr: "تكلفة البضاعة المباعة",  parent_id: 50, parent_code: "5100", level: 3, type: 3, list: 4, department: 2, side: 1, is_active: true,  balance: 28400000 },
+  { id: 510, code: "5201", nameAr: "رواتب وأجور",            parent_id: 51, parent_code: "5200", level: 3, type: 3, list: 4, department: 2, side: 1, is_active: true,  balance: 5200000  },
+  { id: 511, code: "5202", nameAr: "إيجارات",                parent_id: 51, parent_code: "5200", level: 3, type: 3, list: 4, department: 2, side: 1, is_active: true,  balance: 1440000  },
+  { id: 512, code: "5203", nameAr: "نقل وتوزيع",             parent_id: 51, parent_code: "5200", level: 3, type: 3, list: 4, department: 2, side: 1, is_active: true,  balance: 980000   },
+  { id: 513, code: "5204", nameAr: "مصروفات إدارية",         parent_id: 51, parent_code: "5200", level: 3, type: 3, list: 4, department: 2, side: 1, is_active: true,  balance: 650000   },
+];
+
+// ─── Numeric-aware code comparison ───────────────────────────────────────────
+export function codeCompare(a, b) {
+  const numA = /^\d+$/.test(a.code) ? parseInt(a.code, 10) : null;
+  const numB = /^\d+$/.test(b.code) ? parseInt(b.code, 10) : null;
+  if (numA !== null && numB !== null) return numA - numB;
+  return a.code.localeCompare(b.code);
+}
+
+// ─── Build tree from flat V2 list ────────────────────────────────────────────
+export function buildAccountTreeV2(accounts) {
+  const map = {};
+  accounts.forEach((a) => { map[a.id] = { ...a, children: [] }; });
+
+  const roots = [];
+  accounts.forEach((a) => {
+    if (a.parent_id !== null && map[a.parent_id]) {
+      map[a.parent_id].children.push(map[a.id]);
+    } else {
+      roots.push(map[a.id]);
+    }
+  });
+
+  function sortChildren(node) {
+    node.children.sort(codeCompare);
+    node.children.forEach(sortChildren);
+  }
+  roots.sort(codeCompare);
+  roots.forEach(sortChildren);
+
+  function computeTotals(node) {
+    if (!node.children.length) { node.totalBalance = node.balance || 0; return node.totalBalance; }
+    node.totalBalance = node.children.reduce((s, c) => s + computeTotals(c), 0);
+    return node.totalBalance;
+  }
+  roots.forEach(computeTotals);
+
+  return roots;
+}
+
+// ─── Flatten tree into ordered list ──────────────────────────────────────────
+export function flattenV2(nodes, result = []) {
+  nodes.forEach((n) => { result.push(n); if (n.children?.length) flattenV2(n.children, result); });
+  return result;
+}
+
+// ─── Suggest next child code ──────────────────────────────────────────────────
+// Splits code into alpha-prefix + numeric-body + alpha-suffix.
+// If siblings exist: takes max numeric body among siblings + 1, same width.
+// If no siblings: uses parent code + 1 (first child).
+export function suggestChildCode(parentAccount, siblingAccounts) {
+  if (!parentAccount) return "";
+
+  const refs = siblingAccounts.length > 0
+    ? siblingAccounts.map((s) => s.code)
+    : [parentAccount.code];
+
+  const parsed = refs.map((c) => {
+    const m = c.match(/^([A-Za-z]*)(\d+)([A-Za-z]*)$/);
+    if (!m) return null;
+    return { prefix: m[1], num: parseInt(m[2], 10), width: m[2].length, suffix: m[3] };
+  }).filter(Boolean);
+
+  if (!parsed.length) return parentAccount.code + "1";
+
+  const maxEntry = parsed.reduce((a, b) => (a.num > b.num ? a : b));
+  const next     = maxEntry.num + 1;
+  const padded   = String(next).padStart(maxEntry.width, "0");
+  return maxEntry.prefix + padded + maxEntry.suffix;
+}
+
+// ─── Validate no duplicate code within tenant ─────────────────────────────────
+export function isDuplicateCode(code, allAccounts, excludeId = null) {
+  return allAccounts.some((a) => a.code === code && a.id !== excludeId);
 }

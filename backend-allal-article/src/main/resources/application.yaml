@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: backend-allal-article
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/allal_article
+    username: allal_user
+    password: allal_pass@39
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

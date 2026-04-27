@@ -5,7 +5,11 @@ import { useNavigate } from "react-router-dom";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
+import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -28,6 +32,12 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { buildTree, fmt, mockAccounts, mockFiscalYears } from "./mockData";
+
+const JOURNAL_BOOKS = [
+  { id: "manual",  label: "يومية عامة (يدوي)",   prefix: "MAN" },
+  { id: "opening", label: "يومية الأرصدة الافتتاحية", prefix: "OPN" },
+  { id: "adjust",  label: "يومية التسويات",        prefix: "ADJ" },
+];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function flattenTree(nodes, result = []) {
@@ -121,8 +131,9 @@ export default function ManualJournalForm() {
   const navigate = useNavigate();
   const today = new Date().toISOString().split("T")[0];
 
-  const [date, setDate] = useState(today);
-  const [notes, setNotes] = useState("");
+  const [date, setDate]     = useState(today);
+  const [notes, setNotes]   = useState("");
+  const [bookId, setBookId] = useState("manual");
   const [fyId] = useState(mockFiscalYears.find((y) => !y.isClosed)?.id ?? mockFiscalYears[0].id);
   const [lines, setLines] = useState([
     { id: 1, account: null, debit: "", credit: "", description: "" },
@@ -153,7 +164,7 @@ export default function ManualJournalForm() {
 
   const handleSave = (post) => {
     if (!validate()) return;
-    console.log("Saving journal:", { date, notes, fyId, post, lines });
+    console.log("Saving journal:", { date, notes, bookId, fyId, post, lines });
     navigate("/accounting/journals");
   };
 
@@ -183,9 +194,19 @@ export default function ManualJournalForm() {
 
         {/* Header Card */}
         <Card sx={{ mb: 2, p: 2.5 }}>
-          <SoftBox display="flex" gap={2} flexWrap="wrap">
+          <SoftBox display="flex" gap={2} flexWrap="wrap" alignItems="center">
+            <FormControl size="small" sx={{ minWidth: 220 }}>
+              <InputLabel>دفتر اليومية</InputLabel>
+              <Select value={bookId} label="دفتر اليومية" onChange={(e) => setBookId(e.target.value)}>
+                {JOURNAL_BOOKS.map((b) => (
+                  <MenuItem key={b.id} value={b.id}>{b.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <TextField size="small" type="date" label="تاريخ القيد" value={date}
               onChange={(e) => setDate(e.target.value)} sx={{ minWidth: 180 }} InputLabelProps={{ shrink: true }} />
+            <TextField label="السنة المالية" value={activeFY?.name ?? "—"}
+              sx={{ minWidth: 180 }} InputProps={{ readOnly: true }} size="small" />
             <TextField size="small" label="البيان / الوصف" value={notes}
               onChange={(e) => setNotes(e.target.value)} sx={{ flex: 1, minWidth: 240 }} placeholder="ملاحظة اختيارية..." />
           </SoftBox>

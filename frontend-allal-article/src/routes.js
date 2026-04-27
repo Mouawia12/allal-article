@@ -17,6 +17,7 @@ import NewOrderRouter from "layouts/orders/NewOrderRouter";
 import Products from "layouts/products";
 import ProductDetail from "layouts/products/ProductDetail";
 import ProductForm from "layouts/products/ProductForm";
+import ProductSettings from "layouts/products/ProductSettings";
 import PriceLists from "layouts/products/PriceLists";
 import Customers from "layouts/customers";
 import Suppliers from "layouts/suppliers";
@@ -34,14 +35,26 @@ import PurchaseDetail from "layouts/purchases/PurchaseDetail";
 import PurchaseForm from "layouts/purchases/PurchaseForm";
 import RoadInvoices from "layouts/road-invoices";
 import RoadInvoiceForm from "layouts/road-invoices/RoadInvoiceForm";
+import AccountingDashboard from "layouts/accounting/Dashboard";
 import AccountsTree from "layouts/accounting/AccountsTree";
+import ChartTemplates from "layouts/accounting/ChartTemplates";
+import AccountLinks from "layouts/accounting/AccountLinks";
+import JournalBooks from "layouts/accounting/JournalBooks";
 import Journals from "layouts/accounting/Journals";
 import ManualJournalForm from "layouts/accounting/ManualJournalForm";
 import FiscalYears from "layouts/accounting/FiscalYears";
 import OpeningBalances from "layouts/accounting/OpeningBalances";
 import AccountingSettings from "layouts/accounting/AccountingSettings";
+import SubLedgers from "layouts/accounting/SubLedgers";
+import CashBank from "layouts/accounting/CashBank";
+import Taxes from "layouts/accounting/Taxes";
+import Dimensions from "layouts/accounting/Dimensions";
 import TrialBalance from "layouts/accounting/reports/TrialBalance";
 import AccountMovement from "layouts/accounting/reports/AccountMovement";
+import GeneralLedger from "layouts/accounting/reports/GeneralLedger";
+import IncomeStatement from "layouts/accounting/reports/IncomeStatement";
+import BalanceSheet from "layouts/accounting/reports/BalanceSheet";
+import SubledgerReconciliation from "layouts/accounting/reports/SubledgerReconciliation";
 import CompanyProfile from "layouts/company-profile";
 import Partnerships from "layouts/partnerships";
 import LinkedInventory from "layouts/partnerships/LinkedInventory";
@@ -254,6 +267,11 @@ const routes = [
     type: "title", title: "المحاسبة", key: "accounting-title",
   },
   {
+    type: "collapse", name: "لوحة المحاسبة", key: "accounting-dashboard",
+    route: "/accounting/dashboard", icon: <Document size="12px" />,
+    component: <AccountingDashboard />, noCollapse: true,
+  },
+  {
     type: "collapse", name: "شجرة الحسابات", key: "accounts-tree",
     route: "/accounting/accounts-tree", icon: <Document size="12px" />,
     component: <AccountsTree />, noCollapse: true,
@@ -272,6 +290,26 @@ const routes = [
     type: "collapse", name: "ميزان المراجعة", key: "trial-balance",
     route: "/accounting/reports/trial-balance", icon: <Document size="12px" />,
     component: <TrialBalance />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "قائمة الدخل", key: "income-statement",
+    route: "/accounting/reports/income-statement", icon: <Document size="12px" />,
+    component: <IncomeStatement />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "الميزانية العمومية", key: "balance-sheet",
+    route: "/accounting/reports/balance-sheet", icon: <Document size="12px" />,
+    component: <BalanceSheet />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "الأستاذ العام", key: "general-ledger",
+    route: "/accounting/reports/general-ledger", icon: <Document size="12px" />,
+    component: <GeneralLedger />, noCollapse: true,
+  },
+  {
+    type: "collapse", name: "مطابقة الذمم", key: "subledger-reconciliation",
+    route: "/accounting/reports/subledger-reconciliation", icon: <Document size="12px" />,
+    component: <SubledgerReconciliation />, noCollapse: true,
   },
 
   { type: "divider", key: "divider-2" },
@@ -313,11 +351,22 @@ const routes = [
     component: <PurchaseDetail />,
   },
   // Accounting hidden routes
-  { key: "journal-new",         route: "/accounting/journals/new",              component: <ManualJournalForm /> },
-  { key: "opening-balances",    route: "/accounting/opening-balances",          component: <OpeningBalances /> },
-  { key: "accounting-settings", route: "/accounting/settings",                  component: <AccountingSettings /> },
-  { key: "notification-preferences", route: "/notifications/preferences",        component: <NotificationPreferences /> },
-  { key: "account-movement",    route: "/accounting/reports/account-movement",  component: <AccountMovement /> },
+  { key: "journal-new",              route: "/accounting/journals/new",                         component: <ManualJournalForm /> },
+  { key: "opening-balances",         route: "/accounting/opening-balances",                     component: <OpeningBalances /> },
+  { key: "accounting-settings",      route: "/accounting/settings",                             component: <AccountingSettings /> },
+  { key: "chart-templates",          route: "/accounting/chart-templates",                      component: <ChartTemplates /> },
+  { key: "account-links",            route: "/accounting/account-links",                        component: <AccountLinks /> },
+  { key: "journal-books",            route: "/accounting/journal-books",                        component: <JournalBooks /> },
+  { key: "sub-ledgers",              route: "/accounting/sub-ledgers",                          component: <SubLedgers /> },
+  { key: "cash-bank",                route: "/accounting/cash-bank",                            component: <CashBank /> },
+  { key: "taxes",                    route: "/accounting/taxes",                                component: <Taxes /> },
+  { key: "dimensions",               route: "/accounting/dimensions",                           component: <Dimensions /> },
+  { key: "notification-preferences", route: "/notifications/preferences",                       component: <NotificationPreferences /> },
+  { key: "account-movement",         route: "/accounting/reports/account-movement",             component: <AccountMovement /> },
+  { key: "general-ledger",           route: "/accounting/reports/general-ledger",               component: <GeneralLedger /> },
+  { key: "income-statement",         route: "/accounting/reports/income-statement",             component: <IncomeStatement /> },
+  { key: "balance-sheet",            route: "/accounting/reports/balance-sheet",                component: <BalanceSheet /> },
+  { key: "subledger-reconciliation", route: "/accounting/reports/subledger-reconciliation",     component: <SubledgerReconciliation /> },
   {
     key: "new-order",
     route: "/orders/new",
@@ -343,6 +392,11 @@ const routes = [
         subtitle="الأصناف التي أضفتها للمفضلة للوصول السريع"
       />
     ),
+  },
+  {
+    key: "product-settings",
+    route: "/products/settings",
+    component: <ProductSettings />,
   },
   {
     key: "product-detail",
