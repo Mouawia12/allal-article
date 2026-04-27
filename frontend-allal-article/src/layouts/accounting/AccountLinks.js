@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
@@ -30,19 +30,10 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { buildTree, classificationLabels, mockAccountSettings, mockAccounts } from "./mockData";
+import { classificationLabels } from "./mockData";
 
-function flattenTree(nodes, r = []) {
-  nodes.forEach((n) => { r.push(n); if (n.children?.length) flattenTree(n.children, r); });
-  return r;
-}
-
-const postableAccounts = flattenTree(buildTree(mockAccounts)).filter((a) => a.isPostable && a.isActive);
-
-function getAccountName(id) {
-  const a = postableAccounts.find((x) => x.id === id);
-  return a ? `${a.code} — ${a.nameAr}` : "—";
-}
+const accountSettingsDefs = [];
+import { accountingApi } from "services";
 
 // ─── Auto-generation rules ────────────────────────────────────────────────────
 const RULES = [
@@ -135,14 +126,25 @@ function groupBy(arr, key) {
 
 export default function AccountLinks() {
   const [tab, setTab] = useState(0);
-  const [settings, setSettings] = useState(() => {
-    const m = {};
-    mockAccountSettings.forEach((s) => { m[s.key] = s.accountId; });
-    return m;
-  });
+  const [postableAccounts, setPostableAccounts] = useState([]);
+  const [settings, setSettings] = useState({});
 
-  const grouped = groupBy(mockAccountSettings, "group");
-  const missing = mockAccountSettings.filter((s) => !settings[s.key]);
+  useEffect(() => {
+    accountingApi.listAccounts()
+      .then((r) => {
+        const all = r.data?.content ?? r.data ?? [];
+        setPostableAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
+      })
+      .catch(console.error);
+  }, []);
+
+  const getAccountName = (id) => {
+    const a = postableAccounts.find((x) => x.id === id);
+    return a ? `${a.code} — ${a.nameAr}` : "—";
+  };
+
+  const grouped = groupBy(accountSettingsDefs, "group");
+  const missing = accountSettingsDefs.filter((s) => !settings[s.key]);
   const allOk = missing.length === 0;
 
   return (

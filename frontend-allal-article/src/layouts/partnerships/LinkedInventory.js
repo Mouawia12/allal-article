@@ -36,7 +36,6 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { mockActivePartnerships, mockPartnerProducts } from "data/mock/partnershipMock";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
@@ -131,8 +130,8 @@ export default function LinkedInventory() {
   const { partnerId } = useParams();
   const { state } = useLocation();
 
-  const partner = state?.partner ?? mockActivePartnerships.find((p) => p.partnerUuid === partnerId);
-  const products = mockPartnerProducts[partnerId] ?? [];
+  const partner = state?.partner ?? null;
+  const products = [];
   const perms = partner?.permissions ?? {};
 
   const [search, setSearch] = useState("");

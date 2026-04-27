@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -35,7 +35,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { fmt, journalSourceLabels, journalStatusLabels, journalTypeLabels, mockFiscalYears, mockJournals } from "./mockData";
+import { fmt, journalSourceLabels, journalStatusLabels, journalTypeLabels } from "./mockData";
+import { accountingApi } from "services";
 
 const STATUS_TABS = ["الكل", "draft", "posted", "reversed"];
 const STATUS_LABELS = { الكل: "الكل", draft: "مسودة", posted: "مرحّلة", reversed: "معكوسة" };
@@ -134,20 +135,39 @@ function JournalPreviewDialog({ journal, onClose }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Journals() {
   const navigate = useNavigate();
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [allJournals, setAllJournals] = useState([]);
   const [tab, setTab] = useState(0);
-  const [fyFilter, setFyFilter] = useState(mockFiscalYears[0].id);
+  const [fyFilter, setFyFilter] = useState(null);
   const [preview, setPreview] = useState(null);
 
-  const activeFY = mockFiscalYears.find((y) => y.id === fyFilter);
-  const isLocked = activeFY?.isClosed;
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) setFyFilter(active.id);
+      })
+      .catch(console.error);
+  }, []);
 
-  const journals = mockJournals.filter((j) => {
-    if (j.fiscalYearId !== fyFilter) return false;
+  useEffect(() => {
+    accountingApi.listJournals()
+      .then((r) => setAllJournals(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+  }, []);
+
+  const activeFY = fiscalYears.find((y) => y.id === fyFilter);
+  const isLocked = activeFY?.closed;
+
+  const journals = allJournals.filter((j) => {
+    if (fyFilter && j.fiscalYearId !== fyFilter) return false;
     const s = STATUS_TABS[tab];
     return s === "الكل" || j.status === s;
   });
 
-  const stats = mockJournals.filter((j) => j.fiscalYearId === fyFilter);
+  const stats = allJournals.filter((j) => !fyFilter || j.fiscalYearId === fyFilter);
   const totalPosted = stats.filter((j) => j.status === "posted").length;
   const totalDraft  = stats.filter((j) => j.status === "draft").length;
 
@@ -164,9 +184,9 @@ export default function Journals() {
           </SoftBox>
           <SoftBox display="flex" gap={1.5} alignItems="center">
             <FormControl size="small" sx={{ minWidth: 160 }}>
-              <Select value={fyFilter} onChange={(e) => setFyFilter(e.target.value)}>
-                {mockFiscalYears.map((y) => (
-                  <MenuItem key={y.id} value={y.id}>{y.name} {y.isClosed && "🔒"}</MenuItem>
+              <Select value={fyFilter ?? ""} onChange={(e) => setFyFilter(Number(e.target.value))}>
+                {fiscalYears.map((y) => (
+                  <MenuItem key={y.id} value={y.id}>{y.name} {y.closed && "🔒"}</MenuItem>
                 ))}
               </Select>
             </FormControl>

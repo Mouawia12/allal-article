@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -32,12 +32,10 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { mockAccounts } from "./mockData";
+import { accountingApi } from "services";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
-
-const postableAccounts = mockAccounts.filter((a) => a.isPostable && a.isActive);
 
 const initialTaxes = [
   {
@@ -68,7 +66,7 @@ const initialTaxes = [
 
 const typeLabels = { vat: "TVA", tap: "TAP", ibs: "IBS", other: "أخرى" };
 
-function TaxDialog({ tax, onClose, onSave }) {
+function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
   const [form, setForm] = useState(tax ?? {
     code: "", label: "", rate: "", type: "vat",
     payableAccountId: "", recoverableAccountId: "",
@@ -143,6 +141,16 @@ function TaxDialog({ tax, onClose, onSave }) {
 export default function Taxes() {
   const [taxes, setTaxes] = useState(initialTaxes);
   const [dialog, setDialog] = useState(null);
+  const [postableAccounts, setPostableAccounts] = useState([]);
+
+  useEffect(() => {
+    accountingApi.listAccounts()
+      .then((r) => {
+        const all = r.data?.content ?? r.data ?? [];
+        setPostableAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
+      })
+      .catch(console.error);
+  }, []);
 
   const handleSave = (form) => {
     if (dialog === "new") {
@@ -243,6 +251,7 @@ export default function Taxes() {
             tax={dialog === "new" ? null : dialog}
             onClose={() => setDialog(null)}
             onSave={handleSave}
+            postableAccounts={postableAccounts}
           />
         )}
       </SoftBox>

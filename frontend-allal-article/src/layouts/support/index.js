@@ -40,13 +40,25 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import {
-  getTicketStats,
-  supportMessages,
-  supportTickets,
-  ticketPriorityConfig,
-  ticketStatusConfig,
-} from "data/mock/supportMock";
+const ticketStatusConfig = {
+  open: { label: "مفتوحة", color: "#17c1e8", bg: "#e3f8fd" },
+  waiting_owner: { label: "بانتظار الدعم", color: "#fb8c00", bg: "#fff3e0" },
+  waiting_tenant: { label: "بانتظار ردك", color: "#7928ca", bg: "#f5ecff" },
+  resolved: { label: "محلولة", color: "#82d616", bg: "#f0fde4" },
+  closed: { label: "مغلقة", color: "#8392ab", bg: "#f8f9fa" },
+};
+const ticketPriorityConfig = {
+  low: { label: "منخفضة", color: "#8392ab" },
+  normal: { label: "عادية", color: "#17c1e8" },
+  high: { label: "عالية", color: "#fb8c00" },
+  urgent: { label: "عاجلة", color: "#ea0606" },
+};
+const getTicketStats = (tickets) => ({
+  open: tickets.filter((t) => !["resolved", "closed"].includes(t.status)).length,
+  urgent: tickets.filter((t) => t.priority === "urgent" || t.priority === "high").length,
+  unreadOwner: tickets.reduce((s, t) => s + (t.unreadOwner || 0), 0),
+  unreadTenant: tickets.reduce((s, t) => s + (t.unreadTenant || 0), 0),
+});
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const categoryEmoji = {
@@ -325,19 +337,19 @@ function NewTicketDialog({ open, onClose }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function SupportCenter() {
-  const [tickets, setTickets] = useState(supportTickets);
-  const [selectedTicketId, setSelectedTicketId] = useState(supportTickets[0].id);
+  const [tickets, setTickets] = useState([]);
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [composer, setComposer] = useState("");
-  const [messagesByTicket, setMessagesByTicket] = useState(supportMessages);
+  const [messagesByTicket, setMessagesByTicket] = useState({});
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [ticketSearch, setTicketSearch] = useState("");
 
   const messagesEndRef = useRef(null);
 
-  const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0];
+  const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
   const messages = messagesByTicket[selectedTicketId] || [];
   const stats = useMemo(() => getTicketStats(tickets), [tickets]);
-  const isClosed = selectedTicket.status === "closed";
+  const isClosed = selectedTicket?.status === "closed";
 
   const filteredTickets = useMemo(() => {
     const q = ticketSearch.trim();
@@ -396,8 +408,8 @@ export default function SupportCenter() {
     setComposer("");
   };
 
-  const statusCfg = ticketStatusConfig[selectedTicket.status] || ticketStatusConfig.open;
-  const emoji = categoryEmoji[selectedTicket.category] || "🎫";
+  const statusCfg = ticketStatusConfig[selectedTicket?.status] || ticketStatusConfig.open;
+  const emoji = categoryEmoji[selectedTicket?.category] || "🎫";
 
   return (
     <DashboardLayout>
@@ -487,10 +499,10 @@ export default function SupportCenter() {
                 </Box>
                 <Box>
                   <Box sx={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>
-                    {selectedTicket.subject}
+                    {selectedTicket?.subject ?? "—"}
                   </Box>
                   <Box sx={{ fontSize: 11, color: "#94a3b8", mt: 0.2 }}>
-                    {selectedTicket.id} · {selectedTicket.category}
+                    {selectedTicket?.id ?? "—"} · {selectedTicket?.category ?? "—"}
                   </Box>
                 </Box>
               </Box>
@@ -500,7 +512,7 @@ export default function SupportCenter() {
                   size="small"
                   sx={{ height: 22, fontSize: 10, fontWeight: 700, background: statusCfg.bg, color: statusCfg.color }}
                 />
-                {["closed", "resolved"].includes(selectedTicket.status) ? (
+                {["closed", "resolved"].includes(selectedTicket?.status) ? (
                   <Tooltip title="إعادة فتح التذكرة">
                     <IconButton size="small" onClick={() => changeTicketStatus("open")}
                       sx={{ background: "rgba(255,255,255,0.1)", color: "#fff", "&:hover": { background: "rgba(255,255,255,0.2)" } }}>
@@ -528,7 +540,7 @@ export default function SupportCenter() {
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
                 <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
                 <Box sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {selectedTicket.createdAt}
+                  {selectedTicket?.createdAt ?? "—"}
                 </Box>
                 <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
               </Box>

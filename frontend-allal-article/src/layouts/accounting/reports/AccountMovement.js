@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
@@ -20,44 +20,53 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { buildTree, fmt, journalSourceLabels, journalStatusLabels, mockAccounts, mockJournals } from "../mockData";
-
-function flattenTree(nodes, r = []) {
-  nodes.forEach((n) => { r.push(n); if (n.children?.length) flattenTree(n.children, r); });
-  return r;
-}
-
-const allAccounts = flattenTree(buildTree(mockAccounts)).filter((a) => a.isPostable);
-
-// Mock: generate account movement lines from journals
-function getMovement(accountId) {
-  const lines = [];
-  let running = 0;
-  mockJournals
-    .filter((j) => j.status !== "void")
-    .forEach((j) => {
-      j.lines.forEach((l) => {
-        if (l.accountId === accountId) {
-          running += (l.debit || 0) - (l.credit || 0);
-          lines.push({ date: j.date, journalNo: j.number, source: j.source, description: l.description || j.description, debit: l.debit, credit: l.credit, running, status: j.status });
-        }
-      });
-    });
-  return lines;
-}
+import { fmt, journalStatusLabels } from "../mockData";
+import { accountingApi } from "services";
 
 export default function AccountMovement() {
+  const [accounts, setAccounts] = useState([]);
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [fyId, setFyId] = useState(null);
   const [account, setAccount] = useState(null);
-  const [dateFrom, setDateFrom] = useState("2025-01-01");
-  const [dateTo, setDateTo]     = useState("2025-12-31");
+  const [lines, setLines] = useState([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  const lines = useMemo(() => {
-    if (!account) return [];
-    return getMovement(account.id).filter((l) => l.date >= dateFrom && l.date <= dateTo);
-  }, [account, dateFrom, dateTo]);
+  useEffect(() => {
+    accountingApi.listAccounts()
+      .then((r) => {
+        const all = r.data?.content ?? r.data ?? [];
+        setAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
+      })
+      .catch(console.error);
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) {
+          setFyId(active.id);
+          setDateFrom(active.startDate || "");
+          setDateTo(active.endDate || "");
+        }
+      })
+      .catch(console.error);
+  }, []);
 
-  const totalDebit  = lines.reduce((s, l) => s + (l.debit  || 0), 0);
-  const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
+  useEffect(() => {
+    if (!account || !fyId) return;
+    accountingApi.generalLedger(account.id, fyId)
+      .then((r) => setLines(r.data?.lines ?? []))
+      .catch(console.error);
+  }, [account, fyId]);
+
+  const filtered = useMemo(
+    () => lines.filter((l) => (!dateFrom || l.date >= dateFrom) && (!dateTo || l.date <= dateTo)),
+    [lines, dateFrom, dateTo]
+  );
+
+  const totalDebit  = filtered.reduce((s, l) => s + (l.debit  || 0), 0);
+  const totalCredit = filtered.reduce((s, l) => s + (l.credit || 0), 0);
 
   const cellSx = { py: 0.8, fontSize: 12 };
 
@@ -70,25 +79,32 @@ export default function AccountMovement() {
             <SoftTypography variant="h5" fontWeight="bold">حركة حساب</SoftTypography>
             <SoftTypography variant="caption" color="secondary">عرض حركات حساب معين خلال فترة محددة</SoftTypography>
           </SoftBox>
-          <SoftButton variant="outlined" color="secondary" size="small">
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => window.print()}>
             <PrintIcon sx={{ fontSize: 16, mr: 0.5 }} /> طباعة
           </SoftButton>
         </SoftBox>
 
-        {/* Filters */}
         <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap" alignItems="flex-end">
           <SoftBox flex={1} minWidth={280}>
             <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">الحساب</SoftTypography>
             <Autocomplete
               size="small"
-              options={allAccounts}
+              options={accounts}
               value={account}
               onChange={(_, v) => setAccount(v)}
               getOptionLabel={(o) => `${o.code} — ${o.nameAr}`}
-              filterOptions={(opts, { inputValue: q }) => opts.filter((o) => o.nameAr.includes(q) || o.code.includes(q))}
+              filterOptions={(opts, { inputValue: q }) => opts.filter((o) => o.nameAr?.includes(q) || o.code?.includes(q))}
               renderInput={(params) => <TextField {...params} placeholder="اختر الحساب..." />}
               noOptionsText="لا نتائج"
             />
+          </SoftBox>
+          <SoftBox minWidth={180}>
+            <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">السنة المالية</SoftTypography>
+            <TextField select size="small" value={fyId ?? ""} onChange={(e) => setFyId(e.target.value)} sx={{ minWidth: 180 }}>
+              {fiscalYears.map((fy) => (
+                <option key={fy.id} value={fy.id}>{fy.name}</option>
+              ))}
+            </TextField>
           </SoftBox>
           <SoftBox>
             <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">من تاريخ</SoftTypography>
@@ -106,12 +122,11 @@ export default function AccountMovement() {
           </SoftBox>
         ) : (
           <>
-            {/* Account Summary */}
             <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap">
               {[
-                { label: "إجمالي المدين",  value: totalDebit,  color: "#17c1e8" },
-                { label: "إجمالي الدائن",  value: totalCredit, color: "#82d616" },
-                { label: "صافي الرصيد",    value: Math.abs(totalDebit - totalCredit), color: "#344767" },
+                { label: "إجمالي المدين", value: totalDebit, color: "#17c1e8" },
+                { label: "إجمالي الدائن", value: totalCredit, color: "#82d616" },
+                { label: "صافي الرصيد", value: Math.abs(totalDebit - totalCredit), color: "#344767" },
               ].map(({ label, value, color }) => (
                 <SoftBox key={label} sx={{ background: "#fff", border: "1px solid #eee", borderRadius: 2, px: 2, py: 1.5, minWidth: 140 }}>
                   <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
@@ -125,39 +140,32 @@ export default function AccountMovement() {
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ background: "#f8f9fa" }}>
-                      {["التاريخ", "رقم القيد", "المصدر", "البيان", "مدين", "دائن", "الرصيد المتراكم", "الحالة"].map((h) => (
-                        <TableCell key={h} sx={{ fontWeight: 700, fontSize: 10, color: "#8392ab", py: 1, textTransform: "uppercase" }}>{h}</TableCell>
+                      {["التاريخ", "رقم القيد", "البيان", "مدين", "دائن", "الرصيد المتراكم"].map((h) => (
+                        <TableCell key={h} sx={{ fontWeight: 700, fontSize: 10, color: "#8392ab", py: 1 }}>{h}</TableCell>
                       ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {lines.length === 0 ? (
-                      <TableRow><TableCell colSpan={8} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا توجد حركات في هذه الفترة</TableCell></TableRow>
-                    ) : lines.map((line, i) => {
-                      const st = journalStatusLabels[line.status];
-                      return (
-                        <TableRow key={i} sx={{ "&:hover": { background: "#f8f9fa" } }}>
-                          <TableCell sx={cellSx}><SoftTypography variant="caption">{line.date}</SoftTypography></TableCell>
-                          <TableCell sx={cellSx}><SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>{line.journalNo}</SoftTypography></TableCell>
-                          <TableCell sx={cellSx}><SoftTypography variant="caption">{journalSourceLabels[line.source]}</SoftTypography></TableCell>
-                          <TableCell sx={cellSx}><SoftTypography variant="caption">{line.description || "—"}</SoftTypography></TableCell>
-                          <TableCell style={{ textAlign: "right" }} sx={cellSx}>
-                            {line.debit > 0 ? <SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>{fmt(line.debit)}</SoftTypography> : "—"}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "right" }} sx={cellSx}>
-                            {line.credit > 0 ? <SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#82d616" }}>{fmt(line.credit)}</SoftTypography> : "—"}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "right" }} sx={cellSx}>
-                            <SoftTypography variant="caption" fontWeight="bold" sx={{ color: line.running >= 0 ? "#344767" : "#ea0606" }}>
-                              {fmt(Math.abs(line.running))} {line.running >= 0 ? "م" : "د"}
-                            </SoftTypography>
-                          </TableCell>
-                          <TableCell sx={cellSx}>
-                            <Chip label={st?.label} size="small" sx={{ background: st?.bg, color: st?.color, fontWeight: 600, fontSize: 10, height: 18 }} />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {filtered.length === 0 ? (
+                      <TableRow><TableCell colSpan={6} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا توجد حركات في هذه الفترة</TableCell></TableRow>
+                    ) : filtered.map((line, i) => (
+                      <TableRow key={i} sx={{ "&:hover": { background: "#f8f9fa" } }}>
+                        <TableCell sx={cellSx}><SoftTypography variant="caption">{line.date}</SoftTypography></TableCell>
+                        <TableCell sx={cellSx}><SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>{line.journalNumber}</SoftTypography></TableCell>
+                        <TableCell sx={cellSx}><SoftTypography variant="caption">{line.description || "—"}</SoftTypography></TableCell>
+                        <TableCell style={{ textAlign: "right" }} sx={cellSx}>
+                          {line.debit > 0 ? <SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>{fmt(line.debit)}</SoftTypography> : "—"}
+                        </TableCell>
+                        <TableCell style={{ textAlign: "right" }} sx={cellSx}>
+                          {line.credit > 0 ? <SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#82d616" }}>{fmt(line.credit)}</SoftTypography> : "—"}
+                        </TableCell>
+                        <TableCell style={{ textAlign: "right" }} sx={cellSx}>
+                          <SoftTypography variant="caption" fontWeight="bold" sx={{ color: (line.runningBalance ?? 0) >= 0 ? "#344767" : "#ea0606" }}>
+                            {fmt(Math.abs(line.runningBalance ?? 0))} {(line.runningBalance ?? 0) >= 0 ? "م" : "د"}
+                          </SoftTypography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </TableContainer>

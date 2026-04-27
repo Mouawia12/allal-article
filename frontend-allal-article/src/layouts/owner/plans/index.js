@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -13,7 +14,6 @@ import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import GroupIcon from "@mui/icons-material/Group";
@@ -22,18 +22,26 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 
 import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
-import { mockPlans, mockTenants } from "data/mock/ownerMock";
+import { planColors } from "data/mock/ownerMock";
+import ownerApi from "services/ownerApi";
 
-const fmt = (n) => (n != null ? n.toLocaleString("fr-DZ") : "∞");
+const fmt = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "∞");
+
+const PLAN_FEATURES = {
+  trial:        ["إدارة الطلبيات", "المخزون", "الفواتير"],
+  basic:        ["إدارة الطلبيات", "المخزون", "الفواتير", "التقارير الأساسية"],
+  professional: ["إدارة الطلبيات", "المخزون", "الفواتير", "المحاسبة", "التقارير المتقدمة", "التكامل مع الموردين"],
+  enterprise:   ["كل ميزات الاحترافي", "إدارة متعددة الفروع", "API مخصص", "دعم مخصص", "تدريب فريق العمل"],
+};
 
 // ─── Edit Plan Dialog ─────────────────────────────────────────────────────────
 function EditPlanDialog({ plan, onClose }) {
   const { t } = useI18n();
   const [form, setForm] = useState({
-    priceMonthly: plan?.priceMonthly ?? "",
-    maxUsers: plan?.maxUsers ?? "",
-    maxOrders: plan?.maxOrders ?? "",
-    maxProducts: plan?.maxProducts ?? "",
+    price_monthly: plan?.price_monthly ?? "",
+    max_users: plan?.max_users ?? "",
+    max_orders_monthly: plan?.max_orders_monthly ?? "",
+    max_products: plan?.max_products ?? "",
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -41,34 +49,32 @@ function EditPlanDialog({ plan, onClose }) {
   return localizeNode((
     <Dialog open={!!plan} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Box sx={{ fontWeight: 700 }}>تعديل خطة — {plan.nameAr}</Box>
+        <Box sx={{ fontWeight: 700 }}>تعديل خطة — {plan.name_ar}</Box>
         <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
           <TextField
             label="السعر الشهري (دج)"
-            value={form.priceMonthly}
-            onChange={set("priceMonthly")}
+            value={form.price_monthly}
+            onChange={set("price_monthly")}
             size="small" fullWidth
             helperText="اتركه فارغاً لخطة مخصصة السعر"
           />
-          <TextField label="أقصى مستخدمين (فارغ = ∞)" value={form.maxUsers} onChange={set("maxUsers")} size="small" fullWidth />
-          <TextField label="أقصى طلبيات/شهر (فارغ = ∞)" value={form.maxOrders} onChange={set("maxOrders")} size="small" fullWidth />
-          <TextField label="أقصى أصناف (فارغ = ∞)" value={form.maxProducts} onChange={set("maxProducts")} size="small" fullWidth />
+          <TextField label="أقصى مستخدمين (فارغ = ∞)" value={form.max_users} onChange={set("max_users")} size="small" fullWidth />
+          <TextField label="أقصى طلبيات/شهر (فارغ = ∞)" value={form.max_orders_monthly} onChange={set("max_orders_monthly")} size="small" fullWidth />
+          <TextField label="أقصى أصناف (فارغ = ∞)" value={form.max_products} onChange={set("max_products")} size="small" fullWidth />
         </Box>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <Box
-          component="button"
-          onClick={onClose}
+          component="button" onClick={onClose}
           sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}
         >
           إلغاء
         </Box>
         <Box
-          component="button"
-          onClick={onClose}
+          component="button" onClick={onClose}
           sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 13, color: "#fff", fontWeight: 600 }}
         >
           حفظ التعديلات
@@ -79,83 +85,79 @@ function EditPlanDialog({ plan, onClose }) {
 }
 
 // ─── Plan Card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, subscriberCount, onEdit }) {
+function PlanCard({ plan, onEdit }) {
   const { t } = useI18n();
-  const [active, setActive] = useState(plan.isActive);
+  const [active, setActive] = useState(!!plan.is_active);
+  const color = planColors[plan.code] ?? "#8392ab";
+  const features = PLAN_FEATURES[plan.code] ?? [];
 
   return localizeNode((
-    <Card sx={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", border: `2px solid ${plan.color}33`, overflow: "visible" }}>
-      {/* Header strip */}
-      <Box sx={{ background: plan.color, borderRadius: "10px 10px 0 0", p: 2, color: "#fff" }}>
+    <Card sx={{ flex: 1, minWidth: 220, display: "flex", flexDirection: "column", border: `2px solid ${color}33`, overflow: "visible" }}>
+      <Box sx={{ background: color, borderRadius: "10px 10px 0 0", p: 2, color: "#fff" }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <Box>
-            <Box sx={{ fontSize: 16, fontWeight: 700 }}>{plan.nameAr}</Box>
-            <Box sx={{ fontSize: 12, opacity: 0.85 }}>{plan.nameEn}</Box>
+            <Box sx={{ fontSize: 16, fontWeight: 700 }}>{plan.name_ar}</Box>
+            <Box sx={{ fontSize: 12, opacity: 0.85 }}>{plan.name_en}</Box>
           </Box>
-          <Box sx={{ display: "flex", gap: 0.5 }}>
-            <Tooltip title="تعديل الخطة">
-              <IconButton size="small" onClick={onEdit} sx={{ color: "rgba(255,255,255,0.8)", "&:hover": { color: "#fff" } }}>
-                <EditIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
+          <Tooltip title="تعديل الخطة">
+            <IconButton size="small" onClick={onEdit} sx={{ color: "rgba(255,255,255,0.8)", "&:hover": { color: "#fff" } }}>
+              <EditIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
         <Box sx={{ mt: 1.5, fontSize: 22, fontWeight: 800 }}>
-          {plan.priceMonthly != null ? (
-            <>{plan.priceMonthly.toLocaleString("fr-DZ")} <span style={{ fontSize: 13, fontWeight: 400 }}>دج/شهر</span></>
+          {plan.price_monthly != null && plan.price_monthly > 0 ? (
+            <>{Number(plan.price_monthly).toLocaleString("fr-DZ")} <span style={{ fontSize: 13, fontWeight: 400 }}>دج/شهر</span></>
           ) : (
-            <span style={{ fontSize: 16, fontWeight: 600 }}>سعر مخصص</span>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>مجاني / تجريبي</span>
           )}
         </Box>
       </Box>
 
-      {/* Body */}
       <Box sx={{ p: 2, flex: 1 }}>
-        {/* Limits */}
         <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <GroupIcon sx={{ fontSize: 15, color: "#8392ab" }} />
-            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.maxUsers)} مستخدم</Box>
+            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.max_users)} مستخدم</Box>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <ShoppingCartIcon sx={{ fontSize: 15, color: "#8392ab" }} />
-            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.maxOrders)} طلبية</Box>
+            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.max_orders_monthly)} طلبية</Box>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <InventoryIcon sx={{ fontSize: 15, color: "#8392ab" }} />
-            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.maxProducts)} صنف</Box>
+            <Box sx={{ fontSize: 12, color: "#344767" }}>{fmt(plan.max_products)} صنف</Box>
           </Box>
         </Box>
 
-        <Divider sx={{ mb: 1.5 }} />
-
-        {/* Features */}
-        <Box sx={{ mb: 2 }}>
-          <Box sx={{ fontSize: 11, fontWeight: 600, color: "#8392ab", mb: 1 }}>الميزات المتاحة</Box>
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-            {plan.featuresAr.map((f) => (
-              <Box key={f} sx={{ display: "flex", alignItems: "center", gap: 0.4, fontSize: 11, color: "#344767" }}>
-                <CheckCircleIcon sx={{ fontSize: 13, color: plan.color }} /> {f}
+        {features.length > 0 && (
+          <>
+            <Divider sx={{ mb: 1.5 }} />
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ fontSize: 11, fontWeight: 600, color: "#8392ab", mb: 1 }}>الميزات المتاحة</Box>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                {features.map((f) => (
+                  <Chip key={f} label={f} size="small"
+                    sx={{ height: 20, fontSize: 10, background: `${color}14`, color }} />
+                ))}
               </Box>
-            ))}
-          </Box>
-        </Box>
+            </Box>
+          </>
+        )}
 
         <Divider sx={{ mb: 1.5 }} />
 
-        {/* Footer */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Box>
             <Box sx={{ fontSize: 11, color: "#8392ab" }}>المشتركون الحاليون</Box>
-            <Box sx={{ fontSize: 18, fontWeight: 700, color: plan.color }}>{subscriberCount}</Box>
+            <Box sx={{ fontSize: 18, fontWeight: 700, color }}>{Number(plan.tenant_count ?? 0)}</Box>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Box sx={{ fontSize: 12, color: "#8392ab" }}>{active ? "مفعّلة" : "معطّلة"}</Box>
             <Switch
-              size="small"
-              checked={active}
+              size="small" checked={active}
               onChange={(e) => setActive(e.target.checked)}
-              sx={{ "& .MuiSwitch-thumb": { background: plan.color } }}
+              sx={{ "& .MuiSwitch-thumb": { background: color } }}
             />
           </Box>
         </Box>
@@ -166,7 +168,16 @@ function PlanCard({ plan, subscriberCount, onEdit }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OwnerPlans() {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [editPlan, setEditPlan] = useState(null);
+
+  useEffect(() => {
+    ownerApi.listPlans()
+      .then((r) => setPlans(r.data?.data ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <OwnerLayout>
@@ -176,22 +187,16 @@ export default function OwnerPlans() {
           <Box sx={{ fontSize: 13, color: "#8392ab" }}>تعديل أسعار وحدود وميزات كل خطة</Box>
         </Box>
 
-        {/* Plan cards */}
-        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 3 }}>
-          {mockPlans.map((plan) => {
-            const count = mockTenants.filter((t) => t.planId === plan.id && t.status !== "cancelled").length;
-            return (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                subscriberCount={count}
-                onEdit={() => setEditPlan(plan)}
-              />
-            );
-          })}
-        </Box>
+        {loading ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>
+        ) : (
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 3 }}>
+            {plans.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} onEdit={() => setEditPlan(plan)} />
+            ))}
+          </Box>
+        )}
 
-        {/* Info note */}
         <Card sx={{ p: 2.5 }}>
           <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767", mb: 1 }}>ملاحظات حول إدارة الخطط</Box>
           <Box component="ul" sx={{ m: 0, pl: 2.5, fontSize: 12, color: "#8392ab", lineHeight: 2 }}>

@@ -65,7 +65,10 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 import useProductFavorites from "hooks/useProductFavorites";
-import { formatDZD, getPriceListsFor, resolveProductPrice } from "data/mock/pricingInventoryMock";
+const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const getPriceListsFor = () => [];
+const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
+import { ordersApi, customersApi, productsApi } from "services";
 import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
 import demoToolsImage from "assets/images/products/demo-tools.jpg";
 import demoCablesImage from "assets/images/products/demo-cables.jpg";
@@ -76,34 +79,6 @@ const categories = ["الكل", "مسامير وبراغي", "أدوات", "كه
 const favoriteCategory = "المفضلة";
 const categoryFilters = ["الكل", favoriteCategory, ...categories.filter((cat) => cat !== "الكل")];
 
-// weightPerUnit: وزن وحدة قياس واحدة (كغ) | unitsPerPackage: عدد القطع في كرطون/علبة | packageUnit: اسم وحدة التعليب
-const mockProducts = [
-  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.05,  unitsPerPackage: 100, packageUnit: "كرطون", image: demoBoltsImage },
-  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.03,  unitsPerPackage: 200, packageUnit: "كرطون", image: demoBoltsImage },
-  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", color: "#FF6B6B", weightPerUnit: 0.02,  unitsPerPackage: 500, packageUnit: "كيس", image: demoBoltsImage },
-  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.35,  unitsPerPackage: 12,  packageUnit: "علبة", image: demoToolsImage },
-  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.5,   unitsPerPackage: 12,  packageUnit: "علبة", image: demoToolsImage },
-  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", color: "#4ECDC4", weightPerUnit: 0.4,   unitsPerPackage: 6,   packageUnit: "علبة", image: demoToolsImage },
-  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.3,   unitsPerPackage: 100, packageUnit: "رزمة", image: demoCablesImage },
-  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  color: "#FFE66D", weightPerUnit: 0.2,   unitsPerPackage: 100, packageUnit: "رزمة", image: demoCablesImage },
-  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  color: "#FFE66D", weightPerUnit: 0.1,   unitsPerPackage: 20,  packageUnit: "كرطون", image: demoCablesImage },
-  { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
-  { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  color: "#A8E6CF", weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد", image: demoBuildingSuppliesImage },
-  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", color: "#A8E6CF", weightPerUnit: 0.45,  unitsPerPackage: 10,  packageUnit: "علبة"  },
-  { id: 13, name: "دهان كلاسيك 4L", code: "DHN-CLS-4", category: "دهانات", stock: 240, unit: "علبة", color: "#DDA0DD",
-    weightPerUnit: 4.5, unitsPerPackage: 4, packageUnit: "كرطون", image: demoBuildingSuppliesImage,
-    hasVariants: true,
-    variants: [
-      { id: "DHN-WHT-4", sku: "DHN-WHT-4", attrs: { اللون: "أبيض"  }, barcode: "6193001000001", price: 3200, stock: 80 },
-      { id: "DHN-GRY-4", sku: "DHN-GRY-4", attrs: { اللون: "رمادي" }, barcode: "6193001000002", price: 3050, stock: 60 },
-      { id: "DHN-BEI-4", sku: "DHN-BEI-4", attrs: { اللون: "بيج"   }, barcode: "6193001000003", price: 3200, stock: 55 },
-      { id: "DHN-WHI-4", sku: "DHN-WHI-4", attrs: { اللون: "عاجي"  }, barcode: "6193001000004", price: 3200, stock: 45 },
-    ],
-  },
-  { id: 14, name: "دهان رمادي 4L", code: "DHN-GRY-4", category: "دهانات", stock: 60, unit: "علبة", color: "#DDA0DD", weightPerUnit: 4.5, unitsPerPackage: 4, packageUnit: "كرطون" },
-  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  color: "#B0C4DE", weightPerUnit: 0.15,  unitsPerPackage: 24,  packageUnit: "كرطون" },
-  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", color: "#F4A460", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة"  },
-];
 
 // حساب عدد الكراطين/العلب من الكمية
 function calcPackages(qty, product) {
@@ -111,130 +86,7 @@ function calcPackages(qty, product) {
   return Math.ceil(qty / product.unitsPerPackage);
 }
 
-export const mockCustomers = [
-  {
-    id: 1,
-    name: "شركة الرياض للمقاولات",
-    phone: "0555-123456",
-    phone2: "0555-654321",
-    email: "riyadh@example.com",
-    wilaya: "وهران",
-    address: "حي السعادة، شارع العلماء",
-    salesperson: "أحمد محمد",
-    ordersCount: 12,
-    lastOrder: "2024-01-22",
-    totalAmount: 14520000,
-    paidAmount: 12000000,
-    openingBalance: 500000,
-    status: "active",
-    shippingRoute: "وهران - الساحل",
-    defaultPriceListId: "WHOLESALE",
-    orders: [
-      { id: "ORD-001", date: "2024-01-22", amount: 2500000, paid: 2500000, status: "paid" },
-      { id: "ORD-002", date: "2024-01-15", amount: 4800000, paid: 2400000, status: "partial" },
-      { id: "ORD-003", date: "2024-01-08", amount: 3200000, paid: 0, status: "unpaid" },
-    ],
-    payments: [
-      { id: "PMT-001", date: "2024-01-22", amount: 2500000, type: "cash", direction: "in", receiver: "أحمد محمد", payer: "شركة الرياض" },
-      { id: "PMT-002", date: "2024-01-18", amount: 2400000, type: "bank", direction: "in", receiver: "خالد عمر", payer: "شركة الرياض" },
-      { id: "PMT-003", date: "2024-01-20", amount: 200000, type: "cash", direction: "out", receiver: "شركة الرياض", payer: "الإدارة" },
-    ],
-  },
-  {
-    id: 2,
-    name: "مؤسسة البناء الحديث",
-    phone: "0561-789012",
-    phone2: "",
-    email: "modern@example.com",
-    wilaya: "الجزائر",
-    address: "المنطقة الصناعية، قطعة 14",
-    salesperson: "خالد عمر",
-    ordersCount: 7,
-    lastOrder: "2024-01-16",
-    totalAmount: 8750000,
-    paidAmount: 8750000,
-    openingBalance: 0,
-    status: "active",
-    shippingRoute: "الجزائر - وسط",
-    defaultPriceListId: "SEMI_WHOLESALE",
-    orders: [
-      { id: "ORD-010", date: "2024-01-16", amount: 3500000, paid: 3500000, status: "paid" },
-      { id: "ORD-011", date: "2024-01-05", amount: 5250000, paid: 5250000, status: "paid" },
-    ],
-    payments: [],
-  },
-  {
-    id: 3,
-    name: "شركة الإنشاءات المتحدة",
-    phone: "0536-345678",
-    phone2: "0536-111222",
-    email: "united@example.com",
-    wilaya: "سطيف",
-    address: "حي النصر، الطريق الوطني 4",
-    salesperson: "محمد سعيد",
-    ordersCount: 18,
-    lastOrder: "2024-01-17",
-    totalAmount: 31200000,
-    paidAmount: 16200000,
-    openingBalance: 1000000,
-    status: "active",
-    shippingRoute: "سطيف - الشرق",
-    defaultPriceListId: "AHMED",
-    orders: [
-      { id: "ORD-020", date: "2024-01-17", amount: 10000000, paid: 0, status: "unpaid" },
-      { id: "ORD-021", date: "2024-01-10", amount: 10000000, paid: 5000000, status: "partial" },
-      { id: "ORD-022", date: "2024-01-03", amount: 11200000, paid: 11200000, status: "paid" },
-    ],
-    payments: [
-      { id: "PMT-010", date: "2024-01-17", amount: 5000000, type: "cheque", direction: "in", receiver: "محمد سعيد", payer: "شركة الإنشاءات" },
-    ],
-  },
-  {
-    id: 4,
-    name: "مجموعة الخليج للتطوير",
-    phone: "0502-901234",
-    phone2: "",
-    email: "gulf@example.com",
-    wilaya: "قسنطينة",
-    address: "شارع الاستقلال رقم 7",
-    salesperson: "أحمد محمد",
-    ordersCount: 4,
-    lastOrder: "2024-01-18",
-    totalAmount: 4280000,
-    paidAmount: 4280000,
-    openingBalance: 0,
-    status: "active",
-    shippingRoute: "قسنطينة - الشرق",
-    orders: [
-      { id: "ORD-030", date: "2024-01-18", amount: 4280000, paid: 4280000, status: "paid" },
-    ],
-    payments: [],
-  },
-  {
-    id: 5,
-    name: "شركة الأفق للتجارة",
-    phone: "0518-567890",
-    phone2: "",
-    email: "horizon@example.com",
-    wilaya: "وهران",
-    address: "حي الشهداء رقم 22",
-    salesperson: "يوسف علي",
-    ordersCount: 9,
-    lastOrder: "2024-01-18",
-    totalAmount: 9860000,
-    paidAmount: 5000000,
-    openingBalance: 250000,
-    status: "active",
-    shippingRoute: "وهران - الغرب",
-    orders: [
-      { id: "ORD-040", date: "2024-01-18", amount: 4860000, paid: 0, status: "unpaid" },
-      { id: "ORD-041", date: "2024-01-11", amount: 5000000, paid: 5000000, status: "paid" },
-    ],
-    payments: [
-      { id: "PMT-020", date: "2024-01-12", amount: 5000000, type: "bank", direction: "in", receiver: "يوسف علي", payer: "شركة الأفق" },
-    ],
-  },
-];
+export const mockCustomers = [];
 
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 const paymentTypeLabel = { cash: "نقدي", bank: "تحويل بنكي", cheque: "شيك" };
@@ -1153,7 +1005,8 @@ function NewOrder() {
   const salesPriceLists = getPriceListsFor("sales");
   const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const [cart, setCart] = useState({}); // { productId: { product, qty, willShip } }
-  const [selectedProductId, setSelectedProductId] = useState(mockProducts[0]?.id ?? null);
+  const [apiProducts, setApiProducts] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState(null);
   const [qtyDialog, setQtyDialog] = useState(null); // { product, qty }
   const [qtyInput, setQtyInput] = useState("1");
   const [replaceQtyOnNextDigit, setReplaceQtyOnNextDigit] = useState(true);
@@ -1161,12 +1014,37 @@ function NewOrder() {
   const [notes, setNotes] = useState("");
   const [newCustomerDialog, setNewCustomerDialog] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState(emptyNewCustomerForm);
-  const [customers, setCustomers] = useState(mockCustomers);
+  const [customers, setCustomers] = useState([]);
   const [successDialog, setSuccessDialog] = useState(false);
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
+
+  useEffect(() => {
+    productsApi.list().then((r) => {
+      const all = r.data?.content ?? r.data ?? [];
+      const mapped = all.map((p) => ({
+        id: p.id,
+        name: p.name ?? p.nameAr,
+        code: p.code ?? p.id,
+        category: p.category ?? "عام",
+        stock: p.stock ?? 0,
+        unit: p.unit ?? "وحدة",
+        color: "#17c1e8",
+        weightPerUnit: p.weightPerUnit ?? 0,
+        unitsPerPackage: p.unitsPerPackage ?? 1,
+        packageUnit: p.packageUnit ?? "وحدة",
+      }));
+      setApiProducts(mapped);
+      if (mapped.length) setSelectedProductId(mapped[0].id);
+    }).catch(console.error);
+    customersApi.list().then((r) => {
+      setCustomers((r.data?.content ?? r.data ?? []).map((c) => ({
+        orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...c,
+      })));
+    }).catch(console.error);
+  }, []);
 
   const normalizeQty = (value) => {
     const digitsOnly = String(value ?? "").replace(/[^\d]/g, "");
@@ -1187,7 +1065,7 @@ function NewOrder() {
     ["clear", "0", "backspace"],
   ];
 
-  const filteredProducts = mockProducts.filter((p) => {
+  const filteredProducts = apiProducts.filter((p) => {
     const matchCat =
       category === "الكل" ||
       (category === favoriteCategory && isFavorite(p.id)) ||
@@ -1346,7 +1224,24 @@ function NewOrder() {
   };
 
   const handleSubmit = (isDraft) => {
-    setSuccessDialog(isDraft ? "draft" : "submitted");
+    const payload = {
+      customerId: customer?.id ?? null,
+      notes,
+      status: isDraft ? "draft" : "confirmed",
+      priceListId: selectedPriceListId,
+      items: cartItems.map((item) => {
+        const priceInfo = resolveProductPrice(item.product, selectedPriceListId, "sales");
+        return {
+          productId: item.product.id,
+          qty: Number(item.qty),
+          unitPrice: priceInfo.unitPrice,
+          willShip: item.willShip ?? true,
+        };
+      }),
+    };
+    ordersApi.create(payload)
+      .then(() => setSuccessDialog(isDraft ? "draft" : "submitted"))
+      .catch(console.error);
   };
 
   const updateNewCustomerField = (field, value) => {
@@ -1360,9 +1255,7 @@ function NewOrder() {
 
     if (!name || !phone || !wilaya) return;
 
-    const openingBalance = Math.max(0, Number(newCustomerForm.openingBalance) || 0);
-    const newCust = {
-      id: Math.max(...customers.map((item) => item.id), 0) + 1,
+    const apiData = {
       name,
       phone,
       phone2: newCustomerForm.phone2.trim(),
@@ -1370,22 +1263,18 @@ function NewOrder() {
       wilaya,
       address: newCustomerForm.address.trim(),
       salesperson: newCustomerForm.salesperson.trim() || "غير محدد",
-      ordersCount: 0,
-      lastOrder: "—",
-      totalAmount: 0,
-      paidAmount: 0,
-      openingBalance,
-      balance: openingBalance,
-      status: "active",
       shippingRoute: newCustomerForm.shippingRoute.trim() || `${wilaya} - عام`,
-      orders: [],
-      payments: [],
+      openingBalance: Math.max(0, Number(newCustomerForm.openingBalance) || 0),
     };
-
-    setCustomers((prev) => [...prev, newCust]);
-    setCustomer(newCust);
-    setNewCustomerForm(emptyNewCustomerForm);
-    setNewCustomerDialog(false);
+    customersApi.create(apiData)
+      .then((r) => {
+        const newCust = { orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...r.data };
+        setCustomers((prev) => [...prev, newCust]);
+        setCustomer(newCust);
+        setNewCustomerForm(emptyNewCustomerForm);
+        setNewCustomerDialog(false);
+      })
+      .catch(console.error);
   };
 
   const focusSearchInput = () => {

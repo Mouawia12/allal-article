@@ -41,11 +41,11 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import {
-  currentUser,
   getUserPermissions,
   permissionsByModule,
   roleConfig,
-} from "data/mock/usersMock";
+} from "data/config/permissionsConfig";
+import { useAuth } from "context/AuthContext";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
@@ -248,7 +248,8 @@ function EditProfile({ user }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function Profile() {
-  const user = currentUser;
+  const { user: authUser } = useAuth();
+  const user = { ...authUser, role: authUser?.roleCode || "viewer", assignedWilaya: "", maxDiscountPct: 0 };
   const [tab, setTab] = useState(0);
   const rc = roleConfig[user.role] || roleConfig.viewer;
   const colorIdx = user.id % avatarColors.length;

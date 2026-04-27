@@ -20,6 +20,15 @@ import LoginIcon from "@mui/icons-material/Login";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import PaymentsIcon from "@mui/icons-material/Payments";
+import ReplyIcon from "@mui/icons-material/Reply";
+import PriceChangeIcon from "@mui/icons-material/PriceChange";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import AssignmentReturnIcon from "@mui/icons-material/AssignmentReturn";
+import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
+import SettingsApplicationsIcon from "@mui/icons-material/SettingsApplications";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -90,6 +99,76 @@ const mockLogs = [
     entity: "—", description: "تسجيل دخول للنظام",
     details: { device: "Mobile", ip: "192.168.1.x" },
   },
+  {
+    id: 13, time: "2024-01-22 16:05", user: "أحمد محمد", role: "إدارة", action: "customer_payment_received",
+    entity: "PMT-004 / مؤسسة الإبداع التجارية", description: "تسجيل دفعة من زبون",
+    details: {
+      customer: "مؤسسة الإبداع التجارية",
+      amount: "250,000 دج",
+      method: "نقدي",
+      receivedBy: "أحمد محمد",
+      paidBy: "مؤسسة الإبداع التجارية",
+      reference: "PMT-004",
+    },
+  },
+  {
+    id: 14, time: "2024-01-22 16:20", user: "الإدارة", role: "إدارة", action: "customer_payment_refund",
+    entity: "PMT-005 / شركة التقدم للمقاولات", description: "تسجيل دفعة عكسية للزبون",
+    details: {
+      customer: "شركة التقدم للمقاولات",
+      amount: "50,000 دج",
+      method: "تحويل بنكي",
+      paidBy: "الإدارة",
+      receivedBy: "شركة التقدم للمقاولات",
+      reason: "تسوية دفعة زائدة",
+      reference: "PMT-005",
+    },
+  },
+  {
+    id: 15, time: "2024-01-22 16:40", user: "المالك", role: "مالك", action: "product_price_changed",
+    entity: "BRG-010-50 / برغي M10", description: "تغيير سعر صنف",
+    details: { oldPrice: "120 دج", newPrice: "135 دج", priceList: "السعر الرئيسي", reason: "تحديث تكلفة الشراء" },
+  },
+  {
+    id: 16, time: "2024-01-22 16:52", user: "الإدارة", role: "إدارة", action: "inventory_adjustment",
+    entity: "WH-MAIN / دهان أبيض 20L", description: "تسوية كمية مخزون",
+    details: { product: "دهان أبيض 20L", warehouse: "المخزن الرئيسي", oldQty: 48, newQty: 44, reason: "جرد يدوي" },
+  },
+  {
+    id: 17, time: "2024-01-22 17:05", user: "يوسف علي", role: "إدارة", action: "stock_transfer",
+    entity: "TRF-2024-003", description: "تحويل مخزون بين مستودعين",
+    details: { product: "صامولة M10", qty: 200, from: "المخزن الرئيسي", to: "مخزن سطيف" },
+  },
+  {
+    id: 18, time: "2024-01-22 17:20", user: "الإدارة", role: "إدارة", action: "create_return",
+    entity: "RET-2024-002 / ORD-2024-007", description: "إنشاء مرتجع طلبية",
+    details: { customer: "مؤسسة الإبداع التجارية", order: "ORD-2024-007", returnedQty: 12, receivedBy: "الإدارة" },
+  },
+  {
+    id: 19, time: "2024-01-22 17:35", user: "الإدارة", role: "إدارة", action: "supplier_payment_paid",
+    entity: "SP-003 / مصنع الصلب الجزائري", description: "تسجيل دفعة لمورد",
+    details: { supplier: "مصنع الصلب الجزائري", amount: "320,000 دج", method: "تحويل بنكي", paidBy: "الإدارة", reference: "SP-003" },
+  },
+  {
+    id: 20, time: "2024-01-22 17:50", user: "المالك", role: "مالك", action: "user_permission_changed",
+    entity: "خالد عمر", description: "تعديل صلاحيات مستخدم",
+    details: { targetUser: "خالد عمر", permission: "customers.payments", oldValue: "غير مفعلة", newValue: "مفعلة" },
+  },
+  {
+    id: 21, time: "2024-01-22 18:05", user: "المالك", role: "مالك", action: "settings_changed",
+    entity: "إعدادات الذكاء الاصطناعي", description: "تعديل إعدادات النظام",
+    details: { setting: "ai.provider", oldValue: "غير محدد", newValue: "OpenAI", scope: "tenant" },
+  },
+  {
+    id: 22, time: "2024-01-22 18:12", user: "النظام", role: "نظام", action: "failed_login",
+    entity: "admin@example.com", description: "محاولة دخول فاشلة",
+    details: { email: "admin@example.com", ip: "192.168.1.x", reason: "كلمة مرور غير صحيحة" },
+  },
+  {
+    id: 23, time: "2024-01-22 18:25", user: "الإدارة", role: "إدارة", action: "data_exported",
+    entity: "تقرير الزبائن المديونين", description: "تصدير بيانات حساسة",
+    details: { exportType: "PDF", records: 18, filter: "مديونون / ولاية الجزائر" },
+  },
 ];
 
 const actionConfig = {
@@ -101,7 +180,18 @@ const actionConfig = {
   delete_line:   { label: "حذف سطر",       color: "#ea0606", Icon: DeleteIcon },
   add_customer:  { label: "إضافة زبون",    color: "#82d616", Icon: PersonAddIcon },
   update_product:{ label: "تعديل صنف",     color: "#fb8c00", Icon: InventoryIcon },
+  product_price_changed: { label: "تغيير سعر", color: "#fb8c00", Icon: PriceChangeIcon },
   ship_order:    { label: "شحن طلبية",     color: "#17c1e8", Icon: LocalShippingIcon },
+  create_return: { label: "إنشاء مرتجع",    color: "#ea0606", Icon: AssignmentReturnIcon },
+  inventory_adjustment: { label: "تسوية مخزون", color: "#fb8c00", Icon: InventoryIcon },
+  stock_transfer: { label: "تحويل مخزون", color: "#17c1e8", Icon: SwapHorizIcon },
+  customer_payment_received: { label: "استلام دفعة", color: "#66BB6A", Icon: PaymentsIcon },
+  customer_payment_refund:   { label: "دفعة عكسية",  color: "#ea0606", Icon: ReplyIcon },
+  supplier_payment_paid:     { label: "دفع لمورد",   color: "#344767", Icon: PaymentsIcon },
+  user_permission_changed: { label: "تعديل صلاحيات", color: "#7928ca", Icon: ManageAccountsIcon },
+  settings_changed: { label: "تعديل إعدادات", color: "#344767", Icon: SettingsApplicationsIcon },
+  failed_login: { label: "فشل دخول", color: "#ea0606", Icon: WarningAmberIcon },
+  data_exported: { label: "تصدير بيانات", color: "#8392ab", Icon: FileDownloadIcon },
   ai_process:    { label: "معالجة AI",      color: "#7928ca", Icon: AutoAwesomeIcon },
   login:         { label: "تسجيل دخول",    color: "#8392ab", Icon: LoginIcon },
 };
@@ -110,6 +200,7 @@ const roleColors = {
   "بائع": "#17c1e8",
   "إدارة": "#82d616",
   "مالك": "#7928ca",
+  "نظام": "#8392ab",
 };
 
 const actionTypes = ["الكل", ...Object.keys(actionConfig)];
@@ -217,10 +308,12 @@ function AuditLogs() {
   const users = ["الكل", ...new Set(mockLogs.map((l) => l.user))];
 
   const filtered = mockLogs.filter((log) => {
+    const detailText = Object.values(log.details || {}).join(" ");
     const matchSearch =
       log.description.includes(search) ||
       log.user.includes(search) ||
-      log.entity.includes(search);
+      log.entity.includes(search) ||
+      detailText.includes(search);
     const matchAction = actionFilter === "الكل" || log.action === actionFilter;
     const matchUser = userFilter === "الكل" || log.user === userFilter;
     return matchSearch && matchAction && matchUser;
@@ -248,8 +341,9 @@ function AuditLogs() {
           {[
             { label: "إجمالي العمليات اليوم", value: mockLogs.filter(l => l.time.startsWith("2024-01-22")).length, color: "info" },
             { label: "عمليات الطلبيات",        value: mockLogs.filter(l => l.action.includes("order")).length,      color: "success" },
-            { label: "تعديلات الإدارة",        value: mockLogs.filter(l => l.role === "إدارة").length,              color: "warning" },
-            { label: "عمليات AI",              value: mockLogs.filter(l => l.action === "ai_process").length,        color: "dark" },
+            { label: "عمليات الدفعات",         value: mockLogs.filter(l => l.action.includes("payment")).length,    color: "success" },
+            { label: "حركات المخزون",          value: mockLogs.filter(l => ["inventory_adjustment", "stock_transfer"].includes(l.action)).length, color: "warning" },
+            { label: "أمن وصلاحيات",           value: mockLogs.filter(l => ["user_permission_changed", "failed_login"].includes(l.action)).length, color: "dark" },
           ].map((s) => (
             <Grid item xs={6} sm={3} key={s.label}>
               <Card sx={{ p: 2, textAlign: "center" }}>

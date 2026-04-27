@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -45,89 +45,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
-
-
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const mockCustomers = [
-  {
-    id: 1, name: "شركة الرياض للمقاولات", phone: "0555-123456", phone2: "0555-654321",
-    address: "حي السعادة، شارع العلماء", wilaya: "وهران",
-    salesperson: "أحمد محمد", ordersCount: 12, lastOrder: "2024-01-22",
-    totalAmount: 14520000, paidAmount: 12000000, openingBalance: 500000,
-    status: "active", shippingRoute: "وهران - الساحل",
-    orders: [
-      { id: "ORD-001", date: "2024-01-22", amount: 2500000, paid: 2500000, status: "paid" },
-      { id: "ORD-002", date: "2024-01-15", amount: 4800000, paid: 2400000, status: "partial" },
-      { id: "ORD-003", date: "2024-01-08", amount: 3200000, paid: 0,       status: "unpaid" },
-    ],
-    payments: [
-      { id: "PMT-001", date: "2024-01-22", amount: 2500000, type: "cash",   direction: "in",  receiver: "أحمد محمد", payer: "شركة الرياض" },
-      { id: "PMT-002", date: "2024-01-18", amount: 2400000, type: "bank",   direction: "in",  receiver: "خالد عمر",  payer: "شركة الرياض" },
-      { id: "PMT-003", date: "2024-01-20", amount:  200000, type: "cash",   direction: "out", receiver: "شركة الرياض", payer: "الإدارة" },
-    ],
-  },
-  {
-    id: 2, name: "مؤسسة البناء الحديث", phone: "0561-789012", phone2: "",
-    address: "المنطقة الصناعية، قطعة 14", wilaya: "الجزائر",
-    salesperson: "خالد عمر", ordersCount: 7, lastOrder: "2024-01-16",
-    totalAmount: 8750000, paidAmount: 8750000, openingBalance: 0,
-    status: "active", shippingRoute: "الجزائر - وسط",
-    orders: [
-      { id: "ORD-010", date: "2024-01-16", amount: 3500000, paid: 3500000, status: "paid" },
-      { id: "ORD-011", date: "2024-01-05", amount: 5250000, paid: 5250000, status: "paid" },
-    ],
-    payments: [],
-  },
-  {
-    id: 3, name: "شركة الإنشاءات المتحدة", phone: "0536-345678", phone2: "0536-111222",
-    address: "حي النصر، الطريق الوطني 4", wilaya: "سطيف",
-    salesperson: "محمد سعيد", ordersCount: 18, lastOrder: "2024-01-17",
-    totalAmount: 31200000, paidAmount: 16200000, openingBalance: 1000000,
-    status: "active", shippingRoute: "سطيف - الشرق",
-    orders: [
-      { id: "ORD-020", date: "2024-01-17", amount: 10000000, paid: 0,        status: "unpaid" },
-      { id: "ORD-021", date: "2024-01-10", amount: 10000000, paid: 5000000,  status: "partial" },
-      { id: "ORD-022", date: "2024-01-03", amount: 11200000, paid: 11200000, status: "paid" },
-    ],
-    payments: [
-      { id: "PMT-010", date: "2024-01-17", amount: 5000000, type: "cheque", direction: "in", receiver: "محمد سعيد", payer: "شركة الإنشاءات" },
-    ],
-  },
-  {
-    id: 4, name: "مجموعة الخليج للتطوير", phone: "0502-901234", phone2: "",
-    address: "شارع الاستقلال رقم 7", wilaya: "قسنطينة",
-    salesperson: "أحمد محمد", ordersCount: 4, lastOrder: "2024-01-18",
-    totalAmount: 4280000, paidAmount: 4280000, openingBalance: 0,
-    status: "active", shippingRoute: "قسنطينة - الشرق",
-    orders: [
-      { id: "ORD-030", date: "2024-01-18", amount: 4280000, paid: 4280000, status: "paid" },
-    ],
-    payments: [],
-  },
-  {
-    id: 5, name: "شركة الأفق للتجارة", phone: "0518-567890", phone2: "",
-    address: "حي الشهداء رقم 22", wilaya: "وهران",
-    salesperson: "يوسف علي", ordersCount: 9, lastOrder: "2024-01-18",
-    totalAmount: 9860000, paidAmount: 5000000, openingBalance: 250000,
-    status: "active", shippingRoute: "وهران - الغرب",
-    orders: [
-      { id: "ORD-040", date: "2024-01-18", amount: 4860000, paid: 0,       status: "unpaid" },
-      { id: "ORD-041", date: "2024-01-11", amount: 5000000, paid: 5000000, status: "paid" },
-    ],
-    payments: [
-      { id: "PMT-020", date: "2024-01-12", amount: 5000000, type: "bank", direction: "in", receiver: "يوسف علي", payer: "شركة الأفق" },
-    ],
-  },
-  {
-    id: 6, name: "مؤسسة النجاح التجارية", phone: "0544-123456", phone2: "",
-    address: "شارع بن باديس رقم 3", wilaya: "الجلفة",
-    salesperson: "خالد عمر", ordersCount: 3, lastOrder: "2024-01-10",
-    totalAmount: 2980000, paidAmount: 2980000, openingBalance: 0,
-    status: "inactive", shippingRoute: "—",
-    orders: [],
-    payments: [],
-  },
-];
+import { customersApi } from "services";
 
 function getInitials(name) {
   return name.split(" ").slice(0, 2).map((w) => w[0]).join("");
@@ -556,25 +474,52 @@ function CustomerDetailDialog({ customer, onClose }) {
 }
 
 // ─── Add Customer Dialog ──────────────────────────────────────────────────────
-function AddCustomerDialog({ open, onClose }) {
+const emptyCustomerForm = { name: "", phone: "", phone2: "", wilaya: "", address: "", shippingRoute: "", email: "", openingBalance: "", salesperson: "" };
+
+function AddCustomerDialog({ open, onClose, onSaved }) {
+  const [form, setForm] = useState(emptyCustomerForm);
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => { if (open) setForm(emptyCustomerForm); }, [open]);
+
+  const save = () => {
+    if (!form.name.trim() || !form.phone.trim()) return;
+    setSaving(true);
+    customersApi.create({
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      phone2: form.phone2.trim() || null,
+      wilaya: form.wilaya || null,
+      address: form.address.trim() || null,
+      shippingRoute: form.shippingRoute.trim() || null,
+      email: form.email.trim() || null,
+      openingBalance: Number(form.openingBalance) || 0,
+      salesperson: form.salesperson.trim() || null,
+    })
+      .then((r) => { onSaved(r.data); onClose(); })
+      .catch(console.error)
+      .finally(() => setSaving(false));
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>إضافة زبون جديد</DialogTitle>
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid item xs={12}>
-            <TextField fullWidth label="اسم الزبون / الشركة *" size="small" />
+            <TextField fullWidth label="اسم الزبون / الشركة *" size="small" value={form.name} onChange={(e) => set("name", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="رقم الهاتف *" size="small" />
+            <TextField fullWidth label="رقم الهاتف *" size="small" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="الهاتف الثاني" size="small" />
+            <TextField fullWidth label="الهاتف الثاني" size="small" value={form.phone2} onChange={(e) => set("phone2", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
             <FormControl size="small" fullWidth>
               <InputLabel>الولاية *</InputLabel>
-              <Select defaultValue="" label="الولاية *">
+              <Select value={form.wilaya} onChange={(e) => set("wilaya", e.target.value)} label="الولاية *">
                 {WILAYAS.map((w) => (
                   <MenuItem key={w.code} value={w.name}>{w.code} - {w.name}</MenuItem>
                 ))}
@@ -582,26 +527,29 @@ function AddCustomerDialog({ open, onClose }) {
             </FormControl>
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="العنوان التفصيلي" size="small" />
+            <TextField fullWidth label="العنوان التفصيلي" size="small" value={form.address} onChange={(e) => set("address", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="مسار الشحن" size="small" placeholder="مثال: وهران - الساحل" />
+            <TextField fullWidth label="مسار الشحن" size="small" placeholder="مثال: وهران - الساحل" value={form.shippingRoute} onChange={(e) => set("shippingRoute", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="البريد الإلكتروني" size="small" />
+            <TextField fullWidth label="البريد الإلكتروني" size="small" value={form.email} onChange={(e) => set("email", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth label="الرصيد الافتتاحي (دج)" type="number" size="small"
+              value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)}
               helperText="رصيد سابق قبل بدء التسجيل في البرنامج" />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth label="البائع المسؤول" size="small" />
+            <TextField fullWidth label="البائع المسؤول" size="small" value={form.salesperson} onChange={(e) => set("salesperson", e.target.value)} />
           </Grid>
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" onClick={onClose}>حفظ الزبون</SoftButton>
+        <SoftButton variant="gradient" color="info" size="small" disabled={!form.name.trim() || !form.phone.trim() || saving} onClick={save}>
+          {saving ? "جارٍ الحفظ..." : "حفظ الزبون"}
+        </SoftButton>
       </DialogActions>
     </Dialog>
   );
@@ -776,6 +724,8 @@ function PrintReportDialog({ open, onClose, customers, isDebtMode, wilayaFilter 
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function Customers() {
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(0);
   const [wilayaFilter, setWilayaFilter] = useState("all");
@@ -783,8 +733,19 @@ function Customers() {
   const [addDialog, setAddDialog] = useState(false);
   const [printDialog, setPrintDialog] = useState(false);
 
+  useEffect(() => {
+    customersApi.list()
+      .then((r) => setCustomers((r.data?.content ?? r.data ?? []).map((c) => ({
+        totalAmount: 0, paidAmount: 0, orders: [], payments: [],
+        ordersCount: 0, lastOrder: "—", shippingRoute: "—", salesperson: "—",
+        ...c,
+      }))))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
   // tab: 0=الكل 1=نشطون 2=غير نشطين 3=مديونون
-  const filtered = mockCustomers.filter((c) => {
+  const filtered = customers.filter((c) => {
     const debt = c.totalAmount - c.paidAmount - c.openingBalance;
     const matchStatus =
       tab === 0 ? true :
@@ -800,8 +761,8 @@ function Customers() {
     return matchStatus && matchWilaya && matchSearch;
   });
 
-  const totalDebt = mockCustomers.reduce((s, c) => {
-    const d = c.totalAmount - c.paidAmount - c.openingBalance;
+  const totalDebt = customers.reduce((s, c) => {
+    const d = c.totalAmount - c.paidAmount - (c.openingBalance ?? 0);
     return s + (d > 0 ? d : 0);
   }, 0);
 
@@ -833,9 +794,9 @@ function Customers() {
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
           {[
-            { label: "إجمالي الزبائن",   value: mockCustomers.length,                                           color: "info" },
-            { label: "نشطون",             value: mockCustomers.filter(c => c.status === "active").length,        color: "success" },
-            { label: "مديونون",           value: mockCustomers.filter(c => c.totalAmount - c.paidAmount > 0).length, color: "error" },
+            { label: "إجمالي الزبائن",   value: customers.length,                                               color: "info" },
+            { label: "نشطون",             value: customers.filter(c => c.status === "active").length,            color: "success" },
+            { label: "مديونون",           value: customers.filter(c => (c.totalAmount - c.paidAmount) > 0).length, color: "error" },
             { label: "إجمالي الديون",    value: `${(totalDebt / 1000000).toFixed(1)}م دج`,                      color: "warning" },
           ].map((s) => (
             <Grid item xs={6} sm={3} key={s.label}>
@@ -894,7 +855,11 @@ function Customers() {
       </SoftBox>
 
       <CustomerDetailDialog customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} />
-      <AddCustomerDialog open={addDialog} onClose={() => setAddDialog(false)} />
+      <AddCustomerDialog
+        open={addDialog}
+        onClose={() => setAddDialog(false)}
+        onSaved={(c) => setCustomers((prev) => [{ totalAmount: 0, paidAmount: 0, orders: [], payments: [], ordersCount: 0, lastOrder: "—", shippingRoute: "—", salesperson: "—", ...c }, ...prev])}
+      />
 
       <PrintReportDialog
         open={printDialog}

@@ -22,6 +22,7 @@ import App from "App";
 import { SoftUIControllerProvider } from "context";
 import { DarkModeProvider } from "context/DarkModeContext";
 import { I18nProvider } from "i18n";
+import { AuthProvider } from "context/AuthContext";
 
 const rawBasename = process.env.PUBLIC_URL || "";
 const basename = rawBasename === "." ? "/" : rawBasename;
@@ -29,12 +30,14 @@ const basename = rawBasename === "." ? "/" : rawBasename;
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <BrowserRouter basename={basename}>
-    <SoftUIControllerProvider>
-      <DarkModeProvider>
-        <I18nProvider>
-          <App />
-        </I18nProvider>
-      </DarkModeProvider>
-    </SoftUIControllerProvider>
+    <AuthProvider>
+      <SoftUIControllerProvider>
+        <DarkModeProvider>
+          <I18nProvider>
+            <App />
+          </I18nProvider>
+        </DarkModeProvider>
+      </SoftUIControllerProvider>
+    </AuthProvider>
   </BrowserRouter>
 );

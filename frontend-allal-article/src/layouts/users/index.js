@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
@@ -45,11 +45,11 @@ import { WILAYAS } from "data/wilayas";
 import {
   allPermissions,
   getUserPermissions,
-  mockUsers as initialUsers,
   permissionsByModule,
   roleConfig,
   roleDefaultPermissions,
-} from "data/mock/usersMock";
+} from "data/config/permissionsConfig";
+import { usersApi } from "services";
 
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 
@@ -382,22 +382,60 @@ function UserFormDialog({ open, user, onClose, onSave }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function Users() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [formDialog, setFormDialog] = useState(null);
   const [permDialog, setPermDialog] = useState(null);
 
+  const normalizeUser = (u) => ({
+    ...u,
+    role: u.roleCode || u.role || "viewer",
+    assignedWilaya: u.assignedWilaya || "",
+    maxDiscountPct: u.maxDiscountPct || 0,
+    canViewAllOrders: u.canViewAllOrders || false,
+    lang: u.lang || "ar",
+    lastLogin: u.lastLogin || "—",
+    ordersCount: u.ordersCount || 0,
+    customPermissions: [],
+    notes: u.notes || "",
+    password: "",
+  });
+
+  const loadUsers = useCallback(() => {
+    usersApi.list()
+      .then((r) => {
+        const raw = r.data?.data;
+        const list = Array.isArray(raw) ? raw : (raw?.content ?? []);
+        setUsers(list.map(normalizeUser));
+      })
+      .catch(console.error);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadUsers();
+    usersApi.listRoles().then((r) => setRoles(r.data?.data ?? [])).catch(console.error);
+  }, [loadUsers]);
+
   const filtered = users.filter((u) => {
-    const matchSearch = u.name.includes(search) || u.email.includes(search) || (roleConfig[u.role]?.label || "").includes(search);
+    const matchSearch = u.name?.includes(search) || u.email?.includes(search) || (roleConfig[u.role]?.label || "").includes(search);
     const matchRole = roleFilter === "all" || u.role === roleFilter;
     return matchSearch && matchRole;
   });
 
-  const upsertUser = (u) => {
-    setUsers((prev) =>
-      prev.some((x) => x.id === u.id) ? prev.map((x) => x.id === u.id ? u : x) : [...prev, u]
-    );
+  const upsertUser = async (u) => {
+    try {
+      const roleObj = roles.find((r) => r.code === u.role);
+      const req = { name: u.name, email: u.email, phone: u.phone || "", roleId: roleObj?.id, userType: u.userType || "staff" };
+      if (u.password) req.password = u.password;
+      if (u.id && u.id < 1e13) {
+        await usersApi.update(u.id, req);
+      } else {
+        await usersApi.create(req);
+      }
+      loadUsers();
+    } catch (e) { console.error(e); }
   };
 
   const toggleStatus = (userId) => {

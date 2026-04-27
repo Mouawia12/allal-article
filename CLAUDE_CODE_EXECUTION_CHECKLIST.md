@@ -185,6 +185,8 @@
   - صورة رئيسية
   - مصدر الصورة
   - حالة المعالجة الذكية
+  - تخزين الصور كـ external assets في Cloudflare R2 مع حفظ metadata و object key في قاعدة البيانات فقط
+  - عدم افتراض local server file paths أو تخزين binary/blob داخل قاعدة البيانات
   منجز عندما:
   - المنتج يستطيع عرض الصور الأصلية والمعالجة إن وجدت.
 
@@ -460,6 +462,7 @@
   - retriable items
   منجز عندما:
   - رفع ملفات/صور لا ينفذ بشكل blocking داخل request واحدة.
+  - عملية الرفع تحفظ الملف في Cloudflare R2 ثم تحفظ reference في قاعدة البيانات بدون تخزين أسرار R2 في الجداول.
 
 - [ ] 8.3 بناء product import review flow.
   المطلوب:
@@ -471,6 +474,7 @@
   - import selected only
   منجز عندما:
   - Claude يستطيع ربط شاشة معاينة حقيقية بالباك إند بدون افتراضات.
+  - ملف الاستيراد يشار إليه عبر `media_assets.source_file_id` أو مرجع مكافئ، وليس عبر مسار محلي على السيرفر.
 
 - [ ] 8.4 بناء image processing lifecycle.
   المطلوب:

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -32,75 +32,98 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 
 import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
-import { mockTenants, mockPlans, statusConfig, planColors } from "data/mock/ownerMock";
+import { statusConfig } from "data/mock/ownerMock";
+import ownerApi from "services/ownerApi";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
 // ─── New Tenant Dialog ────────────────────────────────────────────────────────
-function NewTenantDialog({ open, onClose }) {
+function NewTenantDialog({ open, onClose, plans, onCreated }) {
   const { t } = useI18n();
-  const [form, setForm] = useState({ name: "", email: "", phone: "", wilaya: "", planId: 1 });
+  const [form, setForm] = useState({ companyName:"", contactEmail:"", contactPhone:"", wilayaCode:"", planCode:"trial", ownerName:"", ownerPassword:"" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const handleCreate = async () => {
+    if (!form.companyName || !form.contactEmail) return setError("اسم الشركة والبريد الإلكتروني مطلوبان");
+    setLoading(true); setError("");
+    try {
+      const r = await ownerApi.createTenant(form);
+      setResult(r.data?.data);
+      onCreated?.();
+    } catch (e) {
+      setError(e.response?.data?.message || "حدث خطأ أثناء الإنشاء");
+    } finally { setLoading(false); }
+  };
+
+  const handleClose = () => { setForm({ companyName:"", contactEmail:"", contactPhone:"", wilayaCode:"", planCode:"trial", ownerName:"", ownerPassword:"" }); setResult(null); setError(""); onClose(); };
+
   return localizeNode((
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Box sx={{ fontWeight: 700 }}>إضافة مشترك جديد</Box>
-        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+        <IconButton size="small" onClick={handleClose}><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-          <TextField label="اسم الشركة" value={form.name} onChange={set("name")} size="small" fullWidth required />
-          <TextField label="البريد الإلكتروني للمدير" value={form.email} onChange={set("email")} size="small" fullWidth required type="email" />
-          <TextField label="رقم الهاتف" value={form.phone} onChange={set("phone")} size="small" fullWidth />
-          <TextField label="الولاية" value={form.wilaya} onChange={set("wilaya")} size="small" fullWidth />
-          <FormControl size="small" fullWidth>
-            <Select value={form.planId} onChange={set("planId")} displayEmpty>
-              {mockPlans.map((p) => (
-                <MenuItem key={p.id} value={p.id}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: "50%", background: p.color }} />
-                    {p.nameAr} — {p.priceMonthly ? `${fmt(p.priceMonthly)} دج/شهر` : "مجاني"}
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <Box sx={{ background: "#e3f8fd", border: "1px solid #b2ebf9", borderRadius: 2, p: 1.5, fontSize: 12, color: "#344767" }}>
-            <Box sx={{ fontWeight: 600, mb: 0.5 }}>سيتم تلقائياً:</Box>
-            <Box>• إنشاء مخطط قاعدة البيانات المنفصل (schema)</Box>
-            <Box>• توليد شجرة الحسابات المحاسبية الجزائرية</Box>
-            <Box>• إنشاء حساب المدير الأول وإرسال بريد الترحيب</Box>
-            <Box>• تفعيل فترة تجريبية 30 يوم</Box>
+        {result ? (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <Box sx={{ background: "#f0fde4", border: "1px solid #82d61644", borderRadius: 2, p: 2, fontSize: 13, color: "#344767" }}>
+              <Box sx={{ fontWeight: 700, mb: 1, color: "#82d616" }}>✓ تم إنشاء المشترك بنجاح</Box>
+              <Box>Schema: <b>{result.schemaName}</b></Box>
+              <Box>البريد: <b>{result.ownerEmail}</b></Box>
+              <Box>كلمة المرور: <b>{result.ownerPassword}</b></Box>
+              <Box sx={{ mt: 1, fontSize: 11, color: "#ea0606", fontWeight: 600 }}>احتفظ بهذه المعلومات — لن تظهر مجدداً</Box>
+            </Box>
           </Box>
-        </Box>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+            <TextField label="اسم الشركة *" value={form.companyName} onChange={set("companyName")} size="small" fullWidth />
+            <TextField label="البريد الإلكتروني للتواصل *" value={form.contactEmail} onChange={set("contactEmail")} size="small" fullWidth type="email" />
+            <TextField label="رقم الهاتف" value={form.contactPhone} onChange={set("contactPhone")} size="small" fullWidth />
+            <TextField label="الولاية (رمز)" value={form.wilayaCode} onChange={set("wilayaCode")} size="small" fullWidth placeholder="16" />
+            <TextField label="اسم مدير الحساب الأول" value={form.ownerName} onChange={set("ownerName")} size="small" fullWidth placeholder="يُستخدم اسم الشركة افتراضياً" />
+            <TextField label="كلمة مرور المدير (اختياري)" value={form.ownerPassword} onChange={set("ownerPassword")} size="small" fullWidth placeholder="تُولَّد تلقائياً إن تُركت فارغة" />
+            <FormControl size="small" fullWidth>
+              <Select value={form.planCode} onChange={set("planCode")}>
+                {(plans ?? []).map((p) => (
+                  <MenuItem key={p.code} value={p.code}>
+                    {p.name_ar} — {p.price_monthly ? `${fmt(p.price_monthly)} دج/شهر` : "مجاني"}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {error && <Box sx={{ color: "#ea0606", fontSize: 12 }}>{error}</Box>}
+            <Box sx={{ background: "#e3f8fd", border: "1px solid #b2ebf9", borderRadius: 2, p: 1.5, fontSize: 12, color: "#344767" }}>
+              <Box sx={{ fontWeight: 600, mb: 0.5 }}>سيتم تلقائياً:</Box>
+              <Box>• إنشاء مخطط قاعدة البيانات المنفصل</Box>
+              <Box>• توليد شجرة الحسابات المحاسبية الجزائرية (SCF)</Box>
+              <Box>• إنشاء حساب المدير الأول</Box>
+            </Box>
+          </Box>
+        )}
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Box
-          component="button"
-          onClick={onClose}
-          sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}
-        >
-          إلغاء
+        <Box component="button" onClick={handleClose}
+          sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}>
+          {result ? "إغلاق" : "إلغاء"}
         </Box>
-        <Box
-          component="button"
-          onClick={onClose}
-          sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 13, color: "#fff", fontWeight: 600 }}
-        >
-          إنشاء المشترك
-        </Box>
+        {!result && (
+          <Box component="button" onClick={handleCreate} disabled={loading}
+            sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, color: "#fff", fontWeight: 600, opacity: loading ? 0.7 : 1, fontFamily: "inherit" }}>
+            {loading ? "جاري الإنشاء..." : "إنشاء المشترك"}
+          </Box>
+        )}
       </DialogActions>
     </Dialog>
   ), t);
 }
 
 // ─── Tenant Detail Dialog ─────────────────────────────────────────────────────
-function TenantDetailDialog({ tenant, onClose }) {
+function TenantDetailDialog({ tenant, onClose, onStatusChange }) {
   const { t } = useI18n();
   if (!tenant) return null;
-  const plan = mockPlans.find((p) => p.id === tenant.planId);
   const sc = statusConfig[tenant.status];
   const userPct = tenant.maxUsers ? Math.round((tenant.usersCount / tenant.maxUsers) * 100) : 0;
 
@@ -121,13 +144,11 @@ function TenantDetailDialog({ tenant, onClose }) {
 
           {/* Plan */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Box sx={{ width: 12, height: 12, borderRadius: "50%", background: plan?.color }} />
-            <Box sx={{ fontSize: 13, fontWeight: 600, color: plan?.color }}>{plan?.nameAr}</Box>
-            {plan?.priceMonthly ? (
-              <Box sx={{ fontSize: 12, color: "#8392ab" }}>— {fmt(plan.priceMonthly)} دج/شهر</Box>
-            ) : (
-              <Box sx={{ fontSize: 12, color: "#8392ab" }}>— مجاني</Box>
-            )}
+            <Box sx={{ fontSize: 13, fontWeight: 600, color: "#17c1e8" }}>{tenant.plan_name ?? "—"}</Box>
+            {tenant.price_monthly
+              ? <Box sx={{ fontSize: 12, color: "#8392ab" }}>— {fmt(tenant.price_monthly)} دج/شهر</Box>
+              : <Box sx={{ fontSize: 12, color: "#8392ab" }}>— مجاني</Box>
+            }
           </Box>
 
           <Divider />
@@ -135,76 +156,48 @@ function TenantDetailDialog({ tenant, onClose }) {
           {/* Info grid */}
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
             {[
-              { label: "البريد الإلكتروني", value: tenant.contactEmail },
-              { label: "الهاتف", value: tenant.contactPhone },
-              { label: "الولاية", value: tenant.wilaya },
-              { label: "مخطط قاعدة البيانات", value: tenant.schemaName },
-              { label: "تاريخ الإنشاء", value: tenant.createdAt },
-              { label: "آخر نشاط", value: tenant.lastActivityAt },
-              { label: "بداية الاشتراك", value: tenant.subscriptionStartedAt ?? "—" },
-              { label: "تجديد الاشتراك", value: tenant.subscriptionRenewsAt ?? "—" },
+              { label: "البريد الإلكتروني", value: tenant.contact_email },
+              { label: "الهاتف", value: tenant.contact_phone },
+              { label: "الولاية", value: tenant.wilaya_code },
+              { label: "مخطط قاعدة البيانات", value: tenant.schema_name },
+              { label: "تاريخ الإنشاء", value: tenant.created_at ? new Date(tenant.created_at).toLocaleDateString("ar-DZ") : "—" },
+              { label: "آخر نشاط", value: tenant.last_activity_at ? new Date(tenant.last_activity_at).toLocaleDateString("ar-DZ") : "—" },
+              { label: "تفعيل", value: tenant.activated_at ? new Date(tenant.activated_at).toLocaleDateString("ar-DZ") : "—" },
+              { label: "انتهاء التجربة", value: tenant.trial_ends_at ?? "—" },
             ].map(({ label, value }) => (
               <Box key={label}>
                 <Box sx={{ fontSize: 10, color: "#8392ab", mb: 0.2 }}>{label}</Box>
-                <Box sx={{ fontSize: 12, fontWeight: 500, color: "#344767" }}>{value}</Box>
+                <Box sx={{ fontSize: 12, fontWeight: 500, color: "#344767" }}>{value ?? "—"}</Box>
               </Box>
             ))}
           </Box>
 
           <Divider />
 
-          {/* Usage */}
-          <Box>
-            <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767", mb: 1 }}>الاستخدام</Box>
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.4 }}>
-              <Box sx={{ fontSize: 12, color: "#344767" }}>المستخدمون</Box>
-              <Box sx={{ fontSize: 12, color: "#8392ab" }}>
-                {tenant.usersCount} / {tenant.maxUsers ?? "∞"}
-              </Box>
-            </Box>
-            <LinearProgress
-              variant="determinate"
-              value={userPct}
-              sx={{ height: 6, borderRadius: 3, background: "#f0f2f5", "& .MuiLinearProgress-bar": { background: userPct > 85 ? "#ea0606" : "#17c1e8", borderRadius: 3 } }}
-            />
-            <Box sx={{ display: "flex", gap: 3, mt: 1.5 }}>
-              <Box>
-                <Box sx={{ fontSize: 10, color: "#8392ab" }}>طلبيات هذا الشهر</Box>
-                <Box sx={{ fontSize: 14, fontWeight: 700, color: "#344767" }}>{fmt(tenant.ordersThisMonth)}</Box>
-              </Box>
-              <Box>
-                <Box sx={{ fontSize: 10, color: "#8392ab" }}>إجمالي الطلبيات</Box>
-                <Box sx={{ fontSize: 14, fontWeight: 700, color: "#344767" }}>{fmt(tenant.totalOrders)}</Box>
-              </Box>
-              <Box>
-                <Box sx={{ fontSize: 10, color: "#8392ab" }}>مساحة التخزين</Box>
-                <Box sx={{ fontSize: 14, fontWeight: 700, color: "#344767" }}>{tenant.storageUsedMB} MB</Box>
-              </Box>
-            </Box>
-          </Box>
-
-          {tenant.suspendedReason && (
+          {tenant.suspended_reason && (
             <Box sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5, fontSize: 12, color: "#ea0606" }}>
-              سبب الإيقاف: {tenant.suspendedReason}
+              سبب الإيقاف: {tenant.suspended_reason}
             </Box>
           )}
         </Box>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         {tenant.status === "active" && (
-          <Box
-            component="button"
-            sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5 }}
-          >
+          <Box component="button" onClick={() => onStatusChange(tenant.id, "suspended")}
+            sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
             <PauseCircleIcon sx={{ fontSize: 15 }} /> إيقاف الاشتراك
           </Box>
         )}
         {tenant.status === "suspended" && (
-          <Box
-            component="button"
-            sx={{ background: "#f0fde4", border: "1px solid #82d61644", color: "#82d616", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5 }}
-          >
+          <Box component="button" onClick={() => onStatusChange(tenant.id, "active")}
+            sx={{ background: "#f0fde4", border: "1px solid #82d61644", color: "#82d616", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
             <PlayCircleIcon sx={{ fontSize: 15 }} /> استئناف الاشتراك
+          </Box>
+        )}
+        {(tenant.status === "trial" || tenant.status === "active") && (
+          <Box component="button" onClick={() => onStatusChange(tenant.id, "active")}
+            sx={{ display: tenant.status === "trial" ? "flex" : "none", background: "#e3f8fd", border: "1px solid #17c1e844", color: "#17c1e8", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
+            <PlayCircleIcon sx={{ fontSize: 15 }} /> تفعيل الاشتراك
           </Box>
         )}
         <Box
@@ -221,16 +214,29 @@ function TenantDetailDialog({ tenant, onClose }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function OwnerTenants() {
-  const [search, setSearch] = useState("");
+  const [search, setSearch]           = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [planFilter, setPlanFilter] = useState("all");
-  const [newOpen, setNewOpen] = useState(false);
-  const [detail, setDetail] = useState(null);
+  const [planFilter, setPlanFilter]   = useState("all");
+  const [newOpen, setNewOpen]         = useState(false);
+  const [detail, setDetail]           = useState(null);
+  const [tenants, setTenants]         = useState([]);
+  const [plans, setPlans]             = useState([]);
 
-  const filtered = mockTenants.filter((t) => {
+  const load = () => {
+    ownerApi.listTenants().then((r) => setTenants(r.data?.data ?? [])).catch(console.error);
+    ownerApi.listPlans().then((r) => setPlans(r.data?.data ?? [])).catch(console.error);
+  };
+  useEffect(load, []);
+
+  const handleStatusChange = async (id, status) => {
+    try { await ownerApi.updateStatus(id, status, null); load(); setDetail(null); }
+    catch (e) { console.error(e); }
+  };
+
+  const filtered = tenants.filter((t) => {
     if (statusFilter !== "all" && t.status !== statusFilter) return false;
-    if (planFilter !== "all" && t.planId !== Number(planFilter)) return false;
-    if (search && !t.name.includes(search) && !t.contactEmail.includes(search) && !t.wilaya.includes(search)) return false;
+    if (planFilter !== "all" && t.plan_code !== planFilter) return false;
+    if (search && !t.company_name?.includes(search) && !t.contact_email?.includes(search)) return false;
     return true;
   });
 
@@ -275,7 +281,7 @@ export default function OwnerTenants() {
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <Select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)} displayEmpty>
               <MenuItem value="all">كل الخطط</MenuItem>
-              {mockPlans.map((p) => <MenuItem key={p.id} value={p.id}>{p.nameAr}</MenuItem>)}
+              {plans.map((p) => <MenuItem key={p.code} value={p.code}>{p.name_ar}</MenuItem>)}
             </Select>
           </FormControl>
           <Box sx={{ fontSize: 12, color: "#8392ab", alignSelf: "center", ml: 1 }}>
@@ -296,35 +302,26 @@ export default function OwnerTenants() {
               </TableHead>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا توجد نتائج</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا يوجد مشتركون بعد</TableCell></TableRow>
                 ) : filtered.map((t) => {
-                  const plan = mockPlans.find((p) => p.id === t.planId);
                   const sc = statusConfig[t.status];
                   return (
                     <TableRow key={t.id} sx={{ "&:hover": { background: "#f8f9fa" }, cursor: "pointer" }} onClick={() => setDetail(t)}>
                       <TableCell>
-                        <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767" }}>{t.name}</Box>
-                        <Box sx={{ fontSize: 10, color: "#adb5bd" }}>{t.schemaName}</Box>
+                        <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767" }}>{t.company_name}</Box>
+                        <Box sx={{ fontSize: 10, color: "#adb5bd" }}>{t.schema_name}</Box>
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: "#8392ab" }}>{t.wilaya}</TableCell>
-                      <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>{t.contactEmail}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: "#8392ab" }}>{t.wilaya_code ?? "—"}</TableCell>
+                      <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>{t.contact_email}</TableCell>
                       <TableCell>
-                        <Chip
-                          label={plan?.nameAr}
-                          size="small"
-                          sx={{ fontSize: 10, fontWeight: 600, color: plan?.color, background: `${plan?.color}18`, border: `1px solid ${plan?.color}44` }}
-                        />
+                        <Chip label={t.plan_name ?? "—"} size="small" sx={{ fontSize: 10, fontWeight: 600, color: "#17c1e8", background: "#e3f8fd", border: "1px solid #17c1e844" }} />
                       </TableCell>
                       <TableCell>
-                        <Chip label={sc?.labelAr} size="small" sx={{ background: sc?.bg, color: sc?.color, fontWeight: 600, fontSize: 10 }} />
+                        <Chip label={sc?.labelAr ?? t.status} size="small" sx={{ background: sc?.bg ?? "#f8f9fa", color: sc?.color ?? "#344767", fontWeight: 600, fontSize: 10 }} />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: "#344767" }}>
-                        {t.usersCount} / {t.maxUsers ?? "∞"}
+                      <TableCell sx={{ fontSize: 11, color: "#8392ab", whiteSpace: "nowrap" }}>
+                        {t.created_at ? new Date(t.created_at).toLocaleDateString("ar-DZ") : "—"}
                       </TableCell>
-                      <TableCell style={{ textAlign: "right" }} sx={{ fontSize: 12, color: "#344767" }}>
-                        {fmt(t.ordersThisMonth)}
-                      </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: "#8392ab", whiteSpace: "nowrap" }}>{t.lastActivityAt}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Tooltip title="تفاصيل">
                           <IconButton size="small" onClick={() => setDetail(t)}><VisibilityIcon sx={{ fontSize: 15 }} /></IconButton>
@@ -338,8 +335,8 @@ export default function OwnerTenants() {
           </TableContainer>
         </Card>
 
-        <NewTenantDialog open={newOpen} onClose={() => setNewOpen(false)} />
-        <TenantDetailDialog tenant={detail} onClose={() => setDetail(null)} />
+        <NewTenantDialog open={newOpen} onClose={() => setNewOpen(false)} plans={plans} onCreated={load} />
+        <TenantDetailDialog tenant={detail} onClose={() => setDetail(null)} onStatusChange={handleStatusChange} />
       </Box>
     </OwnerLayout>
   );

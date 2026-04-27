@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -19,7 +19,8 @@ import NewReleasesIcon from "@mui/icons-material/NewReleases";
 
 import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { useI18n } from "i18n";
-import { mockOwnerStats, mockProvisioningEvents, mockPlans, planColors, statusConfig } from "data/mock/ownerMock";
+import { planColors, statusConfig } from "data/mock/ownerMock";
+import ownerApi from "services/ownerApi";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
@@ -80,8 +81,19 @@ const eventLabels = {
 // ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function OwnerDashboard() {
   const { t } = useI18n();
-  const s = mockOwnerStats;
   const currency = t("دج");
+  const [stats,   setStats]   = useState(null);
+  const [revenue, setRevenue] = useState(null);
+  const [events,  setEvents]  = useState([]);
+
+  useEffect(() => {
+    ownerApi.getStats().then((r) => setStats(r.data?.data ?? null)).catch(console.error);
+    ownerApi.getRevenue().then((r) => setRevenue(r.data?.data ?? null)).catch(console.error);
+    ownerApi.listEvents(10).then((r) => setEvents(r.data?.data ?? [])).catch(console.error);
+  }, []);
+
+  const s = stats;
+  const rv = revenue;
 
   return (
     <OwnerLayout>
@@ -98,29 +110,29 @@ export default function OwnerDashboard() {
           <StatCard
             icon={<TrendingUpIcon />}
             label="MRR (الإيراد الشهري)"
-            value={`${fmt(s.mrr)} ${currency}`}
-            sub={`ARR: ${fmt(s.arr)} ${currency}`}
+            value={s ? `${fmt(s.mrr)} ${currency}` : "—"}
+            sub={s ? `جديد هذا الشهر: ${s.newThisMonth}` : ""}
             color="linear-gradient(135deg, #17c1e8, #0ea5c9)"
           />
           <StatCard
             icon={<GroupIcon />}
             label="المشتركون النشطون"
-            value={s.activeCount}
-            sub={`${t("تجريبي")}: ${s.trialCount} · ${t("موقوف")}: ${s.suspendedCount}`}
+            value={s?.activeTenants ?? "—"}
+            sub={s ? `تجريبي: ${s.trialTenants} · موقوف: ${s.suspendedTenants}` : ""}
             color="linear-gradient(135deg, #82d616, #5faa0e)"
           />
           <StatCard
             icon={<ReceiptLongIcon />}
-            label="الطلبيات هذا الشهر"
-            value={fmt(s.ordersThisMonth)}
-            sub={`${t("الإجمالي")}: ${fmt(s.totalOrders)}`}
+            label="إجمالي المشتركين"
+            value={s?.totalTenants ?? "—"}
+            sub=""
             color="linear-gradient(135deg, #7928ca, #5e1e9e)"
           />
           <StatCard
             icon={<NewReleasesIcon />}
             label="مشتركون جدد هذا الشهر"
-            value={s.newThisMonth}
-            sub={`${t("إلغاءات")}: ${s.churnedThisMonth}`}
+            value={s?.newThisMonth ?? "—"}
+            sub=""
             color="linear-gradient(135deg, #fb8c00, #e07b00)"
           />
         </Box>
@@ -132,27 +144,31 @@ export default function OwnerDashboard() {
           <Card sx={{ flex: 2, minWidth: 300, p: 2.5 }}>
             <Box sx={{ fontSize: 14, fontWeight: 700, color: "#344767", mb: 0.5 }}>الإيراد الشهري</Box>
             <Box sx={{ fontSize: 11, color: "#8392ab", mb: 1 }}>آخر 6 أشهر (دج)</Box>
-            <RevenueBar months={s.monthlyRevenue} currency={currency} />
+            {rv?.monthly?.length > 0
+              ? <RevenueBar months={rv.monthly} currency={currency} />
+              : <Box sx={{ color: "#8392ab", fontSize: 12, mt: 2, textAlign: "center" }}>لا توجد بيانات بعد</Box>
+            }
           </Card>
 
           {/* Revenue by plan */}
           <Card sx={{ flex: 1, minWidth: 220, p: 2.5 }}>
             <Box sx={{ fontSize: 14, fontWeight: 700, color: "#344767", mb: 1.5 }}>توزيع الخطط</Box>
-            {s.revenueByPlan.map((item) => {
-              const plan = mockPlans.find((p) => p.id === item.planId);
-              const pct = s.activeCount > 0 ? Math.round((item.count / s.totalCount) * 100) : 0;
+            {(s?.planDistribution ?? []).map((item, i) => {
+              const total = s?.totalTenants || 1;
+              const pct = Math.round(((item.tenant_count ?? 0) / total) * 100);
+              const colors = ["#17c1e8","#82d616","#7928ca","#fb8c00"];
               return (
-                <Box key={item.planId} sx={{ mb: 1.5 }}>
+                <Box key={item.code} sx={{ mb: 1.5 }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.4 }}>
-                    <Box sx={{ fontSize: 12, fontWeight: 600, color: plan?.color ?? "#344767" }}>{item.planName}</Box>
-                    <Box sx={{ fontSize: 11, color: "#8392ab" }}>{item.count} · {fmt(item.revenue)} {currency}</Box>
+                    <Box sx={{ fontSize: 12, fontWeight: 600, color: colors[i % colors.length] }}>{item.name_ar}</Box>
+                    <Box sx={{ fontSize: 11, color: "#8392ab" }}>{item.tenant_count ?? 0} مشترك</Box>
                   </Box>
                   <LinearProgress
                     variant="determinate"
                     value={pct}
                     sx={{
                       height: 6, borderRadius: 3, background: "#f0f2f5",
-                      "& .MuiLinearProgress-bar": { background: plan?.color ?? "#17c1e8", borderRadius: 3 },
+                      "& .MuiLinearProgress-bar": { background: colors[i % colors.length], borderRadius: 3 },
                     }}
                   />
                 </Box>
@@ -166,7 +182,10 @@ export default function OwnerDashboard() {
           {Object.entries(statusConfig).map(([key, cfg]) => (
             <Card key={key} sx={{ flex: 1, minWidth: 110, p: 2, textAlign: "center", border: `1px solid ${cfg.color}22` }}>
               <Box sx={{ fontSize: 22, fontWeight: 700, color: cfg.color }}>
-                {key === "active" ? s.activeCount : key === "trial" ? s.trialCount : key === "suspended" ? s.suspendedCount : s.cancelledCount}
+                {s
+                  ? (key === "active" ? s.activeTenants : key === "trial" ? s.trialTenants : key === "suspended" ? s.suspendedTenants : 0)
+                  : "—"
+                }
               </Box>
               <Box sx={{ fontSize: 12, color: "#8392ab" }}>{cfg.labelAr}</Box>
             </Card>
@@ -182,24 +201,33 @@ export default function OwnerDashboard() {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ background: "#f8f9fa" }}>
-                  {["التاريخ", "المشترك", "العملية", "المنفذ", "التفاصيل"].map((h) => (
+                  {["التاريخ", "المشترك", "العملية", "الحالة"].map((h) => (
                     <TableCell key={h} sx={{ fontSize: 11, fontWeight: 700, color: "#8392ab", py: 1 }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {mockProvisioningEvents.map((ev) => {
-                  const cfg = eventLabels[ev.event];
+                {events.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} sx={{ textAlign: "center", color: "#8392ab", fontSize: 12, py: 3 }}>
+                      لا توجد عمليات بعد
+                    </TableCell>
+                  </TableRow>
+                ) : events.map((ev) => {
+                  const cfg = eventLabels[ev.event_type] ?? { label: ev.event_type, color: "#8392ab", bg: "#f8f9fa" };
                   return (
                     <TableRow key={ev.id} sx={{ "&:hover": { background: "#f8f9fa" } }}>
-                      <TableCell sx={{ fontSize: 11, color: "#8392ab", whiteSpace: "nowrap" }}>{ev.createdAt}</TableCell>
-                      <TableCell sx={{ fontSize: 12, fontWeight: 600, color: "#344767" }}>{ev.tenantName}</TableCell>
-                      <TableCell>
-                        <Chip label={cfg?.label ?? ev.event} size="small"
-                          sx={{ background: cfg?.bg, color: cfg?.color, fontWeight: 600, fontSize: 10 }} />
+                      <TableCell sx={{ fontSize: 11, color: "#8392ab", whiteSpace: "nowrap" }}>
+                        {ev.created_at ? new Date(ev.created_at).toLocaleString("ar-DZ") : "—"}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>{ev.performedBy}</TableCell>
-                      <TableCell sx={{ fontSize: 11, color: "#344767" }}>{ev.details}</TableCell>
+                      <TableCell sx={{ fontSize: 12, fontWeight: 600, color: "#344767" }}>{ev.company_name ?? "—"}</TableCell>
+                      <TableCell>
+                        <Chip label={cfg.label} size="small"
+                          sx={{ background: cfg.bg, color: cfg.color, fontWeight: 600, fontSize: 10 }} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={ev.status} size="small" color={ev.status === "completed" ? "success" : ev.status === "failed" ? "error" : "default"} sx={{ fontSize: 10 }} />
+                      </TableCell>
                     </TableRow>
                   );
                 })}

@@ -39,6 +39,8 @@ database
 │   ├── customers
 │   ├── products
 │   ├── product_favorites
+│   ├── media_assets
+│   ├── product_images
 │   ├── price_lists
 │   ├── price_list_items
 │   ├── orders
@@ -63,6 +65,18 @@ database
 - المال `numeric(14,2)`.
 - الكميات `numeric(14,3)`.
 - الأوزان `numeric(14,3)`.
+- الصور والملفات والمرفقات وملفات PDF تحفظ خارج التطبيق والسيرفر في object storage.
+- المزود المعتمد حاليًا هو `Cloudflare R2`.
+- قاعدة البيانات لا تخزن binary/blob أو base64 للملفات، ولا تعتمد على مسارات local server.
+- قاعدة البيانات تحفظ فقط metadata و references مثل `storage_provider`, `bucket_name`, `object_key`, `public_url`, `original_filename`, `mime_type`, `size_bytes`, `extension`, `alt_text/title`, `uploaded_by`, و timestamps.
+- أسرار Cloudflare R2 لا تخزن في قاعدة البيانات. credentials تحفظ لاحقًا في environment variables أو secure config فقط.
+
+تصميم الملفات المعتمد:
+
+- داخل tenant schema، التصميم الأنسب هو جدول عام `media_assets` لكل الملفات والصور والمستندات التجارية، مع جداول متخصصة عند وجود سلوك دومين خاص.
+- `product_images` يبقى جدولًا متخصصًا لأنه يحتاج ترتيبًا، صورة رئيسية، مصدر صورة، وحالة معالجة AI، لكنه يشير إلى `media_assets`.
+- مرفقات الطلبات والزبائن والفواتير والمرتجعات يمكن أن تبدأ عبر `media_assets.owner_type/owner_id`، ثم تضاف جداول متخصصة مثل `order_attachments` أو `customer_documents` فقط إذا احتجنا حالات مراجعة أو صلاحيات أو workflow خاص.
+- `platform.support_attachments` يبقى في platform schema لأن الدعم عابر للـ tenant، لكنه يستعمل نفس فكرة التخزين الخارجي والـ object key.
 
 ---
 
@@ -678,12 +692,17 @@ public_id               uuid not null default gen_random_uuid(),
 message_id              bigint not null references platform.support_messages(id),
 attachment_type         varchar(30) not null,
                           -- image, audio, file
-file_name               varchar(240) not null,
+original_filename       varchar(240) not null,
 mime_type               varchar(120),
-storage_key             text not null,
+storage_provider        varchar(40) not null default 'cloudflare_r2',
+bucket_name             varchar(120) not null,
+object_key              text not null,
+public_url              text,
 size_bytes              bigint,
+extension               varchar(20),
 duration_seconds        integer,
-thumbnail_storage_key   text,
+thumbnail_object_key    text,
+metadata_json           jsonb,
 created_at              timestamptz not null default now(),
 unique (public_id)
 ```
@@ -976,6 +995,14 @@ created_at          timestamptz not null default now(),
 unique (public_id)
 ```
 
+ملاحظات تدقيق إلزامية:
+
+- إنشاء دفعة باتجاه `in` يولد سجلًا في `audit_logs` بالعملية `customer_payment_received`.
+- إنشاء دفعة باتجاه `out` يولد سجلًا في `audit_logs` بالعملية `customer_payment_refund`.
+- `actor_user_id` في `audit_logs` هو المستخدم الذي سجل الدفعة فعليًا، وليس الزبون.
+- `entity_type = 'customer_payment'` و`entity_id = customer_payments.id`.
+- `meta_json` يجب أن يحتوي على الأقل: `customer_id`, `customer_name`, `amount`, `direction`, `payment_method`, `received_by`, `counterparty_name`, و`reference_number`.
+
 ---
 
 ### Products and Inventory
@@ -1136,14 +1163,22 @@ create index idx_product_favorites_product on product_favorites(product_id);
 ```sql
 id                  bigint generated always as identity primary key,
 product_id          bigint not null references products(id),
-file_path           text,
-public_url          text,
+media_asset_id      bigint not null references media_assets(id),
 source_type         varchar(30),                 -- manual, ai_processed, imported
+original_image_id   bigint references product_images(id),
 is_primary          boolean not null default false,
 sort_order          integer not null default 0,
+processing_status   varchar(30),
 metadata_json       jsonb,
-created_at          timestamptz not null default now()
+created_at          timestamptz not null default now(),
+updated_at          timestamptz not null default now()
 ```
+
+ملاحظات:
+
+- تفاصيل التخزين الخارجي موجودة في `media_assets`، وليس في `product_images`.
+- `product_images` يحتفظ بمنطق صور المنتج فقط: الصورة الرئيسية، الترتيب، مصدر الصورة، وربط الصورة المعالجة بالأصلية.
+- لا تستخدم `file_path` محلي ولا تخزن الصورة داخل قاعدة البيانات.
 
 #### `product_price_histories`
 
@@ -2724,13 +2759,22 @@ id              bigint generated always as identity primary key,
 public_id       uuid not null default gen_random_uuid(),
 owner_type      varchar(80),
 owner_id        bigint,
-file_path       text not null,
+storage_provider varchar(40) not null default 'cloudflare_r2',
+bucket_name     varchar(120) not null,
+object_key      text not null,
 public_url      text,
+original_filename varchar(240),
 mime_type       varchar(120),
 size_bytes      bigint,
+extension       varchar(20),
+title           varchar(180),
+alt_text        varchar(240),
+checksum_sha256 varchar(64),
 metadata_json   jsonb,
 created_by      bigint references users(id),
 created_at      timestamptz not null default now(),
+updated_at      timestamptz not null default now(),
+deleted_at      timestamptz,
 unique (public_id)
 
 ai_jobs:
@@ -2775,6 +2819,29 @@ user_agent          text,
 correlation_id      varchar(80),
 created_at          timestamptz not null default now()
 ```
+
+أحداث مالية إلزامية في `audit_logs`:
+
+- `customer_payment_received`: عند تسجيل دفعة داخلة من زبون.
+- `customer_payment_refund`: عند تسجيل دفعة عكسية أو إرجاع مبلغ للزبون.
+- يجب أن تعرض الواجهة اسم منفذ العملية، واسم الزبون/الطرف الذي تمت عليه الدفعة، والمبلغ، وطريقة الدفع، والمرجع.
+
+أحداث تشغيلية حساسة إلزامية:
+
+- `product_price_changed`: تغيير سعر صنف أو قائمة أسعار.
+- `inventory_adjustment`: تسوية مخزون أو جرد يدوي.
+- `stock_transfer`: تحويل مخزون بين مستودعات.
+- `create_return`: إنشاء مرتجع بيع.
+- `purchase_return_created`: إنشاء مرتجع شراء.
+- `supplier_payment_paid`: تسجيل دفعة لمورد.
+- `user_permission_changed`: تعديل صلاحيات مستخدم.
+- `user_status_changed`: تعطيل أو تفعيل مستخدم.
+- `settings_changed`: تعديل إعدادات عامة أو محاسبية أو إعدادات AI/إشعارات.
+- `failed_login`: محاولة دخول فاشلة.
+- `data_exported`: تصدير تقرير أو بيانات حساسة.
+- `support_ticket_status_changed`: تغيير حالة تذكرة دعم.
+
+محتوى `meta_json` في الأحداث الحساسة يجب أن يحمل ما يكفي للعرض والتدقيق بدون join معقد: اسم الطرف المتأثر، المبلغ أو الكمية عند الحاجة، القيم القديمة والجديدة، سبب الإجراء، ومرجع العملية.
 
 فهارس إلزامية في `audit_logs`:
 

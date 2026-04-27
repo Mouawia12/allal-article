@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Autocomplete from "@mui/material/Autocomplete";
@@ -31,7 +31,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { buildTree, fmt, mockAccounts, mockFiscalYears } from "./mockData";
+import { fmt } from "./mockData";
+import { accountingApi } from "services";
 
 const JOURNAL_BOOKS = [
   { id: "manual",  label: "يومية عامة (يدوي)",   prefix: "MAN" },
@@ -45,7 +46,8 @@ function flattenTree(nodes, result = []) {
   return result;
 }
 
-const postableAccounts = flattenTree(buildTree(mockAccounts)).filter((a) => a.isPostable && a.isActive);
+// populated via API in the main component — passed down as prop
+let postableAccounts = [];
 
 let lineCounter = 3;
 const emptyLine = () => ({ id: lineCounter++, account: null, debit: "", credit: "", description: "" });
@@ -134,14 +136,32 @@ export default function ManualJournalForm() {
   const [date, setDate]     = useState(today);
   const [notes, setNotes]   = useState("");
   const [bookId, setBookId] = useState("manual");
-  const [fyId] = useState(mockFiscalYears.find((y) => !y.isClosed)?.id ?? mockFiscalYears[0].id);
+  const [fyId, setFyId]     = useState(null);
+  const [activeFY, setActiveFY] = useState(null);
+  const [accounts, setAccounts] = useState([]);
   const [lines, setLines] = useState([
     { id: 1, account: null, debit: "", credit: "", description: "" },
     { id: 2, account: null, debit: "", credit: "", description: "" },
   ]);
   const [touched, setTouched] = useState(false);
 
-  const activeFY = mockFiscalYears.find((y) => y.id === fyId);
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) { setFyId(active.id); setActiveFY(active); }
+      })
+      .catch(console.error);
+    accountingApi.listAccounts()
+      .then((r) => {
+        const all = r.data?.content ?? r.data ?? [];
+        const postable = all.filter((a) => a.isPostable !== false && a.isActive !== false);
+        setAccounts(postable);
+        postableAccounts = postable;
+      })
+      .catch(console.error);
+  }, []);
 
   const totalDebit  = useMemo(() => lines.reduce((s, l) => s + (Number(l.debit)  || 0), 0), [lines]);
   const totalCredit = useMemo(() => lines.reduce((s, l) => s + (Number(l.credit) || 0), 0), [lines]);
@@ -164,8 +184,27 @@ export default function ManualJournalForm() {
 
   const handleSave = (post) => {
     if (!validate()) return;
-    console.log("Saving journal:", { date, notes, bookId, fyId, post, lines });
-    navigate("/accounting/journals");
+    const payload = {
+      date,
+      description: notes,
+      fiscalYearId: fyId,
+      bookCode: bookId,
+      items: lines
+        .filter((l) => l.account && (Number(l.debit) > 0 || Number(l.credit) > 0))
+        .map((l) => ({
+          accountId: l.account.id,
+          debit: Number(l.debit) || 0,
+          credit: Number(l.credit) || 0,
+          description: l.description || null,
+        })),
+    };
+    accountingApi.createJournal(payload)
+      .then((r) => {
+        if (post) return accountingApi.postJournal(r.data.id);
+        return r;
+      })
+      .then(() => navigate("/accounting/journals"))
+      .catch((e) => alert(e?.response?.data?.message ?? "حدث خطأ أثناء الحفظ"));
   };
 
   return (

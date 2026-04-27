@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -43,17 +43,15 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import {
-  buildManufacturingRequest,
   depositStatusConfig,
   formatDZD,
   getManufacturingStats,
   manufacturingNextActions,
   manufacturingStatusConfig,
   manufacturingStatusOrder,
-  manufacturingTimeline,
   manufacturingTypeConfig,
-  mockManufacturingRequests,
-} from "data/mock/manufacturingMock";
+} from "data/config/manufacturingConfig";
+import { manufacturingApi } from "services";
 
 const priorityConfig = {
   low:    { label: "منخفضة", color: "#8392ab", bg: "#f8f9fa" },
@@ -590,20 +588,43 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Manufacturing() {
-  const [requests, setRequests] = useState(mockManufacturingRequests);
-  const [selectedId, setSelectedId] = useState(mockManufacturingRequests[0].id);
+  const [requests, setRequests] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+
+  useEffect(() => {
+    manufacturingApi.list()
+      .then((r) => {
+        const list = (r.data?.content ?? r.data ?? []).map((req) => ({
+          materials: [], timeline: [], priority: "normal", sourceType: "stock_replenishment",
+          ...req,
+        }));
+        setRequests(list);
+        if (list.length > 0) setSelectedId(list[0].id);
+      })
+      .catch(console.error);
+  }, []);
   const [statusTab, setStatusTab] = useState("all");
   const [search, setSearch] = useState("");
-  const [timelineByRequest, setTimelineByRequest] = useState(manufacturingTimeline);
+  const [timelineByRequest, setTimelineByRequest] = useState({});
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
 
-  const selectedRequest = requests.find((r) => r.id === selectedId) || requests[0];
+  const selectedRequest = requests.find((r) => r.id === selectedId) || requests[0] || {};
   const selectedStatus = manufacturingStatusConfig[selectedRequest.status] || manufacturingStatusConfig.draft;
   const selectedType = manufacturingTypeConfig[selectedRequest.sourceType] || manufacturingTypeConfig.stock_replenishment;
   const selectedPriority = priorityConfig[selectedRequest.priority] || priorityConfig.normal;
   const selectedTimeline = timelineByRequest[selectedRequest.id] || [];
   const stats = useMemo(() => getManufacturingStats(requests), [requests]);
+
+  useEffect(() => {
+    if (!selectedRequest.id || timelineByRequest[selectedRequest.id]) return;
+    manufacturingApi.getEvents(selectedRequest.id)
+      .then((r) => {
+        const events = r.data?.data ?? [];
+        setTimelineByRequest((prev) => ({ ...prev, [selectedRequest.id]: events }));
+      })
+      .catch(() => {});
+  }, [selectedRequest.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs = [
     { key: "all",          label: "الكل",              count: requests.length },
@@ -636,45 +657,52 @@ export default function Manufacturing() {
   };
 
   const changeStatus = (nextStatus) => {
-    const cfg = manufacturingStatusConfig[nextStatus] || manufacturingStatusConfig.draft;
-    setRequests((prev) =>
-      prev.map((r) => {
-        if (r.id !== selectedRequest.id) return r;
-        const producedQty =
-          ["quality_check", "ready_to_ship", "in_transit", "received"].includes(nextStatus)
-            ? Math.max(r.producedQty, r.qty)
-            : nextStatus === "in_production"
-            ? Math.max(r.producedQty, Math.round(r.qty * 0.35))
-            : r.producedQty;
-        return {
-          ...r,
-          status: nextStatus,
-          progress: cfg.progress,
-          producedQty,
-          receivedQty: nextStatus === "received" ? r.qty : r.receivedQty,
-          updatedAt: "الآن",
-        };
+    const id = selectedRequest.id;
+    const apiMap = {
+      approved:       () => manufacturingApi.approve(id, {}),
+      in_production:  () => manufacturingApi.startProduction(id),
+      quality_check:  () => manufacturingApi.qualityCheck(id, {}),
+      ready_to_ship:  () => manufacturingApi.readyToShip(id),
+      in_transit:     () => manufacturingApi.ship(id),
+      received:       () => manufacturingApi.receive(id, { receivedQty: selectedRequest.qty }),
+      cancelled:      () => manufacturingApi.cancel(id, "إلغاء من لوحة التحكم"),
+    };
+    const apiCall = apiMap[nextStatus];
+    if (!apiCall) return;
+    apiCall()
+      .then((r) => {
+        const updated = r.data;
+        setRequests((prev) => prev.map((req) => req.id === id ? { ...req, ...updated } : req));
+        const cfg = manufacturingStatusConfig[nextStatus] || {};
+        appendTimeline(id, cfg.eventTitle ?? nextStatus, `تم تحديث الحالة إلى "${cfg.label ?? nextStatus}".`);
       })
-    );
-    appendTimeline(selectedRequest.id, cfg.eventTitle, `تم تحديث حالة الطلب إلى "${cfg.label}".`);
+      .catch(console.error);
   };
 
   const createRequest = () => {
-    const newReq = buildManufacturingRequest(form, requests.length + 1);
-    setRequests((prev) => [newReq, ...prev]);
-    setSelectedId(newReq.id);
-    setTimelineByRequest((prev) => ({
-      ...prev,
-      [newReq.id]: [{
-        id: "created",
-        actor: "المستخدم الحالي",
-        title: "فتح طلب تصنيع جديد",
-        body: `${newReq.sourceLabel} لصنف ${newReq.productName} بكمية ${newReq.qty} ${newReq.unit}.`,
-        at: "الآن",
-      }],
-    }));
-    setForm(defaultForm);
-    setNewOpen(false);
+    manufacturingApi.create({
+      productName: form.productName,
+      productCode: form.productCode,
+      qty: Number(form.qty),
+      unit: form.unit,
+      sourceType: form.sourceType,
+      salesOrderNumber: form.salesOrderNumber || null,
+      customerName: form.customerName || null,
+      destinationWarehouse: form.destinationWarehouse || null,
+      factory: form.factory || null,
+      productionLine: form.productionLine || null,
+      responsible: form.responsible || null,
+      priority: form.priority,
+      dueDate: form.dueDate || null,
+    })
+      .then((r) => {
+        const newReq = { materials: [], priority: "normal", sourceType: "stock_replenishment", ...r.data };
+        setRequests((prev) => [newReq, ...prev]);
+        setSelectedId(newReq.id);
+        setForm(defaultForm);
+        setNewOpen(false);
+      })
+      .catch(console.error);
   };
 
   return (

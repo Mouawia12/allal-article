@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -33,6 +33,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import useProductFavorites from "hooks/useProductFavorites";
+import { productsApi } from "services";
 import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
 import demoToolsImage from "assets/images/products/demo-tools.jpg";
 import demoCablesImage from "assets/images/products/demo-cables.jpg";
@@ -43,7 +44,7 @@ const categories = ["الكل", "مسامير وبراغي", "أدوات", "كه
 const favoriteCategory = "المفضلة";
 const categoryFilters = ["الكل", favoriteCategory, ...categories.filter((cat) => cat !== "الكل")];
 
-const mockProducts = [
+const products = [
   { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", onHand: 850,  reserved: 200, pending: 100, unit: "قطعة", color: "#FF6B6B", price: 650,  lastPriceUpdatedAt: "2024-01-22", image: demoBoltsImage },
   { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", onHand: 1200, reserved: 300, pending: 200, unit: "قطعة", color: "#FF6B6B", price: 900,  lastPriceUpdatedAt: "2024-01-19", image: demoBoltsImage },
   { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", onHand: 600,  reserved: 150, pending: 80,  unit: "قطعة", color: "#FF8E53", price: 450,  lastPriceUpdatedAt: "2024-01-18", image: demoBoltsImage },
@@ -315,12 +316,22 @@ function Products({
   subtitle = "إدارة كتالوج الأصناف والمخزون",
 }) {
   const navigate = useNavigate();
+  const [products, setProducts] = useState([]);
   const [view, setView] = useState("grid");
   const [category, setCategory] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
-  const filtered = mockProducts.filter((p) => {
+  useEffect(() => {
+    productsApi.list()
+      .then((r) => setProducts((r.data?.content ?? r.data ?? []).map((p) => ({
+        onHand: 0, reserved: 0, pending: 0, unit: "قطعة", color: "#17c1e8", image: null,
+        ...p,
+      }))))
+      .catch(console.error);
+  }, []);
+
+  const filtered = products.filter((p) => {
     const matchCat =
       category === "الكل" ||
       (category === favoriteCategory && isFavorite(p.id)) ||
@@ -329,8 +340,8 @@ function Products({
     return matchCat && matchSearch;
   });
 
-  const outOfStock = mockProducts.filter(p => p.onHand === 0).length;
-  const lowStock = mockProducts.filter(p => p.onHand > 0 && (p.onHand - p.reserved) < 20).length;
+  const outOfStock = products.filter(p => p.onHand === 0).length;
+  const lowStock = products.filter(p => p.onHand > 0 && (p.onHand - p.reserved) < 20).length;
 
   return (
     <DashboardLayout>
@@ -364,9 +375,9 @@ function Products({
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
           {[
-            { label: "إجمالي الأصناف",   value: mockProducts.length, color: "info" },
+            { label: "إجمالي الأصناف",   value: products.length, color: "info" },
             { label: "المفضلة",           value: favoriteCount, color: "warning" },
-            { label: "متوفرة",            value: mockProducts.filter(p => p.onHand > 0).length, color: "success" },
+            { label: "متوفرة",            value: products.filter(p => p.onHand > 0).length, color: "success" },
             { label: "مخزون منخفض",       value: lowStock, color: "warning" },
             { label: "نفذت من المخزون",   value: outOfStock, color: "error" },
           ].map((s) => (

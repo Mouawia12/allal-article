@@ -36,7 +36,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import ResourceLockBanner from "components/ResourceLockBanner";
-import { getMockResourceLock } from "data/mock/resourceLocksMock";
+const getMockResourceLock = () => null;
 
 const mockOrderDetail = {
   id: "ORD-2024-003",

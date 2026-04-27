@@ -1,9 +1,8 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
@@ -28,121 +27,78 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { accountingApi } from "services";
 
-import { buildTree, mockAccounts, mockFiscalYears } from "../mockData";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) =>
-  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 0 }).format(n) + " دج";
+  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 2 }).format(Math.abs(n ?? 0)) + " دج";
 
-function flattenTree(nodes, r = []) {
-  nodes.forEach((n) => { r.push(n); if (n.children?.length) flattenTree(n.children, r); });
-  return r;
-}
-
-const allAccounts = flattenTree(buildTree(mockAccounts));
-
-// Revenue with contra-account handling: credit-normal = positive, debit-normal = negative
-function netRevenueTotal() {
-  return allAccounts
-    .filter((a) => a.classification === "revenue" && a.isPostable)
-    .reduce((s, a) => s + (a.normalBalance === "credit" ? (a.balance ?? 0) : -(a.balance ?? 0)), 0);
-}
-
-function sumByClassification(cls) {
-  return allAccounts
-    .filter((a) => a.classification === cls && a.isPostable)
-    .reduce((s, a) => s + (a.balance ?? 0), 0);
-}
-
-function groupByParent(cls, excludeCodes = []) {
-  const level2 = mockAccounts.filter(
-    (a) => a.classification === cls && a.level === 2 && !excludeCodes.includes(a.code)
-  );
-  return level2.map((grp) => ({
-    ...grp,
-    items: allAccounts.filter((a) => a.classification === cls && a.parentId === grp.id && a.isPostable),
-    subtotal: allAccounts
-      .filter((a) => a.classification === cls && a.parentId === grp.id && a.isPostable)
-      .reduce((s, a) => s + (a.balance ?? 0), 0),
-  })).filter((g) => g.items.length > 0);
-}
-
-// ─── Row Components ───────────────────────────────────────────────────────────
-function SectionHeader({ label, color }) {
+function ISSection({ title, color, lines, total }) {
   return (
-    <TableRow sx={{ background: `${color}10` }}>
-      <TableCell colSpan={3} sx={{ fontWeight: 800, fontSize: 13, color, py: 1.5, borderBottom: `2px solid ${color}40` }}>
-        {label}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function GroupRow({ label }) {
-  return (
-    <TableRow>
-      <TableCell sx={{ pl: 3, fontWeight: 700, fontSize: 12, color: "#3a416f", py: 1 }} colSpan={3}>
-        {label}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function AccountRow({ code, name, balance }) {
-  return (
-    <TableRow hover>
-      <TableCell sx={{ pl: 5, fontSize: 12 }}>{code}</TableCell>
-      <TableCell sx={{ fontSize: 12 }}>{name}</TableCell>
-      <TableCell sx={{ fontSize: 12, textAlign: "left", fontWeight: 500 }}>{fmt(balance)}</TableCell>
-    </TableRow>
-  );
-}
-
-function SubtotalRow({ label, value, color }) {
-  return (
-    <TableRow sx={{ background: "#f8f9fa" }}>
-      <TableCell colSpan={2} sx={{ fontWeight: 700, fontSize: 12, color, pl: 3, py: 1 }}>
-        {label}
-      </TableCell>
-      <TableCell sx={{ fontWeight: 700, fontSize: 12, textAlign: "left", color }}>
-        {fmt(value)}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function TotalRow({ label, value, highlight }) {
-  return (
-    <TableRow sx={{ background: highlight ? (value >= 0 ? "#f0fde4" : "#ffeaea") : "#f0f2f5" }}>
-      <TableCell colSpan={2} sx={{ fontWeight: 800, fontSize: 13, py: 1.5 }}>{label}</TableCell>
-      <TableCell sx={{ fontWeight: 800, fontSize: 13, textAlign: "left",
-        color: highlight ? (value >= 0 ? "#82d616" : "#ea0606") : "#3a416f" }}>
-        {fmt(value)}
-      </TableCell>
-    </TableRow>
+    <TableContainer>
+      <Table size="small">
+        <TableHead>
+          <TableRow sx={{ background: `${color}20` }}>
+            <TableCell sx={{ fontWeight: 700, color, fontSize: 13 }} colSpan={2}>{title}</TableCell>
+            <TableCell sx={{ fontWeight: 700, color, fontSize: 13, textAlign: "right", minWidth: 130 }}>المبلغ</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {(lines ?? []).map((line, idx) => (
+            <TableRow key={line.accountCode + idx} hover>
+              <TableCell sx={{ width: 30, color: "#8392ab", fontSize: 11 }}>{line.accountCode}</TableCell>
+              <TableCell sx={{ pl: `${(line.level ?? 1) * 16}px`, fontSize: 12 }}>{line.accountName}</TableCell>
+              <TableCell sx={{ textAlign: "right", fontSize: 12, fontWeight: line.level <= 1 ? 700 : 400 }}>
+                {fmt(line.amount)}
+              </TableCell>
+            </TableRow>
+          ))}
+          <TableRow sx={{ background: `${color}15` }}>
+            <TableCell colSpan={2} sx={{ fontWeight: 800, fontSize: 13, color, py: 1.2 }}>
+              إجمالي {title}
+            </TableCell>
+            <TableCell sx={{ fontWeight: 800, fontSize: 13, color, textAlign: "right" }}>{fmt(total)}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function IncomeStatement() {
   const navigate = useNavigate();
-  const [fyId, setFyId] = useState(mockFiscalYears.find((f) => !f.isClosed)?.id ?? mockFiscalYears[0]?.id);
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [fyId, setFyId] = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const revenueGroups = groupByParent("revenue");
-  // Exclude COGS group (code "51") from operating-expense section — shown separately
-  const expenseGroups = groupByParent("expense", ["51"]);
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) setFyId(active.id);
+      })
+      .catch(console.error);
+  }, []);
 
-  const totalRevenue      = netRevenueTotal();
-  const cogsBalance       = mockAccounts.find((a) => a.code === "511")?.balance ?? 0;
-  const sales411          = mockAccounts.find((a) => a.code === "411")?.balance ?? 0;
-  const returns412        = mockAccounts.find((a) => a.code === "412")?.balance ?? 0;
-  const grossProfit       = (sales411 - returns412) - cogsBalance;
-  const totalExpense      = sumByClassification("expense");
-  const operatingExpenses = totalExpense - cogsBalance;
-  const netProfit         = totalRevenue - totalExpense;
+  useEffect(() => {
+    if (!fyId) return;
+    setLoading(true);
+    accountingApi.incomeStatement(fyId)
+      .then((r) => setData(r.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [fyId]);
 
-  const fy = mockFiscalYears.find((f) => f.id === fyId);
+  const totalRevenue = Number(data?.totalRevenue ?? 0);
+  const totalExpense = Number(data?.totalExpense ?? 0);
+  const netIncome    = Number(data?.netIncome ?? 0);
+  const isProfit = netIncome >= 0;
+
+  const NetIcon = netIncome > 0 ? TrendingUpIcon : netIncome < 0 ? TrendingDownIcon : TrendingFlatIcon;
+  const netColor = netIncome > 0 ? "#82d616" : netIncome < 0 ? "#ea0606" : "#344767";
 
   return (
     <DashboardLayout>
@@ -158,14 +114,14 @@ export default function IncomeStatement() {
             <SoftBox>
               <SoftTypography variant="h5" fontWeight="bold">قائمة الدخل</SoftTypography>
               <SoftTypography variant="caption" color="secondary">
-                الإيرادات والمصروفات وصافي الربح — {fy?.name}
+                الإيرادات والمصاريف والنتيجة الصافية — {data?.fiscalYearName ?? ""}
               </SoftTypography>
             </SoftBox>
           </SoftBox>
           <SoftBox display="flex" gap={1} alignItems="center">
             <FormControl size="small" sx={{ minWidth: 180 }}>
-              <Select value={fyId} onChange={(e) => setFyId(Number(e.target.value))}>
-                {mockFiscalYears.map((f) => (
+              <Select value={fyId ?? ""} onChange={(e) => setFyId(Number(e.target.value))}>
+                {fiscalYears.map((f) => (
                   <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>
                 ))}
               </Select>
@@ -177,100 +133,55 @@ export default function IncomeStatement() {
           </SoftBox>
         </SoftBox>
 
-        {/* KPI Cards */}
-        <SoftBox display="flex" gap={2} mb={3} flexWrap="wrap">
-          {[
-            { label: "إجمالي الإيرادات", value: totalRevenue, color: "#82d616", Icon: TrendingUpIcon },
-            { label: "إجمالي الربح الإجمالي", value: grossProfit, color: "#17c1e8", Icon: TrendingFlatIcon },
-            { label: "المصروفات التشغيلية", value: operatingExpenses, color: "#ea0606", Icon: TrendingDownIcon },
-            { label: "صافي الربح / الخسارة", value: netProfit,  color: netProfit >= 0 ? "#82d616" : "#ea0606", Icon: netProfit >= 0 ? TrendingUpIcon : TrendingDownIcon },
-          ].map(({ label, value, color, Icon }) => (
-            <Card key={label} sx={{ flex: "1 1 200px", minWidth: 160 }}>
-              <SoftBox p={2} display="flex" alignItems="center" gap={1.5}>
-                <SoftBox sx={{
-                  width: 40, height: 40, borderRadius: "10px",
-                  background: `${color}18`,
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <Icon sx={{ color, fontSize: 20 }} />
+        {loading && (
+          <SoftTypography variant="caption" color="secondary">جارٍ التحميل...</SoftTypography>
+        )}
+
+        {data && (
+          <>
+            {/* KPI Summary */}
+            <SoftBox display="flex" gap={2} mb={3} flexWrap="wrap">
+              {[
+                { label: "إجمالي الإيرادات", value: totalRevenue, color: "#82d616" },
+                { label: "إجمالي المصاريف",  value: totalExpense, color: "#fb8c00" },
+                { label: isProfit ? "صافي الربح" : "صافي الخسارة", value: netIncome, color: netColor },
+              ].map(({ label, value, color }) => (
+                <Card key={label} sx={{ flex: "1 1 200px", minWidth: 160 }}>
+                  <SoftBox p={2}>
+                    <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
+                    <SoftTypography variant="h6" fontWeight="bold" sx={{ color }}>{fmt(value)}</SoftTypography>
+                  </SoftBox>
+                </Card>
+              ))}
+            </SoftBox>
+
+            {/* Revenue section */}
+            <Card sx={{ mb: 2 }}>
+              <ISSection title="الإيرادات" color="#82d616" lines={data.revenues} total={totalRevenue} />
+            </Card>
+
+            {/* Expense section */}
+            <Card sx={{ mb: 2 }}>
+              <ISSection title="المصاريف" color="#fb8c00" lines={data.expenses} total={totalExpense} />
+            </Card>
+
+            {/* Net result */}
+            <Card>
+              <SoftBox p={2.5} display="flex" justifyContent="space-between" alignItems="center"
+                sx={{ background: `${netColor}10`, borderRadius: 2 }}>
+                <SoftBox display="flex" alignItems="center" gap={1}>
+                  <NetIcon sx={{ color: netColor }} />
+                  <SoftTypography variant="h6" fontWeight="bold" sx={{ color: netColor }}>
+                    {isProfit ? "صافي الربح" : "صافي الخسارة"}
+                  </SoftTypography>
                 </SoftBox>
-                <SoftBox>
-                  <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
-                  <SoftTypography variant="h6" fontWeight="bold" sx={{ color }}>{fmt(value)}</SoftTypography>
-                </SoftBox>
+                <SoftTypography variant="h5" fontWeight="bold" sx={{ color: netColor }}>
+                  {fmt(netIncome)}
+                </SoftTypography>
               </SoftBox>
             </Card>
-          ))}
-        </SoftBox>
-
-        {/* Statement Table */}
-        <Card>
-          <SoftBox p={2} borderBottom="1px solid #f0f2f5">
-            <SoftTypography variant="h6" fontWeight="bold" textAlign="center">
-              قائمة الدخل — {fy?.name}
-            </SoftTypography>
-            <SoftTypography variant="caption" color="secondary" display="block" textAlign="center">
-              الفترة: {fy?.startDate} إلى {fy?.endDate}
-            </SoftTypography>
-          </SoftBox>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ background: "#f8f9fa" }}>
-                  {["الكود", "البند", "المبلغ (دج)"].map((h) => (
-                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, color: "#8392ab", py: 1 }}>{h}</TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {/* ── Revenues ── */}
-                <SectionHeader label="الإيرادات" color="#82d616" />
-                {revenueGroups.map((grp) => (
-                  <>
-                    <GroupRow key={`grp-${grp.id}`} label={grp.nameAr} />
-                    {grp.items.map((acc) => (
-                      <AccountRow key={acc.id} code={acc.code} name={acc.nameAr} balance={acc.balance} />
-                    ))}
-                    <SubtotalRow key={`sub-${grp.id}`} label={`إجمالي ${grp.nameAr}`} value={grp.subtotal} color="#82d616" />
-                  </>
-                ))}
-                <TotalRow label="إجمالي الإيرادات" value={totalRevenue} />
-
-                {/* ── COGS ── */}
-                <SectionHeader label="تكلفة البضاعة المباعة" color="#7928ca" />
-                {allAccounts.filter((a) => a.classification === "expense" && a.parentId !== null && a.isPostable &&
-                  mockAccounts.find((p) => p.id === a.parentId)?.code === "51").map((acc) => (
-                  <AccountRow key={acc.id} code={acc.code} name={acc.nameAr} balance={acc.balance} />
-                ))}
-                <SubtotalRow
-                  label="تكلفة البضاعة المباعة"
-                  value={mockAccounts.find((a) => a.code === "511")?.balance ?? 0}
-                  color="#7928ca"
-                />
-                <TotalRow label="إجمالي الربح" value={grossProfit} highlight />
-
-                {/* ── Operating Expenses ── */}
-                <SectionHeader label="المصروفات التشغيلية" color="#ea0606" />
-                {expenseGroups.map((grp) => (
-                  <>
-                    <GroupRow key={`egrp-${grp.id}`} label={grp.nameAr} />
-                    {grp.items.map((acc) => (
-                      <AccountRow key={acc.id} code={acc.code} name={acc.nameAr} balance={acc.balance} />
-                    ))}
-                    <SubtotalRow key={`esub-${grp.id}`} label={`إجمالي ${grp.nameAr}`} value={grp.subtotal} color="#ea0606" />
-                  </>
-                ))}
-                <TotalRow label="إجمالي المصروفات التشغيلية" value={operatingExpenses} />
-
-                {/* ── Net Profit ── */}
-                <TableRow>
-                  <TableCell colSpan={3} sx={{ py: 0.5 }} />
-                </TableRow>
-                <TotalRow label="صافي الربح / الخسارة" value={netProfit} highlight />
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Card>
+          </>
+        )}
       </SoftBox>
       <Footer />
     </DashboardLayout>

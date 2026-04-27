@@ -30,22 +30,14 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { calcLineTotal, formatDZD, mockPurchases, purchaseProducts } from "./mockData";
-import {
-  getDefaultWarehouse,
-  getPriceListsFor,
-  mockWarehouses,
-  priceSourceLabels,
-  resolveProductPrice,
-} from "data/mock/pricingInventoryMock";
-import { mockPartnerProducts } from "data/mock/partnershipMock";
-import {
-  findSupplierByName,
-  getSupplierName,
-  getSupplierOptions,
-  resolveSupplierLink,
-  supplierMatchLabels,
-} from "data/mock/suppliersMock";
+import { calcLineTotal, formatDZD } from "./mockData";
+const getPriceListsFor = () => [];
+const priceSourceLabels = {};
+const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.purchasePrice || 0, listName: "—" });
+const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
+const resolveSupplierLink = () => ({ isLinked: false });
+const supplierMatchLabels = {};
+import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
 
 let lineId = 1;
 
@@ -161,58 +153,62 @@ function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnte
 export default function PurchaseForm() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const editPurchase = mockPurchases.find((purchase) => purchase.id === id);
-  const isEdit = Boolean(editPurchase);
+  const isEdit = Boolean(id);
 
-  const supplierOptions = useMemo(() => getSupplierOptions(), []);
-  const [supplier, setSupplier] = useState(() => (
-    editPurchase?.supplier ? findSupplierByName(editPurchase.supplier) || editPurchase.supplier : null
-  ));
   const purchasePriceLists = getPriceListsFor("purchase");
-  const [selectedPriceListId, setSelectedPriceListId] = useState(editPurchase?.priceListId || "PURCHASE_MAIN");
-  const [date, setDate] = useState(editPurchase?.date || new Date().toISOString().slice(0, 10));
-  const [expectedDate, setExpectedDate] = useState(editPurchase?.expectedDate || "");
-  const [warehouse, setWarehouse] = useState(editPurchase?.warehouseId || getDefaultWarehouse(mockWarehouses)?.id || "WH-MAIN");
-  const [paymentTerms, setPaymentTerms] = useState(editPurchase?.paymentStatus === "paid" ? "cash" : "credit");
-  const [notes, setNotes] = useState(editPurchase?.notes || "");
-  const [lines, setLines] = useState(() => {
-    if (!editPurchase) return [createLine()];
-    return editPurchase.lines.map((line) => {
-      const product = purchaseProducts.find((item) => item.id === line.productCode) || null;
-      return {
-        id: lineId++,
-        product,
-        qty: line.qty,
-        unitPrice: line.unitPrice,
-        pricingSource: line.pricingSource || "product_default",
-        taxRate: line.taxRate,
-        notes: "",
-      };
-    });
-  });
-  const [savedDialog, setSavedDialog] = useState(null);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+  const [productOptions, setProductOptions] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [supplier, setSupplier] = useState(null);
+  const [selectedPriceListId, setSelectedPriceListId] = useState("PURCHASE_MAIN");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [expectedDate, setExpectedDate] = useState("");
+  const [warehouse, setWarehouse] = useState("");
+  const [paymentTerms, setPaymentTerms] = useState("credit");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState([createLine()]);
+  const [savedId, setSavedId] = useState(null);
 
-  // Linked supplier detection uses stable identifiers, not display names.
+  useEffect(() => {
+    suppliersApi.list().then((r) => setSupplierOptions(r.data?.content ?? r.data ?? [])).catch(console.error);
+    productsApi.list().then((r) => {
+      const all = r.data?.content ?? r.data ?? [];
+      setProductOptions(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, unit: p.unit ?? "وحدة", taxRate: p.taxRate ?? 19 })));
+    }).catch(console.error);
+    inventoryApi.listWarehouses().then((r) => {
+      const whs = r.data?.content ?? r.data ?? [];
+      setWarehouses(whs);
+      const def = whs.find((w) => w.isDefault) ?? whs[0];
+      if (def) setWarehouse(def.id);
+    }).catch(console.error);
+    if (isEdit) {
+      purchasesApi.getById(id).then((r) => {
+        const p = r.data;
+        setDate(p.date || new Date().toISOString().slice(0, 10));
+        setExpectedDate(p.expectedDate || "");
+        setWarehouse(p.warehouseId || "");
+        setNotes(p.notes || "");
+        if (p.supplier) setSupplier({ name: p.supplier });
+        if (p.lines?.length) {
+          setLines(p.lines.map((l) => ({
+            id: lineId++,
+            product: l.productCode ? { id: l.productCode, name: l.product, unit: l.unit, taxRate: l.taxRate } : null,
+            qty: l.qty,
+            unitPrice: l.unitPrice,
+            pricingSource: l.pricingSource || "product_default",
+            taxRate: l.taxRate ?? 19,
+            notes: l.notes || "",
+          })));
+        }
+      }).catch(console.error);
+    }
+  }, [id, isEdit]);
+
   const linkedMatch = useMemo(() => {
     if (!supplier) return null;
     const resolved = resolveSupplierLink(supplier);
     return resolved.isLinked ? resolved : null;
   }, [supplier]);
-
-  const activeProducts = useMemo(() => {
-    if (linkedMatch?.partner?.uuid && mockPartnerProducts[linkedMatch.partner.uuid]) {
-      return mockPartnerProducts[linkedMatch.partner.uuid].map((p) => ({
-        id: p.id,
-        name: p.nameAr,
-        unit: p.unit,
-        price: p.price ?? 0,
-        taxRate: 19,
-        stock: p.stock,
-        fromPartner: true,
-      }));
-    }
-    return purchaseProducts;
-  }, [linkedMatch]);
 
   useEffect(() => {
     setLines((items) =>
@@ -253,10 +249,34 @@ export default function PurchaseForm() {
 
   const save = (mode) => {
     if (!supplier || totals.validLines.length === 0) return;
-    setSavedDialog(mode);
+    const supplierName = typeof supplier === "string" ? supplier : (supplier.name || supplier.nameAr || "");
+    const payload = {
+      supplier: supplierName,
+      date,
+      expectedDate,
+      warehouseId: warehouse,
+      priceListId: selectedPriceListId,
+      paymentTerms,
+      notes,
+      items: totals.validLines.map((l) => ({
+        productId: l.product.id,
+        qty: Number(l.qty),
+        unitPrice: Number(l.unitPrice),
+        taxRate: Number(l.taxRate),
+        notes: l.notes || null,
+      })),
+    };
+    purchasesApi.create(payload)
+      .then((r) => {
+        const newId = r.data?.id;
+        if (mode === "confirm" && newId) {
+          return purchasesApi.confirm(newId).then(() => newId);
+        }
+        return newId;
+      })
+      .then((newId) => setSavedId(newId))
+      .catch(console.error);
   };
-
-  const simulatedId = isEdit ? editPurchase.id : "PUR-2024-007";
 
   return (
     <DashboardLayout>
@@ -268,7 +288,7 @@ export default function PurchaseForm() {
           </IconButton>
           <SoftBox flex={1}>
             <SoftTypography variant="h4" fontWeight="bold">
-              {isEdit ? `تعديل ${editPurchase.id}` : "أمر شراء جديد"}
+              {isEdit ? `تعديل أمر الشراء` : "أمر شراء جديد"}
             </SoftTypography>
             <SoftTypography variant="body2" color="text">
               إدخال مشتريات تجريبي بنفس منطق أوامر المبيعات: مورد، سطور، كميات، أسعار، ورسوم
@@ -355,7 +375,7 @@ export default function PurchaseForm() {
                   <FormControl size="small" fullWidth>
                     <InputLabel>مستودع الاستلام</InputLabel>
                     <Select value={warehouse} label="مستودع الاستلام" onChange={(e) => setWarehouse(e.target.value)}>
-                      {mockWarehouses.map((item) => (
+                      {warehouses.map((item) => (
                         <MenuItem key={item.id} value={item.id}>
                           {item.name}{item.isDefault ? " · افتراضي" : ""}
                         </MenuItem>
@@ -441,7 +461,7 @@ export default function PurchaseForm() {
               <SoftBox display="flex" justifyContent="space-between" mb={1}>
                 <SoftTypography variant="caption" color="secondary">مستودع الاستلام</SoftTypography>
                 <SoftTypography variant="caption" fontWeight="bold">
-                  {mockWarehouses.find((item) => item.id === warehouse)?.name || "—"}
+                  {warehouses.find((item) => item.id === warehouse)?.name || "—"}
                 </SoftTypography>
               </SoftBox>
               <SoftBox display="flex" justifyContent="space-between" mb={1}>
@@ -473,20 +493,18 @@ export default function PurchaseForm() {
         </Grid>
       </SoftBox>
 
-      <Dialog open={!!savedDialog} onClose={() => setSavedDialog(null)} maxWidth="xs" fullWidth>
+      <Dialog open={!!savedId} onClose={() => setSavedId(null)} maxWidth="xs" fullWidth>
         <DialogTitle>
-          <SoftTypography variant="h6" fontWeight="bold">تمت المحاكاة</SoftTypography>
+          <SoftTypography variant="h6" fontWeight="bold">تم الحفظ</SoftTypography>
         </DialogTitle>
         <DialogContent dividers>
           <SoftTypography variant="body2" color="text">
-            {savedDialog === "confirm"
-              ? "تم حفظ أمر الشراء وتأكيده تجريبيا. في الربط الحقيقي سيتم إنشاء قيد التزام للمورد وتحديث المخزون عند الاستلام."
-              : "تم حفظ أمر الشراء كمسودة تجريبية."}
+            تم حفظ أمر الشراء بنجاح.
           </SoftTypography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <SoftButton variant="text" color="secondary" onClick={() => navigate("/purchases")}>العودة للقائمة</SoftButton>
-          <SoftButton variant="gradient" color="info" onClick={() => navigate(`/purchases/${simulatedId}`)}>عرض الأمر</SoftButton>
+          {savedId && <SoftButton variant="gradient" color="info" onClick={() => navigate(`/purchases/${savedId}`)}>عرض الأمر</SoftButton>}
         </DialogActions>
       </Dialog>
 

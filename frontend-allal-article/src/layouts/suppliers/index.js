@@ -39,14 +39,15 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { WILAYAS } from "data/wilayas";
-import { linkedSuppliers } from "data/mock/partnershipMock";
-import {
-  getSupplierBalance,
-  mockSuppliers,
-  resolveSupplierLink,
-  supplierMatchLabels,
-} from "data/mock/suppliersMock";
-import { formatDZD, mockPurchases } from "layouts/purchases/mockData";
+const supplierMatchLabels = {
+  partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
+  commercialRegister: "السجل التجاري", email: "البريد الإلكتروني", phone: "رقم الهاتف",
+};
+const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
+const getSupplierBalance = () => 0;
+import { formatDZD } from "layouts/purchases/mockData";
+import { purchasesApi } from "services";
+import { suppliersApi } from "services";
 
 const emptySupplierForm = {
   name: "",
@@ -148,11 +149,19 @@ function buildSupplierForm(supplier = null) {
 
 function SupplierDetailDialog({ supplier, onClose, onEdit }) {
   const [tab, setTab] = useState(0);
+  const [purchases, setPurchases] = useState([]);
+
+  useEffect(() => {
+    if (!supplier) return;
+    purchasesApi.list({ supplier: supplier.name })
+      .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({ totalAmount: 0, ...p }))))
+      .catch(console.error);
+  }, [supplier]);
+
   if (!supplier) return null;
 
   const link = resolveSupplierLink(supplier);
   const balance = getSupplierBalance(supplier);
-  const purchases = mockPurchases.filter((purchase) => purchase.supplier === supplier.name);
 
   return (
     <Dialog open={!!supplier} onClose={onClose} maxWidth="md" fullWidth>
@@ -319,29 +328,7 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
 
   const save = () => {
     if (!form.name.trim() || !form.phone.trim()) return;
-    onSave({
-      ...(supplier || {}),
-      id: supplier?.id || `SUP-${Date.now()}`,
-      name: form.name.trim(),
-      legalName: form.legalName.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim(),
-      taxNumber: form.taxNumber.trim(),
-      commercialRegister: form.commercialRegister.trim(),
-      nisNumber: form.nisNumber.trim(),
-      address: form.address.trim(),
-      category: form.category.trim() || "عام",
-      paymentTerms: form.paymentTerms.trim() || "غير محدد",
-      status: supplier?.status || "active",
-      totalPurchases: supplier?.totalPurchases || 0,
-      paidAmount: supplier?.paidAmount || 0,
-      openingBalance: Math.max(0, Number(form.openingBalance) || 0),
-      lastPurchase: supplier?.lastPurchase || "—",
-      partnerUuid: supplier?.partnerUuid || null,
-      manualPartnerUuid: form.manualPartnerUuid || null,
-      orders: supplier?.orders || [],
-      payments: supplier?.payments || [],
-    });
+    onSave(form);
     setForm(buildSupplierForm(null));
   };
 
@@ -395,9 +382,7 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
               <InputLabel>ربط يدوي بشريك</InputLabel>
               <Select value={form.manualPartnerUuid} label="ربط يدوي بشريك" onChange={(e) => set("manualPartnerUuid", e.target.value)}>
                 <MenuItem value="">بدون ربط يدوي</MenuItem>
-                {linkedSuppliers.map((partner) => (
-                  <MenuItem key={partner.uuid} value={partner.uuid}>{partner.name}</MenuItem>
-                ))}
+                {/* Partners loaded from API */}
               </Select>
             </FormControl>
           </Grid>
@@ -424,7 +409,7 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
 }
 
 function Suppliers() {
-  const [suppliers, setSuppliers] = useState(mockSuppliers);
+  const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(0);
   const [wilayaFilter, setWilayaFilter] = useState("all");
@@ -457,6 +442,17 @@ function Suppliers() {
   const linkedCount = suppliers.filter((supplier) => resolveSupplierLink(supplier).isLinked).length;
   const totalBalance = suppliers.reduce((sum, supplier) => sum + getSupplierBalance(supplier), 0);
 
+  useEffect(() => {
+    suppliersApi.list()
+      .then((r) => setSuppliers((r.data?.content ?? r.data ?? []).map((s) => ({
+        totalPurchases: 0, paidAmount: 0, orders: [], payments: [],
+        lastPurchase: "—", partnerUuid: null, manualPartnerUuid: null,
+        status: "active",
+        ...s,
+      }))))
+      .catch(console.error);
+  }, []);
+
   const upsertSupplier = (supplier) => {
     setSuppliers((current) => (
       current.some((item) => item.id === supplier.id)
@@ -464,6 +460,27 @@ function Suppliers() {
         : [...current, supplier]
     ));
     setSelectedSupplier(supplier);
+  };
+
+  const handleSaveSupplier = (formData, existingSupplier) => {
+    const apiData = {
+      name: formData.name,
+      legalName: formData.legalName || null,
+      phone: formData.phone,
+      email: formData.email || null,
+      taxNumber: formData.taxNumber || null,
+      commercialRegister: formData.commercialRegister || null,
+      nisNumber: formData.nisNumber || null,
+      wilaya: formData.wilaya || null,
+      address: formData.address || null,
+      category: formData.category || "عام",
+      paymentTerms: formData.paymentTerms || null,
+      openingBalance: Number(formData.openingBalance) || 0,
+    };
+    const apiCall = existingSupplier?.id
+      ? suppliersApi.update(existingSupplier.id, apiData).then((r) => ({ ...existingSupplier, ...r.data }))
+      : suppliersApi.create(apiData).then((r) => ({ totalPurchases: 0, paidAmount: 0, orders: [], payments: [], lastPurchase: "—", partnerUuid: null, manualPartnerUuid: null, status: "active", ...r.data }));
+    apiCall.then(upsertSupplier).catch(console.error);
   };
 
   return (
@@ -548,8 +565,8 @@ function Suppliers() {
       <SupplierFormDialog
         open={addDialog}
         onClose={() => setAddDialog(false)}
-        onSave={(supplier) => {
-          upsertSupplier(supplier);
+        onSave={(formData) => {
+          handleSaveSupplier(formData, null);
           setAddDialog(false);
         }}
       />
@@ -557,8 +574,8 @@ function Suppliers() {
         open={!!editSupplier}
         supplier={editSupplier}
         onClose={() => setEditSupplier(null)}
-        onSave={(supplier) => {
-          upsertSupplier(supplier);
+        onSave={(formData) => {
+          handleSaveSupplier(formData, editSupplier);
           setEditSupplier(null);
         }}
       />

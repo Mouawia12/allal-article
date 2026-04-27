@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -31,16 +31,16 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import ResourceLockBanner from "components/ResourceLockBanner";
-import { getMockResourceLock } from "data/mock/resourceLocksMock";
+const getMockResourceLock = () => null;
 
 import {
   calcLineTotal,
   calcReturnLineTotal,
   formatDZD,
-  mockPurchases,
   paymentConfig,
   statusConfig,
 } from "./mockData";
+import { purchasesApi } from "services";
 
 function InfoItem({ label, value }) {
   return (
@@ -121,33 +121,40 @@ const actionText = {
 export default function PurchaseDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const basePurchase = mockPurchases.find((purchase) => purchase.id === id) || mockPurchases[0];
-  const purchase = { ...basePurchase, id: id || basePurchase.id };
-
-  const [status, setStatus] = useState(purchase.status);
-  const [paymentStatus, setPaymentStatus] = useState(purchase.paymentStatus);
-  const [receivedBy, setReceivedBy] = useState(purchase.receivedBy);
-  const [invoiceNo, setInvoiceNo] = useState(purchase.invoiceNo);
-  const [receivedLines, setReceivedLines] = useState(() =>
-    purchase.lines.map((line) => ({ ...line }))
-  );
+  const [purchase, setPurchase] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState(null);
+  const [receivedBy, setReceivedBy] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [receivedLines, setReceivedLines] = useState([]);
   const [returnDialog, setReturnDialog] = useState(false);
   const [returnNote, setReturnNote] = useState("");
   const [returnReceiver, setReturnReceiver] = useState("");
-  const [returnQuantities, setReturnQuantities] = useState(() =>
-    Object.fromEntries(purchase.lines.map((line) => [line.id, 0]))
-  );
+  const [returnQuantities, setReturnQuantities] = useState({});
   const [dialog, setDialog] = useState(null);
   const [note, setNote] = useState("");
-  const [activity, setActivity] = useState([
-    { time: `${purchase.date} 09:00`, user: purchase.requestedBy, action: "أنشأ أمر الشراء" },
-    ...(purchase.invoiceNo
-      ? [{ time: `${purchase.date} 11:20`, user: "المحاسبة", action: `ربط فاتورة المورد ${purchase.invoiceNo}` }]
-      : []),
-    ...(purchase.receivedBy
-      ? [{ time: purchase.expectedDate, user: purchase.receivedBy, action: "سجل استلام البضاعة" }]
-      : []),
-  ]);
+  const [activity, setActivity] = useState([]);
+
+  useEffect(() => {
+    purchasesApi.getById(id)
+      .then((r) => {
+        const p = { lines: [], returnItems: [], ...r.data };
+        setPurchase(p);
+        setStatus(p.status);
+        setPaymentStatus(p.paymentStatus);
+        setReceivedBy(p.receivedBy || "");
+        setInvoiceNo(p.invoiceNo || "");
+        const lines = (p.lines || []).map((l) => ({ receivedQty: 0, returnedQty: 0, ...l }));
+        setReceivedLines(lines);
+        setReturnQuantities(Object.fromEntries(lines.map((l) => [l.id, 0])));
+        setActivity([
+          { time: `${p.date} 09:00`, user: p.requestedBy || "—", action: "أنشأ أمر الشراء" },
+          ...(p.invoiceNo ? [{ time: `${p.date} 11:20`, user: "المحاسبة", action: `ربط فاتورة المورد ${p.invoiceNo}` }] : []),
+          ...(p.receivedBy ? [{ time: p.expectedDate, user: p.receivedBy, action: "سجل استلام البضاعة" }] : []),
+        ]);
+      })
+      .catch(console.error);
+  }, [id]);
 
   const totals = useMemo(() => {
     const untaxed = receivedLines.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.unitPrice || 0), 0);
@@ -171,8 +178,10 @@ export default function PurchaseDetail() {
   const statusInfo = statusConfig[status] || { label: status, color: "secondary" };
   const paymentInfo = paymentConfig[paymentStatus] || { label: paymentStatus, color: "secondary" };
   const currentAction = dialog ? actionText[dialog] : null;
-  const editLock = getMockResourceLock("purchase_order", purchase.id);
+  const editLock = purchase ? getMockResourceLock("purchase_order", purchase.id) : null;
   const purchaseLockedForEdit = ["received", "cancelled"].includes(status);
+
+  if (!purchase) return <DashboardLayout><DashboardNavbar /><SoftBox py={3} px={3}><SoftTypography>جارٍ التحميل...</SoftTypography></SoftBox><Footer /></DashboardLayout>;
   const returnableLines = receivedLines.filter(
     (line) => Number(line.receivedQty || 0) > Number(line.returnedQty || 0)
   );
@@ -240,16 +249,21 @@ export default function PurchaseDetail() {
 
   const runAction = () => {
     if (dialog === "confirm") {
-      setStatus("confirmed");
-      appendActivity("أرسل أمر الشراء للمورد");
+      purchasesApi.confirm(id)
+        .then(() => { setStatus("confirmed"); appendActivity("أرسل أمر الشراء للمورد"); })
+        .catch(console.error);
     }
     if (dialog === "receive") {
-      setStatus("received");
-      setReceivedBy("المستخدم الحالي");
-      setReceivedLines((lines) =>
-        lines.map((line) => ({ ...line, receivedQty: line.qty, returnedQty: line.returnedQty || 0 }))
-      );
-      appendActivity("سجل استلام كامل الكميات وأقفل تعديل أمر الشراء");
+      purchasesApi.receive(id, { receivedBy: "المستخدم الحالي" })
+        .then(() => {
+          setStatus("received");
+          setReceivedBy("المستخدم الحالي");
+          setReceivedLines((lines) =>
+            lines.map((line) => ({ ...line, receivedQty: line.qty, returnedQty: line.returnedQty || 0 }))
+          );
+          appendActivity("سجل استلام كامل الكميات وأقفل تعديل أمر الشراء");
+        })
+        .catch(console.error);
     }
     if (dialog === "invoice") {
       const nextInvoice = invoiceNo || `BILL-${new Date().getFullYear()}-025`;
@@ -261,8 +275,12 @@ export default function PurchaseDetail() {
       appendActivity("سجل دفع فاتورة المورد بالكامل");
     }
     if (dialog === "cancel") {
-      setStatus("cancelled");
-      appendActivity(note.trim() ? `ألغى أمر الشراء: ${note.trim()}` : "ألغى أمر الشراء");
+      purchasesApi.cancel(id)
+        .then(() => {
+          setStatus("cancelled");
+          appendActivity(note.trim() ? `ألغى أمر الشراء: ${note.trim()}` : "ألغى أمر الشراء");
+        })
+        .catch(console.error);
     }
     setDialog(null);
     setNote("");

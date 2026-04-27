@@ -42,32 +42,15 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
-import { formatDZD, getPriceListsFor, resolveProductPrice } from "data/mock/pricingInventoryMock";
+const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const getPriceListsFor = () => [];
+const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
 import {
   CustomerInfoDialog,
   emptyNewCustomerForm,
-  mockCustomers as baseCustomers,
 } from "./NewOrder";
+import { ordersApi, customersApi, productsApi } from "services";
 
-// ─── Mock Data (same source-of-truth as NewOrder.js) ──────────────────────────
-const mockProducts = [
-  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", stock: 850,  unit: "قطعة", weightPerUnit: 0.05,  unitsPerPackage: 100, packageUnit: "كرطون", price: 12 },
-  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", stock: 1200, unit: "قطعة", weightPerUnit: 0.03,  unitsPerPackage: 200, packageUnit: "كرطون", price: 8  },
-  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", stock: 600,  unit: "قطعة", weightPerUnit: 0.02,  unitsPerPackage: 500, packageUnit: "كيس",   price: 5  },
-  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          stock: 45,   unit: "قطعة", weightPerUnit: 0.35,  unitsPerPackage: 12,  packageUnit: "علبة",  price: 450 },
-  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          stock: 30,   unit: "قطعة", weightPerUnit: 0.5,   unitsPerPackage: 12,  packageUnit: "علبة",  price: 620 },
-  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          stock: 0,    unit: "قطعة", weightPerUnit: 0.4,   unitsPerPackage: 6,   packageUnit: "علبة",  price: 380 },
-  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         stock: 500,  unit: "متر",  weightPerUnit: 0.3,   unitsPerPackage: 100, packageUnit: "رزمة",  price: 95  },
-  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         stock: 800,  unit: "متر",  weightPerUnit: 0.2,   unitsPerPackage: 100, packageUnit: "رزمة",  price: 65  },
-  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         stock: 200,  unit: "لفة",  weightPerUnit: 0.1,   unitsPerPackage: 20,  packageUnit: "كرطون", price: 35  },
-  { id: 10, name: "أنبوب PVC 2 بوصة",   code: "ANB-PVC-2",  category: "سباكة",          stock: 100,  unit: "متر",  weightPerUnit: 1.2,   unitsPerPackage: 6,   packageUnit: "طرد",   price: 280 },
-  { id: 11, name: "أنبوب PVC 1 بوصة",   code: "ANB-PVC-1",  category: "سباكة",          stock: 150,  unit: "متر",  weightPerUnit: 0.7,   unitsPerPackage: 6,   packageUnit: "طرد",   price: 180 },
-  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          stock: 25,   unit: "قطعة", weightPerUnit: 0.45,  unitsPerPackage: 10,  packageUnit: "علبة",  price: 320 },
-  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         stock: 80,   unit: "علبة", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون", price: 1850 },
-  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         stock: 60,   unit: "علبة", weightPerUnit: 4.5,   unitsPerPackage: 4,   packageUnit: "كرطون", price: 1850 },
-  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       stock: 120,  unit: "لفة",  weightPerUnit: 0.15,  unitsPerPackage: 24,  packageUnit: "كرطون", price: 55  },
-  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          stock: 200,  unit: "قطعة", weightPerUnit: 2.0,   unitsPerPackage: 10,  packageUnit: "رزمة",  price: 750 },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function newRow(id) {
@@ -114,7 +97,7 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
       <TableCell sx={{ py: 0.5, minWidth: 260 }}>
         <Autocomplete
           size="small"
-          options={mockProducts}
+          options={apiProducts}
           value={product}
           inputValue={row.inputValue}
           onInputChange={(_, v) => onChange(row.id, "inputValue", v)}
@@ -276,7 +259,8 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
 export default function AdminNewOrder() {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(null);
-  const [customers, setCustomers] = useState(baseCustomers);
+  const [customers, setCustomers] = useState([]);
+  const [apiProducts, setApiProducts] = useState([]);
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
   const [newCustomerDialog, setNewCustomerDialog] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({ ...emptyNewCustomerForm });
@@ -290,6 +274,16 @@ export default function AdminNewOrder() {
   const [rows, setRows] = useState([newRow(1)]);
   const qtyRefs = useRef({});
   const customerDebt = getCustomerDebt(customer);
+
+  useEffect(() => {
+    customersApi.list().then((r) => {
+      setCustomers((r.data?.content ?? r.data ?? []).map((c) => ({ orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...c })));
+    }).catch(console.error);
+    productsApi.list().then((r) => {
+      const all = r.data?.content ?? r.data ?? [];
+      setApiProducts(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, code: p.code ?? String(p.id), unit: p.unit ?? "وحدة", weightPerUnit: p.weightPerUnit ?? 0, unitsPerPackage: p.unitsPerPackage ?? 1, packageUnit: p.packageUnit ?? "وحدة" })));
+    }).catch(console.error);
+  }, []);
 
   // Auto-focus qty after product selected
   const handleProductConfirmed = useCallback((rowId) => {
@@ -351,17 +345,19 @@ export default function AdminNewOrder() {
   const totalItems = filledRows.length;
 
   const handleSave = (action) => {
-    if (!customer) {
-      alert("الرجاء اختيار الزبون أولاً");
-      return;
-    }
-    if (filledRows.length === 0) {
-      alert("الرجاء إضافة صنف واحد على الأقل");
-      return;
-    }
-    const status = action === "confirm" ? "confirmed" : "draft";
-    console.log("Order saved:", { customer, status, priceListId: selectedPriceListId, rows: filledRows, notes, totalAmount });
-    navigate("/orders");
+    if (!customer) { alert("الرجاء اختيار الزبون أولاً"); return; }
+    if (filledRows.length === 0) { alert("الرجاء إضافة صنف واحد على الأقل"); return; }
+    const payload = {
+      customerId: customer.id,
+      notes,
+      status: action === "confirm" ? "confirmed" : "draft",
+      priceListId: selectedPriceListId,
+      items: filledRows.map((row) => {
+        const priceInfo = resolveProductPrice(row.product, selectedPriceListId, "sales");
+        return { productId: row.product.id, qty: Number(row.qty), unitPrice: priceInfo.unitPrice };
+      }),
+    };
+    ordersApi.create(payload).then(() => navigate("/orders")).catch(console.error);
   };
 
   const updateNewCustomerField = (field, value) => {
@@ -372,36 +368,24 @@ export default function AdminNewOrder() {
     const name = newCustomerForm.name.trim();
     const phone = newCustomerForm.phone.trim();
     const wilaya = newCustomerForm.wilaya.trim();
-
     if (!name || !phone || !wilaya) return;
-
-    const openingBalance = Math.max(0, Number(newCustomerForm.openingBalance) || 0);
-    const newCustomer = {
-      id: Math.max(...customers.map((item) => item.id), 0) + 1,
-      name,
-      phone,
+    customersApi.create({
+      name, phone,
       phone2: newCustomerForm.phone2.trim(),
       email: newCustomerForm.email.trim(),
       wilaya,
       address: newCustomerForm.address.trim(),
       salesperson: newCustomerForm.salesperson.trim() || "غير محدد",
-      ordersCount: 0,
-      lastOrder: "—",
-      totalAmount: 0,
-      paidAmount: 0,
-      openingBalance,
-      balance: openingBalance,
-      status: "active",
       shippingRoute: newCustomerForm.shippingRoute.trim() || `${wilaya} - عام`,
-      orders: [],
-      payments: [],
-    };
-
-    setCustomers((current) => [...current, newCustomer]);
-    setCustomer(newCustomer);
-    setCustomerInfoOpen(false);
-    setNewCustomerForm({ ...emptyNewCustomerForm });
-    setNewCustomerDialog(false);
+      openingBalance: Math.max(0, Number(newCustomerForm.openingBalance) || 0),
+    }).then((r) => {
+      const newCustomer = { orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...r.data };
+      setCustomers((current) => [...current, newCustomer]);
+      setCustomer(newCustomer);
+      setCustomerInfoOpen(false);
+      setNewCustomerForm({ ...emptyNewCustomerForm });
+      setNewCustomerDialog(false);
+    }).catch(console.error);
   };
 
   return (

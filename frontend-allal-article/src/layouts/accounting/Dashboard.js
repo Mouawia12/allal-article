@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -31,43 +32,11 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { mockAccounts, mockAccountSettings, mockJournals, mockFiscalYears } from "./mockData";
+import { accountingApi } from "services";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) =>
-  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 0 }).format(n) + " دج";
-
-function getBalance(code) {
-  const acc = mockAccounts.find((a) => a.code === code);
-  return acc?.balance ?? 0;
-}
-
-// ─── Derived data ─────────────────────────────────────────────────────────────
-const cashBalance     = getBalance("141"); // الصندوق
-const bankBalance     = getBalance("142"); // الحساب البنكي
-const customersDebt   = getBalance("131"); // ذمم العملاء
-const suppliersDebt   = getBalance("221"); // ذمم الموردين
-const inventoryValue  = getBalance("121"); // بضاعة للبيع
-const revenueTotal    = getBalance("411"); // مبيعات البضاعة
-const cogsTotal       = getBalance("511"); // تكلفة البضاعة المباعة
-const grossProfit     = revenueTotal - cogsTotal;
-
-const draftJournals    = mockJournals.filter((j) => j.status === "draft");
-const missingLinks     = mockAccountSettings.filter((s) => !s.accountId);
-const activeFY         = mockFiscalYears.find((fy) => !fy.isClosed);
-
-// Simulate: unbalanced journals (none in mock — but we flag missing links as a warning)
-const alerts = [
-  ...(draftJournals.length > 0
-    ? [{ type: "warning", msg: `${draftJournals.length} قيد في حالة مسودة — لم يُرحَّل بعد`, route: "/accounting/journals" }]
-    : []),
-  ...(missingLinks.length > 0
-    ? [{ type: "error", msg: `${missingLinks.length} حساب ربط غير مكتمل في إعدادات المحاسبة`, route: "/accounting/account-links" }]
-    : []),
-  ...(activeFY
-    ? [{ type: "info", msg: `السنة المالية النشطة: ${activeFY.name}`, route: "/accounting/fiscal-years" }]
-    : [{ type: "error", msg: "لا توجد سنة مالية مفتوحة — تحقق من السنوات المالية", route: "/accounting/fiscal-years" }]),
-];
+  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 function BalanceCard({ icon: Icon, label, value, color, onClick }) {
@@ -151,6 +120,44 @@ function ShortcutCard({ icon: Icon, label, route, navigate }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AccountingDashboard() {
   const navigate = useNavigate();
+  const [accounts, setAccounts] = useState([]);
+  const [journals, setJournals] = useState([]);
+  const [fiscalYears, setFiscalYears] = useState([]);
+
+  useEffect(() => {
+    accountingApi.listAccounts()
+      .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+    accountingApi.listJournals()
+      .then((r) => setJournals(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+    accountingApi.listFiscalYears()
+      .then((r) => setFiscalYears(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+  }, []);
+
+  const getBalance = (code) => Number(accounts.find((a) => a.code === code)?.balance ?? 0);
+
+  const cashBalance    = getBalance("141");
+  const bankBalance    = getBalance("142");
+  const customersDebt  = getBalance("131");
+  const suppliersDebt  = getBalance("221");
+  const inventoryValue = getBalance("121");
+  const revenueTotal   = getBalance("411");
+  const cogsTotal      = getBalance("511");
+  const grossProfit    = revenueTotal - cogsTotal;
+
+  const draftJournals = journals.filter((j) => j.status === "draft");
+  const activeFY      = fiscalYears.find((fy) => !fy.closed);
+
+  const alerts = [
+    ...(draftJournals.length > 0
+      ? [{ type: "warning", msg: `${draftJournals.length} قيد في حالة مسودة — لم يُرحَّل بعد`, route: "/accounting/journals" }]
+      : []),
+    ...(activeFY
+      ? [{ type: "info", msg: `السنة المالية النشطة: ${activeFY.name}`, route: "/accounting/fiscal-years" }]
+      : [{ type: "error", msg: "لا توجد سنة مالية مفتوحة — تحقق من السنوات المالية", route: "/accounting/fiscal-years" }]),
+  ];
 
   return (
     <DashboardLayout>
@@ -226,7 +233,7 @@ export default function AccountingDashboard() {
                   </SoftButton>
                 </SoftBox>
 
-                {mockJournals.slice(0, 5).map((j, idx) => {
+                {journals.slice(0, 5).map((j, idx) => {
                   const stCfg = {
                     draft:    { label: "مسودة",  bg: "#fff3e0", color: "#fb8c00" },
                     posted:   { label: "مرحّل",  bg: "#f0fde4", color: "#82d616" },
@@ -331,29 +338,11 @@ export default function AccountingDashboard() {
                   </Tooltip>
                 </SoftBox>
 
-                {mockAccountSettings.map((s) => (
-                  <SoftBox
-                    key={s.key}
-                    display="flex" alignItems="center" justifyContent="space-between"
-                    py={0.8}
-                    sx={{ borderBottom: "1px solid #f0f2f5" }}
-                  >
-                    <SoftTypography variant="caption" color="text">{s.label}</SoftTypography>
-                    {s.accountId ? (
-                      <Chip
-                        label={mockAccounts.find((a) => a.id === s.accountId)?.code ?? "—"}
-                        size="small"
-                        sx={{ background: "#f0fde4", color: "#82d616", fontWeight: 700, fontSize: 10 }}
-                      />
-                    ) : (
-                      <Chip
-                        label="غير مربوط"
-                        size="small"
-                        sx={{ background: "#ffeaea", color: "#ea0606", fontWeight: 700, fontSize: 10 }}
-                      />
-                    )}
-                  </SoftBox>
-                ))}
+                <SoftBox py={1}>
+                  <SoftTypography variant="caption" color="secondary">
+                    ربط الحسابات يُدار من صفحة إعدادات ربط الحسابات
+                  </SoftTypography>
+                </SoftBox>
               </SoftBox>
             </Card>
 

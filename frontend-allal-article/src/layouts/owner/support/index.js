@@ -28,15 +28,23 @@ import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
 import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
-import {
-  getTicketStats,
-  supportMessages,
-  supportTickets,
-  ticketPriorityConfig,
-  ticketStatusConfig,
-} from "data/mock/supportMock";
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── Config ───────────────────────────────────────────────────────────────────
+const ticketStatusConfig = {
+  open:           { label: "مفتوحة",          color: "#17c1e8", bg: "#e3f8fd" },
+  waiting_owner:  { label: "بانتظاري",         color: "#fb8c00", bg: "#fff3e0" },
+  waiting_tenant: { label: "بانتظار المشترك",  color: "#7928ca", bg: "#f5ecff" },
+  resolved:       { label: "محلولة",           color: "#82d616", bg: "#f0fde4" },
+  closed:         { label: "مغلقة",            color: "#8392ab", bg: "#f8f9fa" },
+};
+
+const ticketPriorityConfig = {
+  urgent: { label: "عاجل" },
+  high:   { label: "عالي" },
+  normal: { label: "عادي" },
+  low:    { label: "منخفض" },
+};
+
 const categoryEmoji = {
   الطلبيات: "📦", الاشتراك: "💳", الطباعة: "🖨️",
   المحاسبة: "📊", المخزون: "🏭", التقنية: "⚙️",
@@ -80,7 +88,6 @@ function Attachment({ attachment, mine }) {
 // ─── Queue item ───────────────────────────────────────────────────────────────
 function QueueItem({ ticket, selected, onSelect }) {
   const status = ticketStatusConfig[ticket.status] || ticketStatusConfig.open;
-  const priority = ticketPriorityConfig[ticket.priority] || ticketPriorityConfig.normal;
   const borderColor = priorityBorder[ticket.priority] || "#adb5bd";
   const emoji = categoryEmoji[ticket.category] || "🎫";
   const tenantColor = getTenantColor(ticket.tenantName);
@@ -98,7 +105,6 @@ function QueueItem({ ticket, selected, onSelect }) {
         "&:hover": { background: selected ? `${borderColor}09` : "#f8fafc" },
       }}
     >
-      {/* Tenant avatar */}
       <Box sx={{ position: "relative", flexShrink: 0 }}>
         <Avatar sx={{ width: 40, height: 40, background: tenantColor, fontSize: 13, fontWeight: 700, borderRadius: 2.5 }}>
           {getInitials(ticket.tenantName)}
@@ -117,7 +123,6 @@ function QueueItem({ ticket, selected, onSelect }) {
         )}
       </Box>
 
-      {/* Content */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 0.5, mb: 0.2 }}>
           <Box sx={{ fontSize: 12, fontWeight: 800, color: tenantColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -130,7 +135,6 @@ function QueueItem({ ticket, selected, onSelect }) {
         </Box>
         <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
           <Chip label={status.label} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700, px: 0.2, background: status.bg, color: status.color }} />
-          <Chip label={priority.label} size="small" sx={{ height: 18, fontSize: 9, fontWeight: 700, px: 0.2, background: `${borderColor}18`, color: borderColor }} />
           <Box sx={{ fontSize: 10, color: "#94a3b8", display: "flex", alignItems: "center" }}>{emoji}</Box>
         </Box>
       </Box>
@@ -157,7 +161,6 @@ function ChatMessage({ message, tenantName }) {
 
   return (
     <Box sx={{ display: "flex", flexDirection: mine ? "row-reverse" : "row", alignItems: "flex-end", gap: 1, mb: 1.5 }}>
-      {/* Avatar */}
       {!mine ? (
         <Avatar sx={{ width: 30, height: 30, background: tenantColor, fontSize: 11, fontWeight: 700, flexShrink: 0, borderRadius: 2 }}>
           {getInitials(message.senderName)}
@@ -168,23 +171,16 @@ function ChatMessage({ message, tenantName }) {
         </Avatar>
       )}
 
-      {/* Bubble */}
       <Box sx={{ maxWidth: "68%" }}>
         {!mine && (
-          <Box sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, mb: 0.4, pr: 0.5 }}>
-            {message.senderName}
-          </Box>
+          <Box sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, mb: 0.4, pr: 0.5 }}>{message.senderName}</Box>
         )}
         <Box sx={{
-          background: mine
-            ? "linear-gradient(135deg, #7928ca 0%, #6366f1 100%)"
-            : "#ffffff",
+          background: mine ? "linear-gradient(135deg, #7928ca 0%, #6366f1 100%)" : "#ffffff",
           color: mine ? "#fff" : "#1e293b",
           borderRadius: mine ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
           px: 1.8, py: 1.2,
-          boxShadow: mine
-            ? "0 4px 15px rgba(121,40,202,0.3)"
-            : "0 2px 12px rgba(0,0,0,0.06)",
+          boxShadow: mine ? "0 4px 15px rgba(121,40,202,0.3)" : "0 2px 12px rgba(0,0,0,0.06)",
         }}>
           <Box sx={{ fontSize: 13, lineHeight: 1.7, wordBreak: "break-word" }}>{message.body}</Box>
           {message.attachments?.length > 0 && (
@@ -206,22 +202,27 @@ function ChatMessage({ message, tenantName }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function OwnerSupport() {
-  const [tickets, setTickets] = useState(supportTickets);
-  const [selectedTicketId, setSelectedTicketId] = useState(supportTickets[0].id);
+  const [tickets, setTickets] = useState([]);
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [composer, setComposer] = useState("");
-  const [messagesByTicket, setMessagesByTicket] = useState(supportMessages);
+  const [messagesByTicket, setMessagesByTicket] = useState({});
   const [ticketSearch, setTicketSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const messagesEndRef = useRef(null);
 
-  const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || tickets[0];
-  const messages = messagesByTicket[selectedTicketId] || [];
-  const stats = useMemo(() => getTicketStats(tickets), [tickets]);
-  const isClosed = selectedTicket.status === "closed";
+  const selectedTicket = tickets.find((t) => t.id === selectedTicketId) || null;
+  const messages = selectedTicketId ? (messagesByTicket[selectedTicketId] || []) : [];
+  const isClosed = selectedTicket?.status === "closed";
+
+  const stats = {
+    open: tickets.filter((t) => t.status === "open").length,
+    urgent: tickets.filter((t) => ["urgent", "high"].includes(t.priority)).length,
+    unreadOwner: tickets.reduce((s, t) => s + (t.unreadOwner || 0), 0),
+  };
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
-      const matchSearch = !ticketSearch.trim() || t.tenantName.includes(ticketSearch) || t.subject.includes(ticketSearch) || t.id.includes(ticketSearch);
+      const matchSearch = !ticketSearch.trim() || t.tenantName?.includes(ticketSearch) || t.subject?.includes(ticketSearch);
       const matchStatus = filterStatus === "all" || t.status === filterStatus;
       return matchSearch && matchStatus;
     });
@@ -232,6 +233,7 @@ export default function OwnerSupport() {
   }, [messages]);
 
   const addSystemMessage = (body) => {
+    if (!selectedTicketId) return;
     setMessagesByTicket((cur) => ({
       ...cur,
       [selectedTicketId]: [
@@ -244,19 +246,16 @@ export default function OwnerSupport() {
   const changeTicketStatus = (status) => {
     const label = ticketStatusConfig[status]?.label || status;
     setTickets((cur) => cur.map((t) =>
-      t.id === selectedTicketId
-        ? { ...t, status, lastMessageAt: "الآن", unreadTenant: ["waiting_tenant", "closed", "resolved"].includes(status) ? t.unreadTenant + 1 : t.unreadTenant }
-        : t
+      t.id === selectedTicketId ? { ...t, status, lastMessageAt: "الآن" } : t
     ));
     addSystemMessage(`تم تغيير حالة التذكرة إلى: ${label}`);
   };
 
   const addMessage = (attachmentType = null) => {
     const text = composer.trim() || (attachmentType === "audio" ? "تسجيل صوتي من الدعم" : attachmentType === "image" ? "صورة توضيحية من الدعم" : "");
-    if (!text || isClosed) return;
+    if (!text || isClosed || !selectedTicketId) return;
     const attachment = attachmentType ? {
-      id: `att-${Date.now()}`,
-      type: attachmentType,
+      id: `att-${Date.now()}`, type: attachmentType,
       name: attachmentType === "audio" ? "owner-voice.m4a" : "support-reply.png",
       size: attachmentType === "audio" ? "00:25" : "260 KB",
     } : null;
@@ -269,29 +268,23 @@ export default function OwnerSupport() {
       ],
     }));
     setTickets((cur) => cur.map((t) =>
-      t.id === selectedTicketId
-        ? { ...t, status: "waiting_tenant", lastMessageAt: "الآن", unreadTenant: t.unreadTenant + 1 }
-        : t
+      t.id === selectedTicketId ? { ...t, status: "waiting_tenant", lastMessageAt: "الآن" } : t
     ));
     setComposer("");
   };
 
-  const statusCfg = ticketStatusConfig[selectedTicket.status] || ticketStatusConfig.open;
-  const priorityCfg = ticketPriorityConfig[selectedTicket.priority] || ticketPriorityConfig.normal;
-  const tenantColor = getTenantColor(selectedTicket.tenantName);
-  const emoji = categoryEmoji[selectedTicket.category] || "🎫";
+  const statusCfg = ticketStatusConfig[selectedTicket?.status] ?? ticketStatusConfig.open;
+  const priorityBorderColor = selectedTicket ? (priorityBorder[selectedTicket.priority] || "#adb5bd") : "#adb5bd";
+  const tenantColor = selectedTicket ? getTenantColor(selectedTicket.tenantName) : "#8392ab";
 
   return (
     <OwnerLayout>
       <Box sx={{ p: 3 }}>
 
-        {/* ── Header ── */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 2, flexWrap: "wrap", mb: 3 }}>
           <Box>
             <Box sx={{ fontSize: 22, fontWeight: 800, color: "#1e293b", lineHeight: 1.2 }}>مركز الدعم</Box>
-            <Box sx={{ fontSize: 13, color: "#64748b", mt: 0.3 }}>
-              شات مباشر مع المشتركين · يدعم الصور والتسجيلات الصوتية
-            </Box>
+            <Box sx={{ fontSize: 13, color: "#64748b", mt: 0.3 }}>شات مباشر مع المشتركين</Box>
           </Box>
           <Box sx={{ display: "flex", gap: 1 }}>
             <Chip label="SLA: 4 ساعات" sx={{ background: "#e3f8fd", color: "#17c1e8", fontWeight: 700, borderRadius: 2 }} />
@@ -303,7 +296,6 @@ export default function OwnerSupport() {
           </Box>
         </Box>
 
-        {/* ── Stats ── */}
         <Box sx={{ display: "flex", gap: 1.5, mb: 3, flexWrap: "wrap" }}>
           {[
             { label: "مفتوحة", value: stats.open, color: "#17c1e8", bg: "#e3f8fd" },
@@ -311,21 +303,17 @@ export default function OwnerSupport() {
             { label: "رسائل جديدة", value: stats.unreadOwner, color: "#ea0606", bg: "#ffeaea" },
             { label: "بانتظار المشترك", value: tickets.filter((t) => t.status === "waiting_tenant").length, color: "#7928ca", bg: "#f5ecff" },
           ].map((s) => (
-            <Box key={s.label} sx={{ display: "flex", alignItems: "center", gap: 1, background: s.bg, borderRadius: 2.5, px: 2, py: 1, cursor: "pointer" }}
-              onClick={() => setFilterStatus(s.label === "مفتوحة" ? "open" : s.label === "بانتظار المشترك" ? "waiting_tenant" : "all")}
-            >
+            <Box key={s.label} sx={{ display: "flex", alignItems: "center", gap: 1, background: s.bg, borderRadius: 2.5, px: 2, py: 1 }}>
               <Box sx={{ fontSize: 20, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</Box>
               <Box sx={{ fontSize: 11, color: s.color, fontWeight: 600 }}>{s.label}</Box>
             </Box>
           ))}
         </Box>
 
-        {/* ── Grid ── */}
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "340px 1fr" }, gap: 2, minHeight: 640 }}>
 
-          {/* ── Left: ticket queue ── */}
+          {/* Ticket queue */}
           <Card sx={{ overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 3 }}>
-            {/* Search + filter */}
             <Box sx={{ p: 1.5, display: "flex", gap: 1, borderBottom: "1px solid #f1f5f9" }}>
               <TextField
                 size="small" fullWidth placeholder="بحث..."
@@ -354,14 +342,16 @@ export default function OwnerSupport() {
               </FormControl>
             </Box>
 
-            {/* Count */}
             <Box sx={{ px: 2, py: 1, fontSize: 11, color: "#94a3b8", borderBottom: "1px solid #f1f5f9" }}>
               {filteredTickets.length} تذكرة
             </Box>
 
-            {/* List */}
             <Box sx={{ flex: 1, overflowY: "auto" }}>
-              {filteredTickets.map((ticket) => (
+              {filteredTickets.length === 0 ? (
+                <Box sx={{ textAlign: "center", py: 8, color: "#94a3b8", fontSize: 13 }}>
+                  لا توجد تذاكر دعم بعد
+                </Box>
+              ) : filteredTickets.map((ticket) => (
                 <QueueItem
                   key={ticket.id}
                   ticket={ticket}
@@ -369,161 +359,147 @@ export default function OwnerSupport() {
                   onSelect={setSelectedTicketId}
                 />
               ))}
-              {filteredTickets.length === 0 && (
-                <Box sx={{ textAlign: "center", py: 6, color: "#94a3b8", fontSize: 13 }}>لا توجد تذاكر مطابقة</Box>
-              )}
             </Box>
           </Card>
 
-          {/* ── Right: chat panel ── */}
+          {/* Chat panel */}
           <Card sx={{ display: "flex", flexDirection: "column", overflow: "hidden", borderRadius: 3 }}>
-
-            {/* Chat header */}
-            <Box sx={{
-              px: 2.5, py: 1.8,
-              background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
-              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap",
-            }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                {/* Tenant avatar */}
-                <Avatar sx={{ width: 42, height: 42, background: tenantColor, fontSize: 14, fontWeight: 700, borderRadius: 2.5, flexShrink: 0 }}>
-                  {getInitials(selectedTicket.tenantName)}
-                </Avatar>
-                <Box>
-                  <Box sx={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{selectedTicket.tenantName}</Box>
-                  <Box sx={{ display: "flex", gap: 0.8, mt: 0.3, alignItems: "center" }}>
-                    <Box sx={{ fontSize: 11, color: "#94a3b8" }}>{selectedTicket.id}</Box>
-                    <Box sx={{ fontSize: 11, color: "#94a3b8" }}>·</Box>
-                    <Box sx={{ fontSize: 11, color: "#94a3b8" }}>{emoji} {selectedTicket.category}</Box>
-                    <Box sx={{ fontSize: 11, color: "#94a3b8" }}>·</Box>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-                      <PersonIcon sx={{ fontSize: 11, color: "#94a3b8" }} />
-                      <Box sx={{ fontSize: 11, color: "#94a3b8" }}>{selectedTicket.openedBy}</Box>
+            {!selectedTicket ? (
+              <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 14 }}>
+                اختر تذكرة لعرض المحادثة
+              </Box>
+            ) : (
+              <>
+                <Box sx={{
+                  px: 2.5, py: 1.8,
+                  background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap",
+                }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                    <Avatar sx={{ width: 42, height: 42, background: tenantColor, fontSize: 14, fontWeight: 700, borderRadius: 2.5, flexShrink: 0 }}>
+                      {getInitials(selectedTicket.tenantName)}
+                    </Avatar>
+                    <Box>
+                      <Box sx={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{selectedTicket.tenantName}</Box>
+                      <Box sx={{ display: "flex", gap: 0.8, mt: 0.3, alignItems: "center" }}>
+                        <Box sx={{ fontSize: 11, color: "#94a3b8" }}>{selectedTicket.id}</Box>
+                        <Box sx={{ fontSize: 11, color: "#94a3b8" }}>·</Box>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+                          <PersonIcon sx={{ fontSize: 11, color: "#94a3b8" }} />
+                          <Box sx={{ fontSize: 11, color: "#94a3b8" }}>{selectedTicket.openedBy}</Box>
+                        </Box>
+                      </Box>
                     </Box>
                   </Box>
-                </Box>
-              </Box>
 
-              {/* Actions */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
-                <Chip
-                  label={statusCfg.label}
-                  size="small"
-                  sx={{ height: 22, fontSize: 10, fontWeight: 700, background: statusCfg.bg, color: statusCfg.color }}
-                />
-                <Chip
-                  label={priorityCfg.label}
-                  size="small"
-                  sx={{ height: 22, fontSize: 10, fontWeight: 700, background: `${priorityBorder[selectedTicket.priority] || "#adb5bd"}18`, color: priorityBorder[selectedTicket.priority] || "#adb5bd" }}
-                />
-                {["closed", "resolved"].includes(selectedTicket.status) ? (
-                  <Tooltip title="إعادة فتح">
-                    <IconButton size="small" onClick={() => changeTicketStatus("open")}
-                      sx={{ background: "rgba(255,255,255,0.1)", color: "#fff", "&:hover": { background: "rgba(255,255,255,0.2)" } }}>
-                      <RefreshIcon fontSize="small" />
-                    </IconButton>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                    <Chip label={statusCfg.label} size="small"
+                      sx={{ height: 22, fontSize: 10, fontWeight: 700, background: statusCfg.bg, color: statusCfg.color }} />
+                    {["closed", "resolved"].includes(selectedTicket.status) ? (
+                      <Tooltip title="إعادة فتح">
+                        <IconButton size="small" onClick={() => changeTicketStatus("open")}
+                          sx={{ background: "rgba(255,255,255,0.1)", color: "#fff", "&:hover": { background: "rgba(255,255,255,0.2)" } }}>
+                          <RefreshIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <Box sx={{ display: "flex", gap: 0.5 }}>
+                        <Tooltip title="وضع علامة محلول">
+                          <IconButton size="small" onClick={() => changeTicketStatus("resolved")}
+                            sx={{ background: "rgba(130,214,22,0.15)", color: "#82d616", "&:hover": { background: "rgba(130,214,22,0.25)" } }}>
+                            <TaskAltIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="إغلاق التذكرة">
+                          <IconButton size="small" onClick={() => changeTicketStatus("closed")}
+                            sx={{ background: "rgba(234,6,6,0.15)", color: "#ea0606", "&:hover": { background: "rgba(234,6,6,0.25)" } }}>
+                            <LockIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+
+                <Box sx={{
+                  flex: 1, overflowY: "auto", p: 2.5,
+                  background: "radial-gradient(circle at 1px 1px, #e2e8f022 1px, transparent 0) 0 0 / 20px 20px, #f8fafc",
+                  minHeight: 400,
+                }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
+                    <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+                    <Box sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>{selectedTicket.createdAt}</Box>
+                    <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+                  </Box>
+
+                  {messages.map((msg) => (
+                    <ChatMessage key={msg.id} message={msg} tenantName={selectedTicket.tenantName} />
+                  ))}
+
+                  {isClosed && (
+                    <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+                      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1, background: "#ffeaea", borderRadius: 20, px: 2, py: 0.8 }}>
+                        <LockIcon sx={{ fontSize: 13, color: "#ea0606" }} />
+                        <Box sx={{ fontSize: 11, color: "#ea0606", fontWeight: 600 }}>التذكرة مغلقة — أعد فتحها للرد</Box>
+                      </Box>
+                    </Box>
+                  )}
+                  <div ref={messagesEndRef} />
+                </Box>
+
+                <Box sx={{ p: 1.5, borderTop: "1px solid #f1f5f9", background: "#fff", display: "flex", alignItems: "flex-end", gap: 1 }}>
+                  <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "إرسال صورة"}>
+                    <span>
+                      <IconButton size="small" disabled={isClosed} onClick={() => addMessage("image")}
+                        sx={{ color: "#94a3b8", "&:hover": { color: "#7928ca", background: "#f5ecff" } }}>
+                        <ImageIcon fontSize="small" />
+                      </IconButton>
+                    </span>
                   </Tooltip>
-                ) : (
-                  <Box sx={{ display: "flex", gap: 0.5 }}>
-                    <Tooltip title="وضع علامة محلول">
-                      <IconButton size="small" onClick={() => changeTicketStatus("resolved")}
-                        sx={{ background: "rgba(130,214,22,0.15)", color: "#82d616", "&:hover": { background: "rgba(130,214,22,0.25)" } }}>
-                        <TaskAltIcon fontSize="small" />
+                  <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "تسجيل صوتي"}>
+                    <span>
+                      <IconButton size="small" disabled={isClosed} onClick={() => addMessage("audio")}
+                        sx={{ color: "#94a3b8", "&:hover": { color: "#7928ca", background: "#f5ecff" } }}>
+                        <MicIcon fontSize="small" />
                       </IconButton>
-                    </Tooltip>
-                    <Tooltip title="إغلاق التذكرة">
-                      <IconButton size="small" onClick={() => changeTicketStatus("closed")}
-                        sx={{ background: "rgba(234,6,6,0.15)", color: "#ea0606", "&:hover": { background: "rgba(234,6,6,0.25)" } }}>
-                        <LockIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                )}
-              </Box>
-            </Box>
+                    </span>
+                  </Tooltip>
 
-            {/* Messages */}
-            <Box sx={{
-              flex: 1, overflowY: "auto", p: 2.5,
-              background: "radial-gradient(circle at 1px 1px, #e2e8f022 1px, transparent 0) 0 0 / 20px 20px, #f8fafc",
-              minHeight: 400,
-            }}>
-              {/* Date separator */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
-                <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
-                <Box sx={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {selectedTicket.createdAt}
-                </Box>
-                <Box sx={{ flex: 1, height: 1, background: "#e2e8f0" }} />
-              </Box>
+                  <TextField
+                    size="small" fullWidth multiline maxRows={4}
+                    disabled={isClosed}
+                    placeholder={isClosed ? "التذكرة مغلقة..." : "اكتب رداً على المشترك..."}
+                    value={composer}
+                    onChange={(e) => setComposer(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage(); } }}
+                    InputProps={{
+                      sx: {
+                        borderRadius: 3, background: "#f8fafc",
+                        "& fieldset": { border: "1px solid #e2e8f0" },
+                        "&:hover fieldset": { borderColor: "#7928ca" },
+                        "&.Mui-focused fieldset": { borderColor: "#7928ca" },
+                      },
+                    }}
+                  />
 
-              {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} tenantName={selectedTicket.tenantName} />
-              ))}
-
-              {isClosed && (
-                <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
-                  <Box sx={{ display: "inline-flex", alignItems: "center", gap: 1, background: "#ffeaea", borderRadius: 20, px: 2, py: 0.8 }}>
-                    <LockIcon sx={{ fontSize: 13, color: "#ea0606" }} />
-                    <Box sx={{ fontSize: 11, color: "#ea0606", fontWeight: 600 }}>التذكرة مغلقة — أعد فتحها للرد</Box>
-                  </Box>
-                </Box>
-              )}
-              <div ref={messagesEndRef} />
-            </Box>
-
-            {/* Composer */}
-            <Box sx={{ p: 1.5, borderTop: "1px solid #f1f5f9", background: "#fff", display: "flex", alignItems: "flex-end", gap: 1 }}>
-              <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "إرسال صورة"}>
-                <span>
-                  <IconButton size="small" disabled={isClosed} onClick={() => addMessage("image")}
-                    sx={{ color: "#94a3b8", "&:hover": { color: "#7928ca", background: "#f5ecff" } }}>
-                    <ImageIcon fontSize="small" />
+                  <IconButton
+                    disabled={isClosed}
+                    onClick={() => addMessage()}
+                    sx={{
+                      width: 38, height: 38, flexShrink: 0,
+                      background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #7928ca, #6366f1)",
+                      color: isClosed ? "#94a3b8" : "#fff",
+                      borderRadius: 2.5,
+                      "&:hover": { background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #6b21a8, #4f46e5)" },
+                      transition: "all 0.2s",
+                      boxShadow: isClosed ? "none" : "0 4px 12px rgba(121,40,202,0.35)",
+                    }}
+                  >
+                    <SendIcon sx={{ fontSize: 17 }} />
                   </IconButton>
-                </span>
-              </Tooltip>
-              <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "تسجيل صوتي"}>
-                <span>
-                  <IconButton size="small" disabled={isClosed} onClick={() => addMessage("audio")}
-                    sx={{ color: "#94a3b8", "&:hover": { color: "#7928ca", background: "#f5ecff" } }}>
-                    <MicIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-
-              <TextField
-                size="small" fullWidth multiline maxRows={4}
-                disabled={isClosed}
-                placeholder={isClosed ? "التذكرة مغلقة..." : "اكتب رداً على المشترك..."}
-                value={composer}
-                onChange={(e) => setComposer(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage(); } }}
-                InputProps={{
-                  sx: {
-                    borderRadius: 3, background: "#f8fafc",
-                    "& fieldset": { border: "1px solid #e2e8f0" },
-                    "&:hover fieldset": { borderColor: "#7928ca" },
-                    "&.Mui-focused fieldset": { borderColor: "#7928ca" },
-                  },
-                }}
-              />
-
-              <IconButton
-                disabled={isClosed}
-                onClick={() => addMessage()}
-                sx={{
-                  width: 38, height: 38, flexShrink: 0,
-                  background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #7928ca, #6366f1)",
-                  color: isClosed ? "#94a3b8" : "#fff",
-                  borderRadius: 2.5,
-                  "&:hover": { background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #6b21a8, #4f46e5)", transform: isClosed ? "none" : "scale(1.05)" },
-                  transition: "all 0.2s",
-                  boxShadow: isClosed ? "none" : "0 4px 12px rgba(121,40,202,0.35)",
-                }}
-              >
-                <SendIcon sx={{ fontSize: 17 }} />
-              </IconButton>
-            </Box>
+                </Box>
+              </>
+            )}
           </Card>
         </Box>
       </Box>

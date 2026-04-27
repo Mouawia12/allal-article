@@ -15,11 +15,19 @@ import SoftButton from "components/SoftButton";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import {
-  categoryConfig,
-  mockNotificationTypes,
-  severityConfig,
-} from "data/mock/notificationsMock";
+const severityConfig = {
+  info:            { label: "معلومة",       color: "#17c1e8" },
+  warning:         { label: "تنبيه",        color: "#fb8c00" },
+  critical:        { label: "حرج",          color: "#ea0606" },
+  action_required: { label: "يتطلب إجراء", color: "#7928ca" },
+};
+const categoryConfig = {
+  products:  { label: "الأصناف" },
+  inventory: { label: "المخزون" },
+  orders:    { label: "الطلبيات" },
+  payments:  { label: "المدفوعات" },
+  accounting:{ label: "المحاسبة" },
+};
 
 const digestLabels = {
   instant: "فوري",
@@ -110,75 +118,21 @@ function PreferenceRow({ item, value, onChange }) {
 }
 
 export default function NotificationPreferences() {
-  const [preferences, setPreferences] = useState(() => {
-    return mockNotificationTypes.reduce((acc, item) => {
-      acc[item.code] = {
-        enabled: true,
-        digestMode: item.digestMode,
-        minimumSeverity: item.severity,
-      };
-      return acc;
-    }, {});
-  });
-
-  const updatePreference = (code, patch) => {
-    setPreferences((prev) => ({
-      ...prev,
-      [code]: { ...prev[code], ...patch },
-    }));
-  };
-
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
-        <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
-          <SoftBox>
-            <SoftTypography variant="h4" fontWeight="bold">
-              تفضيلات الإشعارات
-            </SoftTypography>
-            <SoftTypography variant="body2" color="text">
-              الإعدادات مبنية على كتالوج notification_types وليست مفاتيح ثابتة داخل الواجهة
-            </SoftTypography>
-          </SoftBox>
-          <SoftButton variant="gradient" color="info" size="small">
-            حفظ التفضيلات
-          </SoftButton>
+        <SoftBox mb={3}>
+          <SoftTypography variant="h4" fontWeight="bold">تفضيلات الإشعارات</SoftTypography>
+          <SoftTypography variant="body2" color="text">
+            سيتم تحميل أنواع الإشعارات من الباكند قريباً
+          </SoftTypography>
         </SoftBox>
-
-        <Card sx={{ p: 2, mb: 2, background: "#f8f9fa" }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">النوع</SoftTypography>
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">التصنيف</SoftTypography>
-            </Grid>
-            <Grid item xs={6} md={2}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">الأولوية</SoftTypography>
-            </Grid>
-            <Grid item xs={12} sm={4} md={2}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">التجميع</SoftTypography>
-            </Grid>
-            <Grid item xs={12} sm={4} md={1}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">الحد الأدنى</SoftTypography>
-            </Grid>
-            <Grid item xs={12} sm={4} md={1}>
-              <SoftTypography variant="caption" color="secondary" fontWeight="bold">تفعيل</SoftTypography>
-            </Grid>
-          </Grid>
+        <Card sx={{ p: 4, textAlign: "center" }}>
+          <SoftTypography variant="body2" color="secondary">
+            لا توجد إعدادات إشعارات بعد. ستُضاف عند توفر الـ API.
+          </SoftTypography>
         </Card>
-
-        <SoftBox display="flex" flexDirection="column" gap={1.5}>
-          {mockNotificationTypes.map((item) => (
-            <PreferenceRow
-              key={item.code}
-              item={item}
-              value={preferences[item.code]}
-              onChange={updatePreference}
-            />
-          ))}
-        </SoftBox>
       </SoftBox>
       <Footer />
     </DashboardLayout>

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import FormControl from "@mui/material/FormControl";
@@ -21,25 +21,42 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { buildTree, classificationLabels, fmt, mockAccounts, mockFiscalYears } from "./mockData";
-
-function flattenTree(nodes, result = []) {
-  nodes.forEach((n) => { result.push(n); if (n.children?.length) flattenTree(n.children, result); });
-  return result;
-}
-
-// Only postable accounts can have opening balances
-const postable = flattenTree(buildTree(mockAccounts)).filter((a) => a.isPostable);
+import { classificationLabels, fmt } from "./mockData";
+import { accountingApi } from "services";
 
 export default function OpeningBalances() {
-  const [fyId, setFyId] = useState(mockFiscalYears[0].id);
-  const [balances, setBalances] = useState(() => {
-    const m = {};
-    postable.forEach((a) => { m[a.id] = { debit: a.balance > 0 && a.normalBalance === "debit" ? a.balance : 0, credit: a.balance > 0 && a.normalBalance === "credit" ? a.balance : 0 }; });
-    return m;
-  });
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [postable, setPostable] = useState([]);
+  const [fyId, setFyId] = useState(null);
+  const [balances, setBalances] = useState({});
 
-  const isLocked = mockFiscalYears.find((y) => y.id === fyId)?.isClosed;
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) setFyId(active.id);
+      })
+      .catch(console.error);
+    accountingApi.listAccounts()
+      .then((r) => {
+        const all = r.data?.content ?? r.data ?? [];
+        const pts = all.filter((a) => a.isPostable !== false && a.isActive !== false);
+        setPostable(pts);
+        const m = {};
+        pts.forEach((a) => {
+          m[a.id] = {
+            debit: a.balance > 0 && a.normalBalance === "debit" ? a.balance : 0,
+            credit: a.balance > 0 && a.normalBalance === "credit" ? a.balance : 0,
+          };
+        });
+        setBalances(m);
+      })
+      .catch(console.error);
+  }, []);
+
+  const isLocked = fiscalYears.find((y) => y.id === fyId)?.closed;
 
   const setVal = (id, side, val) => setBalances((p) => ({ ...p, [id]: { ...p[id], [side]: Number(val) || 0 } }));
 
@@ -59,14 +76,19 @@ export default function OpeningBalances() {
           </SoftBox>
           <SoftBox display="flex" gap={1.5} alignItems="center">
             <FormControl size="small" sx={{ minWidth: 160 }}>
-              <Select value={fyId} onChange={(e) => setFyId(e.target.value)}>
-                {mockFiscalYears.map((y) => (
-                  <MenuItem key={y.id} value={y.id}>{y.name} {y.isClosed && "🔒"}</MenuItem>
+              <Select value={fyId ?? ""} onChange={(e) => setFyId(e.target.value)}>
+                {fiscalYears.map((y) => (
+                  <MenuItem key={y.id} value={y.id}>{y.name} {y.closed && "🔒"}</MenuItem>
                 ))}
               </Select>
             </FormControl>
             {!isLocked && (
-              <SoftButton variant="gradient" color="info" size="small">
+              <SoftButton variant="gradient" color="info" size="small" onClick={() => {
+                const items = postable
+                  .filter((a) => (balances[a.id]?.debit || 0) + (balances[a.id]?.credit || 0) > 0)
+                  .map((a) => ({ accountId: a.id, debit: balances[a.id]?.debit || 0, credit: balances[a.id]?.credit || 0 }));
+                accountingApi.saveOpeningBalances({ fiscalYearId: fyId, items }).catch(console.error);
+              }}>
                 <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ الأرصدة
               </SoftButton>
             )}

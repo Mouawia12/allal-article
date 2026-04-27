@@ -45,6 +45,10 @@ import createCache from "@emotion/cache";
 
 // Soft UI Dashboard React routes
 import routes from "routes";
+import PrivateRoute from "components/PrivateRoute";
+
+// Landing page
+import LandingPage from "layouts/landing";
 
 // Owner dashboard shell
 import OwnerDashboard from "layouts/owner/dashboard";
@@ -53,6 +57,16 @@ import OwnerPlans    from "layouts/owner/plans";
 import OwnerRevenue  from "layouts/owner/revenue";
 import OwnerNotifications from "layouts/owner/notifications";
 import OwnerSupport from "layouts/owner/support";
+import OwnerLogin from "layouts/owner/login";
+
+// Owner auth
+import { OwnerAuthProvider, useOwnerAuth } from "context/OwnerAuthContext";
+import { Navigate as Redir } from "react-router-dom";
+
+function OwnerPrivateRoute({ children }) {
+  const { isAuthenticated } = useOwnerAuth();
+  return isAuthenticated ? children : <Redir to="/owner/login" replace />;
+}
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
@@ -218,6 +232,8 @@ export default function App() {
     document.scrollingElement.scrollTop = 0;
   }, [pathname]);
 
+  const PUBLIC_ROUTES = ["/", "/authentication/sign-in", "/authentication/sign-up"];
+
   const getRoutes = (allRoutes) =>
     allRoutes.map((route) => {
       if (route.collapse) {
@@ -225,7 +241,15 @@ export default function App() {
       }
 
       if (route.route) {
-        return <Route exact path={route.route} element={route.component} key={route.key} />;
+        const isPublic = PUBLIC_ROUTES.includes(route.route);
+        return (
+          <Route
+            exact
+            path={route.route}
+            element={isPublic ? route.component : <PrivateRoute>{route.component}</PrivateRoute>}
+            key={route.key}
+          />
+        );
       }
 
       return null;
@@ -234,15 +258,18 @@ export default function App() {
   // Owner dashboard: standalone shell — render outside the tenant Sidenav/theme wrappers
   if (pathname.startsWith("/owner")) {
     return (
-      <Routes>
-        <Route path="/owner/dashboard" element={<OwnerDashboard />} />
-        <Route path="/owner/tenants"   element={<OwnerTenants />} />
-        <Route path="/owner/plans"     element={<OwnerPlans />} />
-        <Route path="/owner/revenue"   element={<OwnerRevenue />} />
-        <Route path="/owner/notifications" element={<OwnerNotifications />} />
-        <Route path="/owner/support" element={<OwnerSupport />} />
-        <Route path="/owner/*"         element={<Navigate to="/owner/dashboard" />} />
-      </Routes>
+      <OwnerAuthProvider>
+        <Routes>
+          <Route path="/owner/login" element={<OwnerLogin />} />
+          <Route path="/owner/dashboard"     element={<OwnerPrivateRoute><OwnerDashboard /></OwnerPrivateRoute>} />
+          <Route path="/owner/tenants"       element={<OwnerPrivateRoute><OwnerTenants /></OwnerPrivateRoute>} />
+          <Route path="/owner/plans"         element={<OwnerPrivateRoute><OwnerPlans /></OwnerPrivateRoute>} />
+          <Route path="/owner/revenue"       element={<OwnerPrivateRoute><OwnerRevenue /></OwnerPrivateRoute>} />
+          <Route path="/owner/notifications" element={<OwnerPrivateRoute><OwnerNotifications /></OwnerPrivateRoute>} />
+          <Route path="/owner/support"       element={<OwnerPrivateRoute><OwnerSupport /></OwnerPrivateRoute>} />
+          <Route path="/owner/*"             element={<Navigate to="/owner/login" />} />
+        </Routes>
+      </OwnerAuthProvider>
     );
   }
 
@@ -334,6 +361,7 @@ export default function App() {
         )}
         {layout === "vr" && <Configurator />}
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           {getRoutes(routes)}
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>
@@ -357,6 +385,7 @@ export default function App() {
       )}
       {layout === "vr" && <Configurator />}
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         {getRoutes(routes)}
         <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>

@@ -39,8 +39,8 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { useI18n } from "i18n";
 import { WILAYAS } from "data/wilayas";
-import { categoryConfig, mockNotificationTypes, severityConfig } from "data/mock/notificationsMock";
-import { currentUser, getUserPermissions, permissionsByModule, roleConfig } from "data/mock/usersMock";
+import { getUserPermissions, permissionsByModule, roleConfig } from "data/config/permissionsConfig";
+import { useAuth } from "context/AuthContext";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -339,39 +339,14 @@ function AISettings() {
 
 // ─── Notifications Tab ────────────────────────────────────────────────────────
 function NotificationsSettings() {
-  const [notifs, setNotifs] = useState(() => {
-    return mockNotificationTypes.reduce((acc, row) => {
-      acc[row.code] = row.digestMode !== "muted";
-      return acc;
-    }, {});
-  });
-
   return (
     <SoftBox>
       <SectionHeader
         title="إعدادات الإشعارات"
-        description="هذه القائمة مبنية على notification_types حتى تتوسع مع الباكند بدون مفاتيح ثابتة"
+        description="إعدادات الإشعارات ستُحمَّل من الباكند عند توفر نقطة الـ API"
       />
-      {mockNotificationTypes.map((row) => {
-        const category = categoryConfig[row.category] || { label: row.category };
-        const severity = severityConfig[row.severity] || severityConfig.info;
-        return (
-          <SettingRow
-            key={row.code}
-            label={row.title}
-            description={`${row.code} · ${category.label} · ${severity.label}`}
-          >
-            <Switch
-              checked={notifs[row.code]}
-              disabled={!row.mutable}
-              onChange={(e) => setNotifs(prev => ({ ...prev, [row.code]: e.target.checked }))}
-              color="info"
-            />
-          </SettingRow>
-        );
-      })}
-      <SoftBox display="flex" justifyContent="flex-end" mt={2}>
-        <SoftButton variant="gradient" color="info" size="small">حفظ إعدادات الإشعارات</SoftButton>
+      <SoftBox sx={{ textAlign: "center", py: 4, color: "#8392ab", fontSize: 13 }}>
+        لا توجد إشعارات مُهيأة بعد
       </SoftBox>
     </SoftBox>
   );
@@ -555,7 +530,8 @@ function RoadInvoiceSettings() {
 
 // ─── My Permissions Tab ───────────────────────────────────────────────────────
 function MyPermissionsSettings() {
-  const user = currentUser;
+  const { user: authUser } = useAuth();
+  const user = { ...authUser, role: authUser?.roleCode || "viewer", id: authUser?.id || 0 };
   const perms = getUserPermissions(user);
   const rc = roleConfig[user.role] || roleConfig.viewer;
   const totalAll = Object.values(permissionsByModule).reduce((s, arr) => s + arr.length, 0);

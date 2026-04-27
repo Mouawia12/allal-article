@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -32,7 +32,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { mockFiscalYears } from "./mockData";
+import { accountingApi } from "services";
 
 // ─── Close Year Dialog ────────────────────────────────────────────────────────
 const CLOSE_STEPS = ["التحقق من القيود", "قفل الفترات", "توليد قيود الإقفال", "إنشاء أرصدة سنة جديدة", "تأكيد القفل"];
@@ -148,7 +148,12 @@ function CloseYearDialog({ year, onClose }) {
             {checking ? "جاري الفحص..." : "التالي"}
           </SoftButton>
         ) : (
-          <SoftButton variant="gradient" color="error" disabled={!reason.trim()}>
+          <SoftButton variant="gradient" color="error" disabled={!reason.trim()}
+            onClick={() => {
+              accountingApi.closeFiscalYear(year.id)
+                .then(() => onClose())
+                .catch(console.error);
+            }}>
             <LockIcon sx={{ fontSize: 14, mr: 0.5 }} /> تأكيد القفل
           </SoftButton>
         )}
@@ -158,9 +163,20 @@ function CloseYearDialog({ year, onClose }) {
 }
 
 // ─── Add Fiscal Year Dialog ───────────────────────────────────────────────────
-function AddFYDialog({ onClose }) {
+function AddFYDialog({ onClose, onSaved }) {
   const [form, setForm] = useState({ name: "", startDate: "", endDate: "" });
+  const [saving, setSaving] = useState(false);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const save = () => {
+    if (!form.name.trim() || !form.startDate || !form.endDate) return;
+    setSaving(true);
+    accountingApi.createFiscalYear({ name: form.name.trim(), startDate: form.startDate, endDate: form.endDate })
+      .then((r) => { onSaved(r.data); onClose(); })
+      .catch(console.error)
+      .finally(() => setSaving(false));
+  };
+
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -176,7 +192,9 @@ function AddFYDialog({ onClose }) {
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="text" color="secondary" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info">حفظ</SoftButton>
+        <SoftButton variant="gradient" color="info" disabled={!form.name.trim() || !form.startDate || !form.endDate || saving} onClick={save}>
+          {saving ? "جارٍ الحفظ..." : "حفظ"}
+        </SoftButton>
       </DialogActions>
     </Dialog>
   );
@@ -184,8 +202,16 @@ function AddFYDialog({ onClose }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FiscalYears() {
+  const [fiscalYears, setFiscalYears] = useState([]);
   const [lockDialog, setLockDialog] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
+
+  const reload = () =>
+    accountingApi.listFiscalYears()
+      .then((r) => setFiscalYears(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+
+  useEffect(() => { reload(); }, []);
 
   return (
     <DashboardLayout>
@@ -212,7 +238,7 @@ export default function FiscalYears() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {mockFiscalYears.map((fy) => (
+                {fiscalYears.map((fy) => (
                   <TableRow key={fy.id} sx={{ "&:hover": { background: "#f8f9fa" } }}>
                     <TableCell>
                       <SoftTypography variant="button" fontWeight="bold">{fy.name}</SoftTypography>
@@ -220,14 +246,14 @@ export default function FiscalYears() {
                     <TableCell><SoftTypography variant="caption">{fy.startDate}</SoftTypography></TableCell>
                     <TableCell><SoftTypography variant="caption">{fy.endDate}</SoftTypography></TableCell>
                     <TableCell>
-                      {fy.isClosed
+                      {fy.closed
                         ? <Chip icon={<LockIcon sx={{ fontSize: 12 }} />} label="مغلقة" size="small" color="error" />
                         : <Chip icon={<LockOpenIcon sx={{ fontSize: 12 }} />} label="مفتوحة" size="small" color="success" />}
                     </TableCell>
                     <TableCell><SoftTypography variant="caption">{fy.closedAt ?? "—"}</SoftTypography></TableCell>
                     <TableCell><SoftTypography variant="caption">{fy.closedBy ?? "—"}</SoftTypography></TableCell>
                     <TableCell>
-                      {!fy.isClosed ? (
+                      {!fy.closed ? (
                         <Tooltip title="قفل السنة المالية">
                           <SoftButton size="small" variant="outlined" color="warning" onClick={() => setLockDialog(fy)}>
                             <LockIcon sx={{ fontSize: 14, mr: 0.3 }} /> قفل
@@ -266,8 +292,8 @@ export default function FiscalYears() {
         </SoftBox>
       </SoftBox>
 
-      {lockDialog && <CloseYearDialog year={lockDialog} onClose={() => setLockDialog(null)} />}
-      {addDialog  && <AddFYDialog onClose={() => setAddDialog(false)} />}
+      {lockDialog && <CloseYearDialog year={lockDialog} onClose={() => { setLockDialog(null); reload(); }} />}
+      {addDialog  && <AddFYDialog onClose={() => setAddDialog(false)} onSaved={(fy) => setFiscalYears((prev) => [...prev, fy])} />}
       <Footer />
     </DashboardLayout>
   );

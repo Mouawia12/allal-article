@@ -43,14 +43,12 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { getDefaultWarehouse, mockWarehouses } from "data/mock/pricingInventoryMock";
-
 import {
   generateBarcode,
   generateVariantCombinations,
-  mockProductsExtended,
   productSettings,
 } from "./mockProductData";
+import { productsApi, inventoryApi } from "services";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let unitRowId = 100;
@@ -668,32 +666,42 @@ export default function ProductForm() {
   const { id } = useParams();
   const isEdit  = !!id;
 
-  const existing = isEdit ? mockProductsExtended.find((p) => String(p.id) === String(id)) : null;
-
   const [form, setForm] = useState({
-    name:               existing?.name            ?? "",
-    code:               existing?.code            ?? "",
-    category:           existing?.category        ?? "",
-    description:        existing?.description     ?? "",
-    barcode:            existing?.barcode         ?? "",
-    baseUnit:           existing?.baseUnit        ?? "",
-    weightPerUnit:      existing?.weightPerUnit   ?? "",
-    unitsPerPackage:    existing?.unitsPerPackage ?? "",
-    packageUnit:        existing?.packageUnit     ?? "كرطون",
-    initialStock:       existing?.stock           ?? "0",
-    initialWarehouseId: getDefaultWarehouse(mockWarehouses)?.id || "WH-MAIN",
+    name: "", code: "", category: "", description: "", barcode: "",
+    baseUnit: "", weightPerUnit: "", unitsPerPackage: "", packageUnit: "كرطون",
+    initialStock: "0", initialWarehouseId: "",
   });
-
-  const [units, setUnits] = useState(
-    existing?.units?.map((u) => ({ ...u, _id: unitRowId++ })) ?? [newUnitRow(true)]
-  );
-  const [hasVariants, setHasVariants] = useState(existing?.hasVariants ?? false);
-  const [variantAttrs, setVariantAttrs] = useState(existing?.variantAttributes ?? []);
-  const [variants, setVariants] = useState(
-    existing?.variants?.map((v) => ({ ...v, _id: variantRowId++ })) ?? []
-  );
-  const [images, setImages]   = useState(isEdit ? [{ color: "#FF6B6B88" }] : []);
+  const [units, setUnits] = useState([newUnitRow(true)]);
+  const [hasVariants, setHasVariants] = useState(false);
+  const [variantAttrs, setVariantAttrs] = useState([]);
+  const [variants, setVariants] = useState([]);
+  const [images, setImages] = useState(isEdit ? [{ color: "#FF6B6B88" }] : []);
   const [touched, setTouched] = useState(false);
+  const [warehouses, setWarehouses] = useState([]);
+
+  useEffect(() => {
+    inventoryApi.listWarehouses().then((r) => {
+      const whs = r.data?.content ?? r.data ?? [];
+      setWarehouses(whs);
+      const def = whs.find((w) => w.isDefault) ?? whs[0];
+      if (def) setForm((p) => ({ ...p, initialWarehouseId: def.id }));
+    }).catch(console.error);
+    if (isEdit) {
+      productsApi.getById(id).then((r) => {
+        const p = r.data;
+        setForm({
+          name: p.name ?? "", code: p.code ?? "", category: p.category ?? "",
+          description: p.description ?? "", barcode: p.barcode ?? "",
+          baseUnit: p.baseUnit ?? p.unit ?? "", weightPerUnit: p.weightPerUnit ?? "",
+          unitsPerPackage: p.unitsPerPackage ?? "", packageUnit: p.packageUnit ?? "كرطون",
+          initialStock: String(p.stock ?? 0), initialWarehouseId: p.warehouseId ?? "",
+        });
+        if (p.units?.length) setUnits(p.units.map((u) => ({ ...u, _id: unitRowId++ })));
+        if (p.hasVariants) { setHasVariants(true); setVariantAttrs(p.variantAttributes ?? []); }
+        if (p.variants?.length) setVariants(p.variants.map((v) => ({ ...v, _id: variantRowId++ })));
+      }).catch(console.error);
+    }
+  }, [id, isEdit]);
 
   const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
   const addImage    = () => setImages((p) => [...p, { color: ["#FF6B6B88","#4ECDC488","#FFE66D88","#A8E6CF88"][p.length % 4] }]);
@@ -735,7 +743,21 @@ export default function ProductForm() {
   const handleSave = () => {
     setTouched(true);
     if (!form.name.trim() || !form.baseUnit) return;
-    navigate("/products");
+    const payload = {
+      name: form.name.trim(),
+      code: form.code.trim(),
+      category: form.category,
+      description: form.description,
+      barcode: form.barcode,
+      unit: form.baseUnit,
+      weightPerUnit: Number(form.weightPerUnit) || 0,
+      unitsPerPackage: Number(form.unitsPerPackage) || 1,
+      packageUnit: form.packageUnit,
+    };
+    const apiCall = isEdit
+      ? productsApi.update(id, payload)
+      : productsApi.create(payload);
+    apiCall.then(() => navigate("/products")).catch(console.error);
   };
 
   const cats   = productSettings.categories.map((c) => c.name);
@@ -953,7 +975,7 @@ export default function ProductForm() {
                       fullWidth select label="المستودع"
                       value={form.initialWarehouseId} onChange={set("initialWarehouseId")} size="small"
                     >
-                      {mockWarehouses.map((w) => (
+                      {warehouses.map((w) => (
                         <MenuItem key={w.id} value={w.id}>
                           {w.name}{w.isDefault ? " · افتراضي" : ""}
                         </MenuItem>

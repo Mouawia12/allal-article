@@ -12,6 +12,7 @@
 - الأمان: `Spring Security`
 - أسلوب التوثيق: `OpenAPI / Swagger`
 - الكاش والمهام الخلفية: `Redis` لاحقًا عند الحاجة
+- تخزين الملفات الخارجي: `Cloudflare R2` حاليًا عبر abstraction داخلية
 - النشر: `Docker Compose` في البداية، ثم يمكن التوسع لاحقًا
 
 ## لماذا Spring Boot لهذا المشروع
@@ -75,6 +76,7 @@ support
 locking
 ai
 partnerships
+storage
 ```
 
 كل وحدة يجب أن تكون منظمة حول الدومين وليس حول نوع الملف فقط.
@@ -82,12 +84,20 @@ partnerships
 مثال:
 
 ```text
-com.allal.article.orders
+com.allalarticle.backend.orders
   api
   application
   domain
   infrastructure
 ```
+
+الـ package root المعتمد في مشروع الباك اند الحالي:
+
+```text
+com.allalarticle.backend
+```
+
+الوحدات تبدأ كـ packages واضحة مثل `orders`, `products`, `inventory`, `attachments`, `audit`, ثم تضاف داخل كل وحدة subpackages مثل `controller`, `service`, `dto`, `entity`, `repository`, `mapper`, `event`, و`validation` عند الحاجة فقط، بدون إنشاء CRUD أو منطق أعمال مبكر.
 
 ## الطبقات القياسية
 
@@ -190,6 +200,14 @@ spring.jpa.hibernate.ddl-auto=validate
   - payment out
 - payment allocations
 - توزيع المدفوعات على الطلبيات يجب أن يكون منظمًا وقابلًا للتتبع.
+- كل دفعة زبون، دفعة عكسية، أو دفعة مورد يجب أن تكتب `audit_logs` داخل نفس transaction مع اسم المنفذ والطرف والمبلغ وطريقة الدفع.
+
+### التدقيق وسجل العمليات
+
+- أي عملية تؤثر على المال، المخزون، الأسعار، الصلاحيات، الإعدادات، أو تصدير البيانات يجب أن تمر عبر event/audit واضح.
+- أحداث إلزامية: `customer_payment_received`, `customer_payment_refund`, `supplier_payment_paid`, `product_price_changed`, `inventory_adjustment`, `stock_transfer`, `create_return`, `purchase_return_created`, `user_permission_changed`, `user_status_changed`, `settings_changed`, `failed_login`, `data_exported`, `support_ticket_status_changed`.
+- `actor_user_id` هو المستخدم المنفذ، و`meta_json` يحمل ملخصًا جاهزًا للعرض: الطرف المتأثر، القيم القديمة والجديدة، المبلغ أو الكمية، السبب، والمرجع.
+- لا تعتمد شاشة سجل العمليات على وصف نصي فقط؛ يجب أن تكون الأحداث قابلة للفلترة حسب `action`, `actor_user_id`, `entity_type`, و`created_at`.
 
 ### المحاسبة وشجرة الحسابات
 
@@ -259,11 +277,24 @@ spring.jpa.hibernate.ddl-auto=validate
 - حالة التذكرة لا تعدل يدوياً إلى `waiting_owner` أو `waiting_tenant`. هذه الحالات يحسبها النظام من آخر رسالة: رسالة tenant تجعلها `waiting_owner`، ورسالة platform تجعلها `waiting_tenant`.
 - أفعال المستخدمين المسموحة على الحالة هي: فتح، إغلاق، إعادة فتح فقط.
 - عند الإغلاق يمنع إرسال رسائل جديدة حتى يعاد فتح التذكرة.
-- يجب دعم رسائل `text`, `image`, `audio`, `file`. الملفات تحفظ عبر storage service، والقاعدة تحفظ `storage_key` والـ metadata فقط.
+- يجب دعم رسائل `text`, `image`, `audio`, `file`. الملفات تحفظ عبر storage service، والقاعدة تحفظ `object_key` والـ metadata فقط.
 - التسجيل الصوتي يحفظ كملف مرفق مع `duration_seconds` و `mime_type`، ولا يحفظ كنص base64 داخل قاعدة البيانات.
 - حالة القراءة تكون عبر `support_ticket_participants.last_read_message_id` حتى تظهر badges للطرفين.
 - إغلاق التذكرة لا يحذف الرسائل أو المرفقات؛ تطبق سياسة retention منفصلة، وأي حذف منطقي يجب أن يسجل في audit log.
 - WebSocket/SSE لاحقاً يستخدم لتحديث الشات فورياً، لكن REST يجب أن يبقى المصدر الرسمي للإنشاء والحفظ.
+
+### التخزين الخارجي للصور والملفات
+
+- الملفات تعتبر external assets وليست جزءًا من filesystem السيرفر.
+- المزود المعتمد حاليًا هو `Cloudflare R2`.
+- لا تخزن الصور أو PDF أو المرفقات أو التسجيلات الصوتية في local server storage كخيار أساسي.
+- لا تخزن binary/blob أو base64 داخل PostgreSQL.
+- قاعدة البيانات تحفظ metadata والمرجع فقط: `storage_provider`, `bucket_name`, `object_key`, `public_url` أو مرجع signed URL, `original_filename`, `mime_type`, `size_bytes`, `extension`, `alt_text/title`, `uploaded_by`, و timestamps.
+- يجب بناء abstraction داخلية مثل `StorageService` أو `ObjectStorageGateway` حتى يمكن تغيير المزود لاحقًا بدون تغيير منطق المنتجات أو الطلبات أو الدعم.
+- لا تخزن أسرار Cloudflare R2 في قاعدة البيانات. credentials تكون في environment variables أو secure config فقط.
+- أي upload يجب أن يتعامل مع حالتين منفصلتين: نجاح رفع الملف إلى R2، ونجاح حفظ reference في قاعدة البيانات. الفشل بين المرحلتين يحتاج cleanup أو retry واضح.
+- حذف أو استبدال ملف يجب أن يحدث في التخزين الخارجي ويحدث المرجع في قاعدة البيانات، مع audit/event للكيانات الحساسة.
+- backup الإنتاج يفصل بين backup قاعدة البيانات ونسخ/سياسات حماية object storage.
 
 ### قفل التحرير
 
@@ -371,6 +402,7 @@ Spring Boot API
 PostgreSQL
 Redis
 Nginx / reverse proxy
+Cloudflare R2 للصور والمرفقات والـ PDF
 ```
 
 المطلوب لاحقًا:
@@ -379,6 +411,7 @@ Nginx / reverse proxy
 - ملف `docker-compose.yml`.
 - profile للتطوير و profile للإنتاج.
 - backup يومي لقاعدة البيانات.
+- سياسة backup/retention منفصلة للأصول المخزنة في Cloudflare R2.
 - مراقبة logs.
 
 ## تعليمات مهمة لـ Claude Code عند بدء الباك اند

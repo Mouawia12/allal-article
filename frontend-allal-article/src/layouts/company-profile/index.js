@@ -28,7 +28,20 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { mockCompanyProfile, LEGAL_FORMS, ALGERIAN_BANKS } from "data/mock/companyProfileMock";
+const LEGAL_FORMS = [
+  { value: "SARL",              label: "شركة ذات مسؤولية محدودة (SARL)" },
+  { value: "EURL",              label: "مؤسسة ذات شخص وحيد (EURL)" },
+  { value: "SPA",               label: "شركة مساهمة (SPA)" },
+  { value: "SNC",               label: "شركة اسم جماعي (SNC)" },
+  { value: "auto_entrepreneur", label: "مستثمر ذاتي (Auto-entrepreneur)" },
+  { value: "other",             label: "أخرى" },
+];
+const ALGERIAN_BANKS = [
+  "BNA — البنك الوطني الجزائري", "CPA — القرض الشعبي الجزائري",
+  "BEA — بنك الجزائر الخارجي", "BADR — بنك الفلاحة والتنمية الريفية",
+  "BDL — بنك التنمية المحلية", "CNEP — الصندوق الوطني للتوفير والاحتياط",
+  "SGA — سوسيتيه جنرال الجزائر", "BNP Paribas El Djazaïr", "Natixis Algérie", "أخرى",
+];
 
 // ─── Image Upload Field ───────────────────────────────────────────────────────
 function ImageUpload({ label, value, hint }) {
@@ -112,7 +125,15 @@ function CompletenessBar({ profile }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CompanyProfile() {
   const [tab, setTab] = useState(0);
-  const [form, setForm] = useState({ ...mockCompanyProfile });
+  const [form, setForm] = useState({
+    nameAr: "", nameFr: "", legalForm: "SARL", tradeRegisterNumber: "",
+    taxId: "", statisticalId: "", articleImposition: "",
+    address: "", wilaya: "", postalCode: "",
+    phone: "", mobile: "", fax: "", email: "", website: "",
+    bankName: "", bankBranch: "", rib: "", capitalSocial: "",
+    logoUrl: null, stampImageUrl: null, signatureImageUrl: null,
+    invoiceFooterAr: "", invoiceFooterFr: "",
+  });
   const [saved, setSaved] = useState(false);
 
   const set = (k) => (e) => {

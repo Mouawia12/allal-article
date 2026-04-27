@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
@@ -30,25 +30,12 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import {
-  formatDZD,
-  priceLists as initialPriceLists,
-  priceSourceLabels,
-  resolveProductPrice,
-} from "data/mock/pricingInventoryMock";
-import {
-  mockSuppliers,
-} from "data/mock/suppliersMock";
+const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " دج";
+const initialPriceLists = [];
+const priceSourceLabels = {};
+const resolveProductPrice = (product) => ({ finalPrice: product?.price || 0, listName: "—" });
+import { suppliersApi, customersApi } from "services";
 
-// ─── Mock entities for assignment ────────────────────────────────────────────
-const mockCustomersList = [
-  { id: 1, name: "شركة الرياض للمقاولات",   wilaya: "وهران" },
-  { id: 2, name: "مؤسسة البناء الحديث",     wilaya: "الجزائر" },
-  { id: 3, name: "شركة الإنشاءات المتحدة", wilaya: "سطيف" },
-  { id: 4, name: "مجموعة الخليج للتطوير",  wilaya: "قسنطينة" },
-  { id: 5, name: "شركة الأفق للتجارة",     wilaya: "وهران" },
-  { id: 6, name: "مؤسسة النجاح التجارية",  wilaya: "الجلفة" },
-];
 
 const priceProducts = [
   { id: 1, code: "BRG-010-50", name: "برغي M10 × 50mm", category: "مسامير وبراغي", unit: "قطعة", price: 12 },
@@ -88,9 +75,9 @@ function getListItem(list, product) {
 }
 
 // ─── Assign Entities Dialog ───────────────────────────────────────────────────
-function AssignEntitiesDialog({ open, onClose, priceList, onSave }) {
+function AssignEntitiesDialog({ open, onClose, priceList, onSave, suppliers = [], customers = [] }) {
   const isPurchase = priceList?.type === "purchase";
-  const entities = isPurchase ? mockSuppliers : mockCustomersList;
+  const entities = isPurchase ? suppliers : customers;
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(() => priceList?.assignedIds || []);
@@ -260,6 +247,13 @@ function PriceLists() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialog, setAssignDialog] = useState(false);
   const [listForm, setListForm] = useState({ name: "", type: "sales", code: "" });
+  const [suppliers, setSuppliers] = useState([]);
+  const [customers, setCustomers] = useState([]);
+
+  useEffect(() => {
+    suppliersApi.list().then((r) => setSuppliers(r.data?.content ?? r.data ?? [])).catch(console.error);
+    customersApi.list().then((r) => setCustomers(r.data?.content ?? r.data ?? [])).catch(console.error);
+  }, []);
 
   const selectedList = lists.find((list) => list.id === selectedId) || lists[0];
   const customCount = selectedList.items.filter((item) => Number(item.unitPrice || 0) > 0).length;
@@ -335,9 +329,9 @@ function PriceLists() {
   const assignedEntities = useMemo(() => {
     const ids = selectedList.assignedIds || [];
     if (ids.length === 0) return [];
-    const pool = isPurchase ? mockSuppliers : mockCustomersList;
+    const pool = isPurchase ? suppliers : customers;
     return ids.map((id) => pool.find((e) => e.id === id)).filter(Boolean);
-  }, [selectedList, isPurchase]);
+  }, [selectedList, isPurchase, suppliers, customers]);
 
   return (
     <DashboardLayout>
@@ -642,6 +636,8 @@ function PriceLists() {
         onClose={() => setAssignDialog(false)}
         priceList={selectedList}
         onSave={saveAssignedIds}
+        suppliers={suppliers}
+        customers={customers}
       />
 
       <Footer />

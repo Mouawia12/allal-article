@@ -1,5 +1,3 @@
-import { mockSuppliers } from "data/mock/suppliersMock";
-
 export const statusConfig = {
   pending:   { label: "مسودة شراء", color: "warning" },
   confirmed: { label: "مؤكد للمورد", color: "info" },
@@ -13,9 +11,7 @@ export const paymentConfig = {
   unpaid:  { label: "غير مدفوع", color: "error" },
 };
 
-export const supplierOptions = [
-  ...mockSuppliers.map((supplier) => supplier.name),
-];
+export const supplierOptions = [];
 
 export const purchaseProducts = [
   { id: "RAW-STL-001", name: "حديد تسليح 12mm", unit: "قنطار", price: 85000, taxRate: 19 },

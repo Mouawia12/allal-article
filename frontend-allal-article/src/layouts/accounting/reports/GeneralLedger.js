@@ -1,12 +1,14 @@
 /* eslint-disable react/prop-types */
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
-import Divider from "@mui/material/Divider";
+import FormControl from "@mui/material/FormControl";
 import IconButton from "@mui/material/IconButton";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -17,7 +19,6 @@ import TextField from "@mui/material/TextField";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FilterListIcon from "@mui/icons-material/FilterList";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import PrintIcon from "@mui/icons-material/Print";
 
 import SoftBox from "components/SoftBox";
@@ -26,85 +27,48 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { accountingApi } from "services";
 
-import { buildTree, classificationLabels, mockAccounts, mockJournals, mockFiscalYears } from "../mockData";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) =>
-  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 0 }).format(Math.abs(n)) + " دج";
+  new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 2 }).format(Math.abs(n ?? 0)) + " دج";
 
-function flattenTree(nodes, r = []) {
-  nodes.forEach((n) => { r.push(n); if (n.children?.length) flattenTree(n.children, r); });
-  return r;
-}
-
-const allAccounts = flattenTree(buildTree(mockAccounts));
-const postableAccounts = allAccounts.filter((a) => a.isPostable && a.isActive);
-
-// Build movements from journal lines; running balance respects account normalBalance
-function buildMovements(accountId, normalBalance) {
-  const rows = [];
-  mockJournals
-    .filter((j) => j.status === "posted")
-    .forEach((j) => {
-      j.lines.forEach((l) => {
-        if (l.accountId === accountId) {
-          rows.push({
-            journalId: j.id,
-            number: j.number,
-            date: j.date,
-            description: l.description || j.description,
-            debit: l.debit,
-            credit: l.credit,
-          });
-        }
-      });
-    });
-  rows.sort((a, b) => a.date.localeCompare(b.date));
-  let running = 0;
-  return rows.map((r) => {
-    running += normalBalance === "debit" ? (r.debit - r.credit) : (r.credit - r.debit);
-    return { ...r, running };
-  });
-}
-
-const statusCfg = {
-  posted:   { label: "مرحّل",  bg: "#f0fde4", color: "#82d616" },
-  draft:    { label: "مسودة",  bg: "#fff3e0", color: "#fb8c00" },
-  reversed: { label: "معكوس",  bg: "#f8f9fa", color: "#8392ab" },
+const fmtSigned = (n) => {
+  const v = Number(n ?? 0);
+  return (v >= 0 ? "" : "-") + fmt(v);
 };
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function GeneralLedger() {
   const navigate = useNavigate();
+  const [fiscalYears, setFiscalYears] = useState([]);
+  const [fyId, setFyId] = useState(null);
+  const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo]     = useState("");
-  const activeFY = mockFiscalYears.find((fy) => !fy.isClosed);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const movements = useMemo(() => {
-    if (!selectedAccount) return [];
-    let rows = buildMovements(selectedAccount.id, selectedAccount.normalBalance);
-    if (dateFrom) rows = rows.filter((r) => r.date >= dateFrom);
-    if (dateTo)   rows = rows.filter((r) => r.date <= dateTo);
-    return rows;
-  }, [selectedAccount, dateFrom, dateTo]);
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active) setFyId(active.id);
+      })
+      .catch(console.error);
+    accountingApi.listAccounts()
+      .then((r) => setAccounts((r.data?.content ?? r.data ?? []).filter((a) => a.isPostable !== false)))
+      .catch(console.error);
+  }, []);
 
-  const totalDebit   = movements.reduce((s, r) => s + r.debit,  0);
-  const totalCredit  = movements.reduce((s, r) => s + r.credit, 0);
-  const finalBalance = movements.length > 0 ? movements[movements.length - 1].running : 0;
-  const normalBal    = selectedAccount?.normalBalance ?? "debit";
-  const balLabel     = (val) => {
-    if (val === 0) return "صفر";
-    return normalBal === "debit"
-      ? (val > 0 ? "مدين" : "دائن")
-      : (val > 0 ? "دائن" : "مدين");
-  };
-
-  const accountOptions = postableAccounts.map((a) => ({
-    ...a,
-    label: `${a.code} — ${a.nameAr}`,
-  }));
+  useEffect(() => {
+    if (!selectedAccount || !fyId) return;
+    setLoading(true);
+    accountingApi.generalLedger(selectedAccount.id, fyId)
+      .then((r) => setData(r.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [selectedAccount, fyId]);
 
   return (
     <DashboardLayout>
@@ -120,7 +84,7 @@ export default function GeneralLedger() {
             <SoftBox>
               <SoftTypography variant="h5" fontWeight="bold">الأستاذ العام</SoftTypography>
               <SoftTypography variant="caption" color="secondary">
-                حركات تفصيلية لكل حساب مع الرصيد المتراكم
+                حركات الحساب والرصيد الجاري
               </SoftTypography>
             </SoftBox>
           </SoftBox>
@@ -131,129 +95,89 @@ export default function GeneralLedger() {
         </SoftBox>
 
         {/* Filters */}
-        <Card sx={{ mb: 3 }}>
-          <SoftBox p={2.5}>
-            <SoftBox display="flex" alignItems="center" gap={1} mb={2}>
-              <FilterListIcon sx={{ color: "#8392ab", fontSize: 18 }} />
-              <SoftTypography variant="button" fontWeight="medium">فلترة</SoftTypography>
-            </SoftBox>
-            <SoftBox display="flex" gap={2} flexWrap="wrap" alignItems="flex-end">
-              <Autocomplete
-                options={accountOptions}
-                value={selectedAccount ? { ...selectedAccount, label: `${selectedAccount.code} — ${selectedAccount.nameAr}` } : null}
-                onChange={(_, v) => setSelectedAccount(v)}
-                renderInput={(params) => <TextField {...params} label="اختر حساباً" size="small" />}
-                sx={{ minWidth: 280 }}
-              />
-              <TextField
-                label="من تاريخ" type="date" size="small"
-                value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{ width: 160 }}
-              />
-              <TextField
-                label="إلى تاريخ" type="date" size="small"
-                value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{ width: 160 }}
-              />
-              {(dateFrom || dateTo) && (
-                <SoftButton variant="text" color="error" size="small"
-                  onClick={() => { setDateFrom(""); setDateTo(""); }}>
-                  مسح الفلتر
-                </SoftButton>
-              )}
-            </SoftBox>
+        <Card sx={{ mb: 2 }}>
+          <SoftBox p={2} display="flex" gap={2} flexWrap="wrap" alignItems="center">
+            <FilterListIcon sx={{ color: "#8392ab" }} fontSize="small" />
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <Select value={fyId ?? ""} onChange={(e) => setFyId(Number(e.target.value))}>
+                {fiscalYears.map((f) => (
+                  <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Autocomplete
+              options={accounts}
+              getOptionLabel={(a) => `${a.code} — ${a.name}`}
+              value={selectedAccount}
+              onChange={(_, v) => setSelectedAccount(v)}
+              size="small"
+              sx={{ minWidth: 280 }}
+              renderInput={(params) => <TextField {...params} label="اختر الحساب" />}
+            />
           </SoftBox>
         </Card>
 
-        {!selectedAccount ? (
-          <Card>
-            <SoftBox p={4} textAlign="center">
-              <SoftTypography variant="h6" color="secondary">اختر حساباً لعرض حركاته</SoftTypography>
-              <SoftTypography variant="caption" color="secondary">
-                يعرض الأستاذ العام كل القيود المرحّلة على الحساب المختار مع الرصيد المتراكم
-              </SoftTypography>
-            </SoftBox>
-          </Card>
-        ) : (
+        {loading && (
+          <SoftTypography variant="caption" color="secondary">جارٍ التحميل...</SoftTypography>
+        )}
+
+        {!selectedAccount && !loading && (
+          <SoftBox textAlign="center" py={6}>
+            <SoftTypography variant="body2" color="secondary">اختر حساباً لعرض الأستاذ العام</SoftTypography>
+          </SoftBox>
+        )}
+
+        {data && !loading && (
           <>
-            {/* Account Summary */}
-            <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap">
+            {/* Account summary */}
+            <SoftBox display="flex" gap={2} mb={3} flexWrap="wrap">
               {[
-                { label: "الحساب",       value: `${selectedAccount.code} — ${selectedAccount.nameAr}` },
-                { label: "التصنيف",      value: classificationLabels[selectedAccount.classification]?.label },
-                { label: "إجمالي مدين",  value: fmt(totalDebit)  },
-                { label: "إجمالي دائن",  value: fmt(totalCredit) },
-                { label: "الرصيد الختامي", value: fmt(Math.abs(finalBalance)) },
-              ].map(({ label, value }) => (
-                <Card key={label} sx={{ px: 2, py: 1.5, minWidth: 140 }}>
-                  <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
-                  <SoftTypography variant="button" fontWeight="bold">{value}</SoftTypography>
+                { label: "الرصيد الافتتاحي",  value: data.openingBalance,  color: "#17c1e8" },
+                { label: "إجمالي المدين",      value: data.totalDebit,      color: "#82d616" },
+                { label: "إجمالي الدائن",      value: data.totalCredit,     color: "#fb8c00" },
+                { label: "الرصيد الختامي",     value: data.closingBalance,  color: Number(data.closingBalance) >= 0 ? "#344767" : "#ea0606" },
+              ].map(({ label, value, color }) => (
+                <Card key={label} sx={{ flex: "1 1 160px" }}>
+                  <SoftBox p={2}>
+                    <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
+                    <SoftTypography variant="h6" fontWeight="bold" sx={{ color }}>{fmt(value)}</SoftTypography>
+                  </SoftBox>
                 </Card>
               ))}
             </SoftBox>
 
-            {/* Movements Table */}
             <Card>
+              <SoftBox p={2} display="flex" alignItems="center" gap={1} borderBottom="1px solid #eee">
+                <SoftTypography variant="button" fontWeight="bold">{data.accountCode} — {data.accountName}</SoftTypography>
+                <Chip label={`${data.lines?.length ?? 0} قيد`} size="small" />
+              </SoftBox>
               <TableContainer>
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ background: "#f8f9fa" }}>
-                      {["التاريخ", "رقم القيد", "البيان", "مدين", "دائن", "الرصيد المتراكم", ""].map((h) => (
-                        <TableCell key={h} sx={{ fontWeight: 700, fontSize: 11, color: "#8392ab", py: 1.2 }}>{h}</TableCell>
+                      {["التاريخ", "رقم القيد", "البيان", "مدين", "دائن", "الرصيد"].map((h) => (
+                        <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12 }}>{h}</TableCell>
                       ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {movements.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} align="center" sx={{ py: 4, color: "#8392ab" }}>
-                          لا توجد حركات لهذا الحساب في الفترة المحددة
-                        </TableCell>
+                    {(data.lines ?? []).map((line, idx) => (
+                      <TableRow key={idx} hover>
+                        <TableCell sx={{ fontSize: 12 }}>{line.date}</TableCell>
+                        <TableCell sx={{ fontSize: 12, color: "#17c1e8" }}>{line.journalNumber}</TableCell>
+                        <TableCell sx={{ fontSize: 12 }}>{line.description}</TableCell>
+                        <TableCell sx={{ fontSize: 12, color: "#82d616" }}>{Number(line.debit) > 0 ? fmt(line.debit) : "—"}</TableCell>
+                        <TableCell sx={{ fontSize: 12, color: "#fb8c00" }}>{Number(line.credit) > 0 ? fmt(line.credit) : "—"}</TableCell>
+                        <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>{fmtSigned(line.runningBalance)}</TableCell>
                       </TableRow>
-                    ) : (
-                      movements.map((row, idx) => (
-                        <TableRow key={idx} hover>
-                          <TableCell sx={{ fontSize: 12 }}>{row.date}</TableCell>
-                          <TableCell sx={{ fontSize: 12, fontWeight: 600 }}>{row.number}</TableCell>
-                          <TableCell sx={{ fontSize: 12, maxWidth: 220 }}>{row.description}</TableCell>
-                          <TableCell sx={{ fontSize: 12, color: row.debit  > 0 ? "#3a416f" : "#ccc" }}>
-                            {row.debit  > 0 ? fmt(row.debit)  : "—"}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 12, color: row.credit > 0 ? "#ea0606" : "#ccc" }}>
-                            {row.credit > 0 ? fmt(row.credit) : "—"}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: 12, fontWeight: 700 }}>
-                            <SoftBox display="flex" alignItems="center" gap={0.5}>
-                              {fmt(Math.abs(row.running))}
-                              <SoftTypography variant="caption" color="secondary">
-                                {balLabel(row.running)}
-                              </SoftTypography>
-                            </SoftBox>
-                          </TableCell>
-                          <TableCell>
-                            <IconButton size="small"
-                              onClick={() => navigate("/accounting/journals")}>
-                              <OpenInNewIcon sx={{ fontSize: 14 }} />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-
+                    ))}
                     {/* Totals row */}
-                    {movements.length > 0 && (
-                      <TableRow sx={{ background: "#f8f9fa" }}>
-                        <TableCell colSpan={3} sx={{ fontWeight: 700, fontSize: 12 }}>الإجمالي</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>{fmt(totalDebit)}</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>{fmt(totalCredit)}</TableCell>
-                        <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>
-                          {fmt(Math.abs(finalBalance))} ({balLabel(finalBalance)})
-                        </TableCell>
-                        <TableCell />
-                      </TableRow>
-                    )}
+                    <TableRow sx={{ background: "#f8f9fa", fontWeight: 800 }}>
+                      <TableCell colSpan={3} sx={{ fontWeight: 800 }}>الإجمالي</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: "#82d616" }}>{fmt(data.totalDebit)}</TableCell>
+                      <TableCell sx={{ fontWeight: 800, color: "#fb8c00" }}>{fmt(data.totalCredit)}</TableCell>
+                      <TableCell sx={{ fontWeight: 800 }}>{fmtSigned(data.closingBalance)}</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>

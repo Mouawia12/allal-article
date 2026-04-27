@@ -3,10 +3,13 @@ spring:
     name: backend-allal-article
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/allal_article
-    username: allal_user
-    password: allal_pass@39
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/allal_article}
+    username: ${DB_USERNAME:allal_user}
+    password: ${DB_PASSWORD:allal_pass@39}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 30000
 
   jpa:
     hibernate:
@@ -14,7 +17,48 @@ spring:
     open-in-view: false
 
   flyway:
-    enabled: false
+    enabled: true
+    locations: classpath:db/migration/platform
+    schemas: platform
+    default-schema: platform
+    create-schemas: true
+    baseline-on-migrate: false
+    out-of-order: false
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: ${SERVER_CONTEXT_PATH:/}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:allal-article-secret-key-must-be-at-least-32-chars-for-hmac256}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# ─── Cloudflare R2 Storage ────────────────────────────────────────────────────
+r2:
+  account-id: ${R2_ACCOUNT_ID:placeholder}
+  access-key-id: ${R2_ACCESS_KEY_ID:placeholder}
+  secret-access-key: ${R2_SECRET_ACCESS_KEY:placeholder}
+  bucket-name: ${R2_BUCKET_NAME:allal-article}
+  public-url-prefix: ${R2_PUBLIC_URL_PREFIX:}
+
+# ─── WhatsApp Business API ────────────────────────────────────────────────────
+whatsapp:
+  api-url: ${WHATSAPP_API_URL:https://graph.facebook.com/v19.0}
+  phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:placeholder}
+  access-token: ${WHATSAPP_ACCESS_TOKEN:placeholder}
+
+# ─── AI Services ─────────────────────────────────────────────────────────────
+ai:
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-4o}
+  anthropic:
+    api-key: ${ANTHROPIC_API_KEY:}
+    model: ${ANTHROPIC_MODEL:claude-opus-4-7}
 
 management:
   endpoints:

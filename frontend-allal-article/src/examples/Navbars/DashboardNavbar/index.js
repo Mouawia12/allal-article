@@ -61,11 +61,6 @@ import {
 } from "context";
 import { useDarkMode } from "context/DarkModeContext";
 import { useI18n } from "i18n";
-import {
-  categoryConfig,
-  mockNotificationPreview,
-  severityConfig,
-} from "data/mock/notificationsMock";
 
 function DashboardNavbar({ absolute, light, isMini }) {
   const [navbarType, setNavbarType] = useState();
@@ -111,53 +106,23 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const handleCloseMenu = () => setOpenMenu(false);
   const handleOpenLanguageMenu = (event) => setLanguageMenuAnchor(event.currentTarget);
   const handleCloseLanguageMenu = () => setLanguageMenuAnchor(null);
-  const unreadCount = mockNotificationPreview.filter((item) => !item.isRead).length;
-
-  const notificationItemColor = (severity) => {
-    if (severity === "critical") return "error";
-    if (severity === "action_required") return "warning";
-    if (severity === "success") return "success";
-    return "info";
-  };
+  const unreadCount = 0;
 
   // Render the notifications menu
   const renderMenu = () => (
     <Menu
       anchorEl={openMenu}
       anchorReference={null}
-      anchorOrigin={{
-        vertical: "bottom",
-        horizontal: "left",
-      }}
+      anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       open={Boolean(openMenu)}
       onClose={handleCloseMenu}
       sx={{ mt: 2 }}
     >
       <MenuItem disabled>
         <SoftTypography variant="caption" color="secondary" fontWeight="bold">
-          آخر الإشعارات
+          لا توجد إشعارات جديدة
         </SoftTypography>
       </MenuItem>
-      {mockNotificationPreview.map((item) => {
-        const category = categoryConfig[item.category] || { icon: "notifications" };
-        const severity = severityConfig[item.severity] || severityConfig.info;
-        return (
-          <NotificationItem
-            key={item.publicId}
-            component={Link}
-            to={item.actionUrl}
-            color={notificationItemColor(item.severity)}
-            image={
-              <Icon fontSize="small" sx={{ color: ({ palette: { white } }) => white.main }}>
-                {category.icon}
-              </Icon>
-            }
-            title={[item.isRead ? "" : "جديد", item.title]}
-            date={`${item.createdAt} · ${severity.label}`}
-            onClick={handleCloseMenu}
-          />
-        );
-      })}
       <Divider sx={{ my: 0.5 }} />
       <MenuItem component={Link} to="/notifications" onClick={handleCloseMenu}>
         <SoftTypography variant="button" color="info" fontWeight="bold">

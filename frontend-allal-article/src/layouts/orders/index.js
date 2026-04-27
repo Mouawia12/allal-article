@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -23,9 +23,10 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { ordersApi } from "services";
 
 // ─── Mock Data ───────────────────────────────────────────────────────────────
-const mockOrders = [
+const orders = [
   {
     id: "ORD-2024-001", customer: "شركة الرياض للمقاولات", salesperson: "أحمد محمد",
     date: "2024-01-15", status: "completed", shippingStatus: "shipped", lines: 5, returnedQty: 0, total: "12,500",
@@ -110,12 +111,19 @@ function ColHeader({ children }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 function Orders() {
   const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    ordersApi.list()
+      .then((r) => setOrders(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+  }, []);
+
   const activeKey = tabs[activeTab].key;
 
-  const filtered = mockOrders.filter((o) => {
+  const filtered = orders.filter((o) => {
     const matchStatus = activeKey === "all" || o.status === activeKey;
     const matchSearch =
       o.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -151,10 +159,10 @@ function Orders() {
         {/* ── Stats Row ── */}
         <Grid container spacing={2} mb={3}>
           {[
-            { label: "إجمالي الطلبيات", value: mockOrders.length, color: "info" },
-            { label: "مرسلة / قيد المراجعة", value: mockOrders.filter(o => ["submitted","under_review"].includes(o.status)).length, color: "warning" },
-            { label: "مؤكدة / مشحونة / مكتملة", value: mockOrders.filter(o => ["confirmed","shipped","completed"].includes(o.status)).length, color: "success" },
-            { label: "ملغاة / مرفوضة", value: mockOrders.filter(o => ["cancelled","rejected"].includes(o.status)).length, color: "error" },
+            { label: "إجمالي الطلبيات", value: orders.length, color: "info" },
+            { label: "مرسلة / قيد المراجعة", value: orders.filter(o => ["submitted","under_review"].includes(o.status)).length, color: "warning" },
+            { label: "مؤكدة / مشحونة / مكتملة", value: orders.filter(o => ["confirmed","shipped","completed"].includes(o.status)).length, color: "success" },
+            { label: "ملغاة / مرفوضة", value: orders.filter(o => ["cancelled","rejected"].includes(o.status)).length, color: "error" },
           ].map((stat) => (
             <Grid item xs={6} sm={3} key={stat.label}>
               <Card sx={{ p: 2, textAlign: "center" }}>
@@ -190,7 +198,7 @@ function Orders() {
                       {t.key !== "all" && (
                         <Chip
                           size="small"
-                          label={mockOrders.filter(o => o.status === t.key).length}
+                          label={orders.filter(o => o.status === t.key).length}
                           sx={{ ml: 0.5, height: 18, fontSize: 10 }}
                         />
                       )}

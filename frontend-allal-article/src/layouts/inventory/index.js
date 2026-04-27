@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -39,7 +39,7 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { mockWarehouses } from "data/mock/pricingInventoryMock";
+import { inventoryApi } from "services";
 
 const products = [
   { id: 1, code: "BRG-010-50", name: "برغي M10 × 50mm", category: "مسامير وبراغي", unit: "قطعة", minStock: 100, color: "#FF6B6B" },
@@ -149,12 +149,12 @@ const emptyTransfer = {
 };
 
 function Inventory() {
-  const [warehouses, setWarehouses] = useState(mockWarehouses);
+  const [warehouses, setWarehouses] = useState([]);
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState(0);
   const [viewTab, setViewTab] = useState(0);
   const [selectedWarehouse, setSelectedWarehouse] = useState("all");
-  const [stockLines, setStockLines] = useState(initialStockLines);
+  const [stockLines, setStockLines] = useState([]);
   const [transferMode, setTransferMode] = useState("product");
   const [transferOpen, setTransferOpen] = useState(false);
   const [transfer, setTransfer] = useState(emptyTransfer);
@@ -181,6 +181,23 @@ function Inventory() {
       user: "أمين المخزن",
     },
   ]);
+
+  useEffect(() => {
+    inventoryApi.listWarehouses()
+      .then((r) => setWarehouses(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+    inventoryApi.listStock()
+      .then((r) => setStockLines((r.data?.content ?? r.data ?? []).map((s) => ({
+        productCode: s.productCode ?? s.product?.code ?? "",
+        productName: s.productName ?? s.product?.name ?? "",
+        category: s.category ?? s.product?.category ?? "",
+        unit: s.unit ?? s.product?.unit ?? "قطعة",
+        minStock: s.minStock ?? 0,
+        color: "#17c1e8",
+        ...s,
+      }))))
+      .catch(console.error);
+  }, []);
 
   const inventory = useMemo(() => hydrateStockLines(stockLines, warehouses), [stockLines, warehouses]);
 
@@ -379,32 +396,32 @@ function Inventory() {
   const saveWarehouse = () => {
     const name = warehouseForm.name.trim();
     if (!name) return;
-
-    setWarehouses((current) => {
-      const nextWarehouse = {
-        id: editingWarehouseId || `WH-${Date.now()}`,
-        name,
-        type: warehouseForm.type,
-        city: warehouseForm.city.trim() || "غير محدد",
-        manager: warehouseForm.manager.trim() || "غير محدد",
-        status: "active",
-        capacity: Math.max(1, Number(warehouseForm.capacity || 1)),
-        isDefault: Boolean(warehouseForm.isDefault),
-      };
-
-      const existing = current.some((warehouse) => warehouse.id === nextWarehouse.id);
-      const updated = existing
-        ? current.map((warehouse) => (warehouse.id === nextWarehouse.id ? nextWarehouse : warehouse))
-        : [...current, nextWarehouse];
-
-      if (!nextWarehouse.isDefault) return updated;
-
-      return updated.map((warehouse) => ({
-        ...warehouse,
-        isDefault: warehouse.id === nextWarehouse.id,
-      }));
-    });
-    closeWarehouseDialog();
+    const payload = {
+      name,
+      type: warehouseForm.type,
+      city: warehouseForm.city.trim() || "غير محدد",
+      manager: warehouseForm.manager.trim() || "غير محدد",
+      capacity: Math.max(1, Number(warehouseForm.capacity || 1)),
+      isDefault: Boolean(warehouseForm.isDefault),
+    };
+    const apiCall = editingWarehouseId
+      ? inventoryApi.updateWarehouse(editingWarehouseId, payload)
+      : inventoryApi.createWarehouse(payload);
+    apiCall
+      .then((r) => {
+        const saved = r.data;
+        setWarehouses((current) => {
+          const exists = current.some((w) => w.id === saved.id);
+          const updated = exists
+            ? current.map((w) => (w.id === saved.id ? saved : w))
+            : [...current, saved];
+          return saved.isDefault
+            ? updated.map((w) => ({ ...w, isDefault: w.id === saved.id }))
+            : updated;
+        });
+        closeWarehouseDialog();
+      })
+      .catch(console.error);
   };
 
   const warehouseRows = warehouses.map((warehouse) => {

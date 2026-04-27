@@ -33,6 +33,11 @@
 - كل مشترك يحصل على schema منفصل مثل `tenant_a1b2c3d4`.
 - الجداول التشغيلية لا تنشأ في `public`.
 - تحديد المشترك يتم من JWT/subdomain/header موثوق، وليس من body request.
+- الصور والملفات والمرفقات والـ PDF تعامل كـ external assets.
+- مزود التخزين المعتمد حاليًا هو `Cloudflare R2`.
+- لا تخزن binary/blob أو base64 للملفات داخل PostgreSQL.
+- لا تعتمد الجداول على `file_path` محلي داخل السيرفر؛ تحفظ فقط metadata و object key/reference.
+- أسرار Cloudflare R2 لا تدخل migrations ولا قاعدة البيانات، بل تحفظ لاحقًا في environment variables أو secure config.
 
 ## قواعد Flyway الإلزامية
 
@@ -116,6 +121,19 @@
 - هذا شرط أساسي في الخطة
 - وهو جوهر السلوك الشبيه بـ Odoo
 
+### 5) صمم الملفات كـ external assets من البداية
+
+الأفضل:
+- إنشاء جدول عام `media_assets` داخل tenant schema لكل الملفات التشغيلية: صور المنتجات، مستندات الزبائن، مرفقات الطلبات، PDF الفواتير، وملفات الاستيراد.
+- استخدام جداول متخصصة عند وجود سلوك دومين خاص، مثل `product_images`، لكن تجعلها تشير إلى `media_assets` بدل تكرار كل حقول التخزين.
+- إبقاء `platform.support_attachments` في platform schema لأن تذاكر الدعم عابرة للـ tenant، مع نفس حقول التخزين الخارجي.
+
+السبب:
+- المشروع يحتوي أنواع ملفات كثيرة، وجدول عام يقلل التكرار ويوحد metadata والـ lifecycle.
+- صور المنتجات تحتاج ترتيبًا، صورة رئيسية، وربطًا بالصورة الأصلية/المعالجة؛ لذلك جدول `product_images` مفيد كجدول متخصص فوق `media_assets`.
+- مرفقات الطلبات والزبائن والفواتير يمكن ربطها عبر `owner_type/owner_id` في `media_assets` أو عبر جدول ربط متخصص إذا احتاجت صلاحيات أو حالات خاصة.
+- Cloudflare R2 هو المزود الحالي، لكن وجود `storage_provider` و abstraction في التطبيق يسمح بتغيير المزود لاحقًا.
+
 ## توافق الجداول مع الواجهات الحالية
 
 | الواجهة الحالية | البيانات المطلوبة | الجداول الدنيا المطلوبة |
@@ -169,7 +187,7 @@
 | T1 | roles, permissions, role_permissions, users, user_profiles, user_permissions, access_denial_events | هوية وصلاحيات المشترك مع سجل محاولات الوصول الممنوعة |
 | T2 | wilayas, settings | بيانات مرجعية وإعدادات الشركة |
 | T3 | customers, customer_payments | الزبائن والرصيد قبل الطلبيات |
-| T4 | categories, products, product_favorites, product_images, product_price_histories, price_lists, price_list_items | الأصناف وقوائم الأسعار قبل المخزون والطلبات |
+| T4 | categories, products, product_favorites, media_assets, product_images, product_price_histories, price_lists, price_list_items | الأصناف وقوائم الأسعار قبل المخزون والطلبات، مع تخزين صور المنتجات كأصول خارجية |
 | T5 | warehouses | حتى لو كان هناك مخزن واحد حاليًا |
 | T6 | product_stocks, stock_movements, stock_transfers, stock_transfer_items, stock_reservations | تثبيت منطق المخزون والتحويل بين المستودعات |
 | T7 | orders | الكيان الرئيسي للطلبات |
@@ -184,7 +202,7 @@
 | T16 | accounting automation: tax_codes (+ is_price_inclusive), tax_rates, tax_code_accounts, accounting_settings, accounting_rules, accounting_rule_items, opening_balances, subledger_opening_balances, account_balances (PK→id + partial unique index), reconciliation_matches (+ subledger_entity_id + bank_account_id + fiscal_year_id), reconciliation_items, bank_accounts (+ currency + last_reconciled_at + public_id), cash_boxes (+ currency + public_id), payment_methods, category_account_mappings, product_account_mappings, inventory_valuation_layers, year_close_runs | الربط التلقائي والضرائب والمطابقة والصندوق والبنك |
 | T17 | notification_types, notifications, notification_recipients, notification_templates, notification_actions, notification_escalations, notification_preferences, notification_rules, notification_retention_policies, notification_outbox | إشعارات المشترك |
 | T18 | resource_lock_policies, resource_locks, resource_lock_events | قفل التحرير ومنع التعديل المتزامن |
-| T19 | media_assets, ai_jobs, ai_job_items | وظائف مساندة |
+| T19 | ai_jobs, ai_job_items | وظائف مساندة تعتمد على الملفات والمراجع المخزنة سابقًا في `media_assets` |
 | T20 | audit_logs | تدقيق عمليات المشترك |
 
 ملاحظة ربط الموردين:
@@ -626,8 +644,7 @@
 الحقول المقترحة:
 - `id`
 - `product_id`
-- `file_path`
-- `public_url`
+- `media_asset_id`
 - `source_type` (`manual`, `ai_processed`, `imported`)
 - `original_image_id` (nullable)
 - `sort_order`
@@ -639,6 +656,8 @@
 
 ملاحظات:
 - دعم الصورة الأصلية والمعالجة مهم جدًا لوحدة الـ AI.
+- لا يخزن هذا الجدول مسارًا محليًا أو binary للصورة. معلومات التخزين مثل `storage_provider`, `bucket_name`, `object_key`, `public_url`, `mime_type`, و`size_bytes` تكون في `media_assets`.
+- `product_images` يحتفظ فقط بمنطق الصور الخاص بالمنتج: الترتيب، الصورة الرئيسية، مصدر الصورة، وحالة المعالجة.
 
 ### product_price_histories
 
@@ -1310,6 +1329,29 @@
 - `user_agent`
 - `created_at`
 
+أحداث مالية إلزامية:
+- `customer_payment_received`: عند تسجيل دفعة زبون باتجاه داخل.
+- `customer_payment_refund`: عند تسجيل دفعة عكسية أو إرجاع مبلغ للزبون.
+- `supplier_payment_paid`: عند تسجيل دفعة لمورد.
+
+أحداث تشغيلية حساسة إلزامية:
+- `product_price_changed`: تغيير سعر صنف أو سعر داخل قائمة أسعار.
+- `inventory_adjustment`: تسوية مخزون أو جرد يدوي.
+- `stock_transfer`: تحويل مخزون بين مستودعات.
+- `create_return`: إنشاء مرتجع بيع.
+- `purchase_return_created`: إنشاء مرتجع شراء.
+- `user_permission_changed`: تعديل صلاحيات مستخدم.
+- `user_status_changed`: تعطيل أو تفعيل مستخدم.
+- `settings_changed`: تعديل إعدادات عامة أو محاسبية أو إعدادات AI/إشعارات.
+- `failed_login`: محاولة دخول فاشلة.
+- `data_exported`: تصدير تقرير أو بيانات حساسة.
+- `support_ticket_status_changed`: تغيير حالة تذكرة دعم.
+
+ملاحظات:
+- عند إنشاء سجل في `customer_payments` يجب إنشاء `audit_logs` في نفس transaction.
+- `actor_user_id` يمثل المستخدم الذي نفذ العملية، أو null/system user إذا كان الحدث آليًا.
+- `meta_json` يحفظ اسم الطرف المتأثر، المبلغ أو الكمية، طريقة الدفع، الاتجاه، القيم القديمة والجديدة، وسبب الإجراء حتى يظهر سجل العمليات بوضوح.
+
 فهارس:
 - index على `entity_type, entity_id`
 - index على `actor_user_id`
@@ -1348,7 +1390,7 @@
 - `provider`
 - `model`
 - `initiated_by`
-- `source_file_path`
+- `source_file_id`
 - `options_json`
 - `summary_json`
 - `started_at`
@@ -1393,10 +1435,40 @@
 - `notes`
 - `created_by`
 
+ملاحظة تدقيق:
+- أي `payment` أو `refund` يجب أن يكتب audit event واضحًا حتى يظهر في سجل العمليات من قام بالدفعة، وعلى أي زبون/طرف تمت، وما هو المبلغ وطريقة الدفع.
+
 ### media_assets
 
-إذا كان رفع الملفات سيستخدم بشكل كبير:
-- اجعل هناك جدولًا عامًا لكل الملفات بدل حصرها في `product_images`
+جدول عام موصى به لكل ملفات tenant التشغيلية بدل حصر الملفات في `product_images`.
+
+الحقول المقترحة:
+- `id`
+- `public_id`
+- `owner_type` (`product`, `customer`, `order`, `invoice`, `return`, `purchase_order`, `support_reference`, `ai_import`, ...)
+- `owner_id`
+- `storage_provider` (`cloudflare_r2` حاليًا)
+- `bucket_name`
+- `object_key`
+- `public_url` nullable
+- `signed_url_expires_at` nullable عند تخزين رابط مؤقت فقط، والأفضل توليده عند الطلب بدل حفظه طويلًا
+- `original_filename`
+- `mime_type`
+- `size_bytes`
+- `extension`
+- `title`
+- `alt_text`
+- `checksum_sha256` nullable
+- `metadata_json`
+- `created_by`
+- `created_at`
+- `updated_at`
+- `deleted_at`
+
+ملاحظات:
+- لا تستخدم `file_path` المحلي.
+- لا تخزن Cloudflare R2 credentials هنا.
+- يمكن لاحقًا إضافة جداول ربط متخصصة مثل `order_attachments` أو `customer_documents` إذا احتاجت صلاحيات أو حالات مراجعة منفصلة.
 
 ### import_batches
 

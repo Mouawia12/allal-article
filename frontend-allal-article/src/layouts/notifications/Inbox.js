@@ -15,12 +15,27 @@ import Icon from "components/AppIcon";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import {
-  categoryConfig,
-  lifecycleConfig,
-  mockTenantNotifications,
-  severityConfig,
-} from "data/mock/notificationsMock";
+const severityConfig = {
+  info:            { label: "معلومة",       color: "#17c1e8", bg: "#e3f8fd" },
+  success:         { label: "تم",           color: "#82d616", bg: "#f0fde4" },
+  warning:         { label: "تنبيه",        color: "#fb8c00", bg: "#fff3e0" },
+  critical:        { label: "حرج",          color: "#ea0606", bg: "#ffeaea" },
+  action_required: { label: "يتطلب إجراء", color: "#7928ca", bg: "#f5ecff" },
+};
+const categoryConfig = {
+  products: { label: "الأصناف", icon: "inventory_2" },
+  inventory: { label: "المخزون", icon: "warehouse" },
+  orders:    { label: "الطلبيات", icon: "shopping_cart" },
+  payments:  { label: "المدفوعات", icon: "payment" },
+  accounting:{ label: "المحاسبة", icon: "paid" },
+};
+const lifecycleConfig = {
+  new:       { label: "جديد",       color: "#17c1e8", bg: "#e3f8fd" },
+  read:      { label: "مقروء",      color: "#8392ab", bg: "#f8f9fa" },
+  snoozed:   { label: "مؤجل",       color: "#fb8c00", bg: "#fff3e0" },
+  actioned:  { label: "تم الإجراء", color: "#82d616", bg: "#f0fde4" },
+  escalated: { label: "مصعد",       color: "#ea0606", bg: "#ffeaea" },
+};
 
 const filters = [
   { key: "all", label: "الكل" },
@@ -145,9 +160,10 @@ function NotificationCard({ item, onOpen }) {
 export default function NotificationsInbox() {
   const [filter, setFilter] = useState("all");
   const navigate = useNavigate();
+  const allNotifications = [];
 
   const visibleNotifications = useMemo(() => {
-    return mockTenantNotifications.filter((item) => {
+    return allNotifications.filter((item) => {
       if (filter === "unread") return !item.isRead;
       if (filter === "critical") return ["critical", "action_required"].includes(item.severity);
       if (filter === "action") return item.requiresAction;
@@ -155,14 +171,10 @@ export default function NotificationsInbox() {
       if (filter === "escalated") return item.state === "escalated";
       return true;
     });
-  }, [filter]);
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stats = {
-    total: mockTenantNotifications.length,
-    unread: mockTenantNotifications.filter((item) => !item.isRead).length,
-    critical: mockTenantNotifications.filter((item) => item.severity === "critical").length,
-    action: mockTenantNotifications.filter((item) => item.requiresAction).length,
-    escalated: mockTenantNotifications.filter((item) => item.state === "escalated").length,
+    total: 0, unread: 0, critical: 0, action: 0, escalated: 0,
   };
 
   return (

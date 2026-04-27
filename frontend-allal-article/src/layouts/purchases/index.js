@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
@@ -36,12 +36,13 @@ import {
   calcReturnAmount,
   calcReturnedQty,
   formatDZD,
-  mockPurchases,
   paymentConfig,
   statusConfig,
-  supplierOptions,
 } from "./mockData";
-import { findSupplierByName, resolveSupplierLink, supplierMatchLabels } from "data/mock/suppliersMock";
+const supplierMatchLabels = { taxNumber: "الرقم الضريبي", email: "البريد الإلكتروني" };
+const findSupplierByName = () => null;
+const resolveSupplierLink = () => ({ isLinked: false });
+import { purchasesApi } from "services";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color, icon: Icon }) {
@@ -70,15 +71,26 @@ function StatCard({ label, value, sub, color, icon: Icon }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 function Purchases() {
   const navigate = useNavigate();
+  const [purchases, setPurchases] = useState([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
 
+  useEffect(() => {
+    purchasesApi.list()
+      .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({
+        items: [], returnItems: [], totalAmount: 0, paymentStatus: "unpaid",
+        ...p,
+      }))))
+      .catch(console.error);
+  }, []);
+
+  const supplierOptions = [...new Set(purchases.map((p) => p.supplier).filter(Boolean))];
   const tabStatus = ["all", "pending", "confirmed", "received", "cancelled"][tab];
 
-  const filtered = mockPurchases.filter((p) => {
+  const filtered = purchases.filter((p) => {
     const matchStatus = tabStatus === "all" || p.status === tabStatus;
     const matchPayment = paymentFilter === "all" || p.paymentStatus === paymentFilter;
     const matchSupplier = supplierFilter === "all" || p.supplier === supplierFilter;
@@ -88,13 +100,13 @@ function Purchases() {
     return matchStatus && matchPayment && matchSupplier && matchSearch;
   });
 
-  const pendingCount   = mockPurchases.filter(p => p.status === "pending").length;
-  const confirmedCount = mockPurchases.filter(p => p.status === "confirmed").length;
-  const receivedCount  = mockPurchases.filter(p => p.status === "received").length;
-  const unpaidAmount   = mockPurchases
+  const pendingCount   = purchases.filter(p => p.status === "pending").length;
+  const confirmedCount = purchases.filter(p => p.status === "confirmed").length;
+  const receivedCount  = purchases.filter(p => p.status === "received").length;
+  const unpaidAmount   = purchases
     .filter(p => p.paymentStatus !== "paid")
     .reduce((s, p) => s + p.totalAmount, 0);
-  const returnedQty = mockPurchases.reduce((sum, purchase) => sum + calcReturnedQty(purchase), 0);
+  const returnedQty = purchases.reduce((sum, purchase) => sum + calcReturnedQty(purchase), 0);
 
   return (
     <DashboardLayout>
@@ -143,11 +155,11 @@ function Purchases() {
             <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="inherit"
               TabIndicatorProps={{ style: { background: "#17c1e8" } }}>
               {[
-                { label: "الكل",          count: mockPurchases.length },
+                { label: "الكل",          count: purchases.length },
                 { label: "مسودة شراء",   count: pendingCount },
                 { label: "مؤكدة للمورد",  count: confirmedCount },
                 { label: "مستلمة",        count: receivedCount },
-                { label: "ملغاة",         count: mockPurchases.filter(p => p.status === "cancelled").length },
+                { label: "ملغاة",         count: purchases.filter(p => p.status === "cancelled").length },
               ].map((t, i) => (
                 <Tab key={i} label={
                   <SoftTypography variant="caption" fontWeight="medium">

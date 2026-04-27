@@ -11,8 +11,8 @@
 	<groupId>com.allalarticle</groupId>
 	<artifactId>backend-allal-article</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>backend-allal-article</name>
+	<description>ALLAL-ARTICLE Spring Boot modular monolith backend</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -78,6 +78,32 @@
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
+		</dependency>
+
+		<!-- AWS S3 SDK v2 (Cloudflare R2 compatible) -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>2.25.70</version>
+		</dependency>
+
+		<!-- JWT -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>0.12.6</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>0.12.6</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>0.12.6</version>
+			<scope>runtime</scope>
 		</dependency>
 	</dependencies>
 

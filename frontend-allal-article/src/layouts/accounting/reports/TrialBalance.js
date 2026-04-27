@@ -13,7 +13,7 @@
  * الـ Rollup: DFS من الجذر ← كل أب يجمع كل أبنائه بشكل memoized.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -57,7 +57,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { classificationLabels, mockAccounts, mockFiscalYears, mockJournals } from "../mockData";
+import { classificationLabels } from "../mockData";
+import { accountingApi } from "services";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const LEVEL_COLORS = ["#17c1e8", "#82d616", "#fb8c00", "#7928ca", "#ea0606", "#344767"];
@@ -282,13 +283,15 @@ export default function TrialBalance() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // ── Filter State (synced with URL) ──
-  const [fyId,          setFyId]          = useState(() => Number(searchParams.get("fy")) || mockFiscalYears[0].id);
-  const [dateFrom,      setDateFrom]      = useState(() => searchParams.get("from") || mockFiscalYears[0].startDate);
-  const [dateTo,        setDateTo]        = useState(() => searchParams.get("to")   || mockFiscalYears[0].endDate);
+  const [fyId,          setFyId]          = useState(() => Number(searchParams.get("fy")) || null);
+  const [dateFrom,      setDateFrom]      = useState(() => searchParams.get("from") || "");
+  const [dateTo,        setDateTo]        = useState(() => searchParams.get("to")   || "");
   const [accountType,   setAccountType]   = useState(() => searchParams.get("type") || "all");
   const [searchText,    setSearchText]    = useState("");
   const [selectedLevel, setSelectedLevel] = useState(3);
   const [showFilters,   setShowFilters]   = useState(true);
+  const [fiscalYears,   setFiscalYears]   = useState([]);
+  const [apiRows,       setApiRows]       = useState([]);
 
   // Column visibility
   const [colOpening,  setColOpening]  = useState(true);
@@ -300,17 +303,18 @@ export default function TrialBalance() {
   const [showZero,    setShowZero]    = useState(false);
   const [showInactive,setShowInactive]= useState(false);
 
-  const activeFY = mockFiscalYears.find((y) => y.id === fyId) || mockFiscalYears[0];
+  const activeFY = fiscalYears.find((y) => y.id === fyId) ?? null;
 
   // Sync FY → dates
   const handleFyChange = (id) => {
-    const fy = mockFiscalYears.find((y) => y.id === id);
+    const fy = fiscalYears.find((y) => y.id === id);
     setFyId(id);
     if (fy) { setDateFrom(fy.startDate); setDateTo(fy.endDate); }
   };
 
   const handleReset = () => {
-    handleFyChange(mockFiscalYears[0].id);
+    const first = fiscalYears[0];
+    if (first) handleFyChange(first.id);
     setAccountType("all");
     setSearchText("");
     setSelectedLevel(3);
@@ -319,10 +323,50 @@ export default function TrialBalance() {
     setColOpening(true); setColPeriod(true); setColCurrent(true); setColNet(true);
   };
 
-  // ── Engine ──
-  const directMap = useMemo(() => computeDirectMetrics(mockJournals, dateFrom, dateTo), [dateFrom, dateTo]);
+  // Load fiscal years once
+  useEffect(() => {
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setFiscalYears(fys);
+        const active = fys.find((f) => !f.closed) ?? fys[0];
+        if (active && !fyId) {
+          setFyId(active.id);
+          setDateFrom(active.startDate ?? "");
+          setDateTo(active.endDate ?? "");
+        }
+      })
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const allRows = useMemo(() => buildDisplayTree(mockAccounts, directMap), [directMap]);
+  // Load trial balance when fyId changes
+  useEffect(() => {
+    if (!fyId) return;
+    accountingApi.trialBalance(fyId)
+      .then((r) => {
+        const rows = (r.data?.rows ?? r.data ?? []).map((row, idx) => ({
+          id: row.accountCode ?? String(idx),
+          code: row.accountCode,
+          nameAr: row.accountName,
+          classification: row.classification,
+          level: Number(row.level ?? 1),
+          isActive: true,
+          hasChildren: false,
+          before_debit:  Number(row.openingDebit  ?? 0),
+          before_credit: Number(row.openingCredit ?? 0),
+          debit:         Number(row.periodDebit   ?? 0),
+          credit:        Number(row.periodCredit  ?? 0),
+          after_debit:   Number(row.closingDebit  ?? 0),
+          after_credit:  Number(row.closingCredit ?? 0),
+          net_balance:   Number(row.closingDebit ?? 0) - Number(row.closingCredit ?? 0),
+        }));
+        setApiRows(rows);
+      })
+      .catch(console.error);
+  }, [fyId]);
+
+  const allRows = apiRows;
 
   // ── Filter rows ──
   const filteredIds = useMemo(() => {
@@ -332,8 +376,7 @@ export default function TrialBalance() {
     const addParents = (row) => {
       if (matched.has(row.id)) return;
       matched.add(row.id);
-      // find parent
-      const parent = allRows.find((r) => r.id === mockAccounts.find((a) => a.id === row.id)?.parentId);
+      const parent = allRows.find((r) => r.level === row.level - 1 && row.code.startsWith(r.code));
       if (parent) addParents(parent);
     };
 
@@ -486,7 +529,7 @@ export default function TrialBalance() {
               <FormControl size="small" sx={{ minWidth: 175 }}>
                 <SoftTypography variant="caption" color="secondary" mb={0.3} display="block">السنة المالية</SoftTypography>
                 <Select value={fyId} onChange={(e) => handleFyChange(e.target.value)}>
-                  {mockFiscalYears.map((y) => (
+                  {fiscalYears.map((y) => (
                     <MenuItem key={y.id} value={y.id}>{y.name} {y.isClosed ? "🔒" : ""}</MenuItem>
                   ))}
                 </Select>

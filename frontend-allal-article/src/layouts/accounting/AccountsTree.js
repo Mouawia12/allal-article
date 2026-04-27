@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -47,10 +47,9 @@ import {
   flattenV2,
   fmt,
   isDuplicateCode,
-  mockAccountsV2,
-  mockFiscalYears,
   suggestChildCode,
 } from "./mockData";
+import { accountingApi } from "services";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let nextId = 1000;
@@ -287,7 +286,7 @@ function AccountDetail({ account, allAccounts, onEdit, onAddChild }) {
         <SoftBox mt={2} p={2}
           sx={{ background: `${listMeta.color}0d`, borderRadius: 2, border: `1px solid ${listMeta.color}33` }}>
           <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>
-            الرصيد — {mockFiscalYears[0]?.name}
+            الرصيد
           </SoftTypography>
           <SoftTypography variant="h5" fontWeight="bold" sx={{ color: listMeta.color }}>
             {fmt(account.balance ?? 0)} دج
@@ -558,25 +557,52 @@ function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, 
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function AccountsTree() {
-  const [accounts, setAccounts]   = useState(mockAccountsV2);
+  const [accounts, setAccounts]   = useState([]);
   const [search, setSearch]       = useState("");
-  const [listFilter, setListFilter] = useState(0);   // 0 = all
+  const [listFilter, setListFilter] = useState(0);
   const [showInactive, setShowInactive] = useState(false);
   const [expanded, setExpanded]   = useState({});
   const [selected, setSelected]   = useState(null);
-  const [dialog, setDialog]       = useState(null);   // { mode, parent?, account? }
-  const [activeFY]                = useState(mockFiscalYears[0]);
+  const [dialog, setDialog]       = useState(null);
+  const [activeFY, setActiveFY]   = useState(null);
+
+  useEffect(() => {
+    accountingApi.listAccounts()
+      .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
+      .catch(console.error);
+    accountingApi.listFiscalYears()
+      .then((r) => {
+        const fys = r.data?.content ?? r.data ?? [];
+        setActiveFY(fys.find((f) => !f.closed) ?? fys[0] ?? null);
+      })
+      .catch(console.error);
+  }, []);
 
   // ── Save handler ──────────────────────────────────────────────────────────
-  const handleSave = (saved) => {
-    setAccounts((prev) => {
-      const exists = prev.some((a) => a.id === saved.id);
-      return exists
-        ? prev.map((a) => (a.id === saved.id ? saved : a))
-        : [...prev, saved];
-    });
-    setSelected(saved);
-    setDialog(null);
+  const handleSave = (formData) => {
+    const isEdit = Boolean(formData.id && accounts.some((a) => a.id === formData.id));
+    const apiData = {
+      code: formData.code,
+      nameAr: formData.nameAr,
+      parentId: formData.parent_id ?? null,
+      classification: formData.list ?? formData.classification ?? null,
+      normalBalance: formData.side ?? formData.normalBalance ?? null,
+      isPostable: !formData.children?.length,
+      isActive: formData.is_active ?? true,
+    };
+    const apiCall = isEdit
+      ? accountingApi.updateAccount(formData.id, apiData).then((r) => r.data)
+      : accountingApi.createAccount(apiData).then((r) => r.data);
+    apiCall
+      .then((saved) => {
+        setAccounts((prev) => {
+          const exists = prev.some((a) => a.id === saved.id);
+          return exists ? prev.map((a) => (a.id === saved.id ? saved : a)) : [...prev, saved];
+        });
+        setSelected(saved);
+        setDialog(null);
+      })
+      .catch(console.error);
   };
 
   // ── Filtered flat list ────────────────────────────────────────────────────

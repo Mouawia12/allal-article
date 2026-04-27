@@ -41,14 +41,21 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import {
-  PERMISSION_DEFS,
-  mockMyInviteCodes,
-  mockActivePartnerships,
-  mockPendingApprovals,
-  mockMyPendingRequests,
-} from "data/mock/partnershipMock";
-import { findSupplierIdentityMatch, supplierMatchLabels } from "data/mock/suppliersMock";
+const supplierMatchLabels = {
+  partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
+  commercialRegister: "السجل التجاري", email: "البريد الإلكتروني",
+};
+const findSupplierIdentityMatch = () => null;
+const PERMISSION_DEFS = [
+  { key: "view_inventory", labelAr: "عرض المخزون والكميات",    descAr: "يسمح للطرف الثاني برؤية الكميات المتاحة", risk: "low" },
+  { key: "view_pricing",   labelAr: "عرض الأسعار",             descAr: "يسمح برؤية أسعار البيع",               risk: "medium" },
+  { key: "view_sales_data",labelAr: "عرض بيانات المبيعات",     descAr: "إجمالي مبيعات الصنف وحركته الشهرية",   risk: "high" },
+  { key: "clone_products", labelAr: "نسخ الأصناف",             descAr: "نسخ بيانات الأصناف إلى كتالوج الشريك", risk: "high" },
+];
+const mockActivePartnerships = [];
+const mockPendingApprovals = [];
+const mockMyInviteCodes = [];
+const mockMyPendingRequests = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const riskColor = { low: "#82d616", medium: "#fb8c00", high: "#ea0606" };
