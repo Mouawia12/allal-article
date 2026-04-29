@@ -142,6 +142,11 @@ public class PlatformService {
         String ownerPassword = body.get("ownerPassword");
         if (ownerPassword == null || ownerPassword.isBlank()) {
             ownerPassword = generateOwnerPassword();
+        } else if (ownerPassword.length() < 8) {
+            throw new AppException(
+                    ErrorCode.BAD_REQUEST,
+                    "كلمة المرور يجب أن تكون 8 أحرف على الأقل",
+                    HttpStatus.BAD_REQUEST);
         }
 
         // Generate schema name
@@ -261,7 +266,7 @@ public class PlatformService {
 
         if (updated == 0) {
             // fallback: update the first active user
-            jdbc.update(
+            updated = jdbc.update(
                 String.format(
                     """
                     update "%s".users set password_hash = ?
@@ -272,6 +277,10 @@ public class PlatformService {
                     )
                     """, schemaName, schemaName),
                 hash);
+        }
+
+        if (updated == 0) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Tenant owner user not found", HttpStatus.NOT_FOUND);
         }
     }
 

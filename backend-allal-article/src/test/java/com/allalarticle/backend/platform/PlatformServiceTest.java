@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,6 +104,21 @@ class PlatformServiceTest {
                     assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
                     assertThat(exception.getMessage()).isEqualTo("Invalid planCode");
                 });
+    }
+
+    @Test
+    void createTenant_rejectsWeakProvidedOwnerPasswordBeforeProvisioning() {
+        assertThatThrownBy(() -> service.createTenant(Map.of(
+                "companyName", "Allal",
+                "contactEmail", "owner@example.com",
+                "ownerPassword", "1234567")))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.BAD_REQUEST);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                    assertThat(exception.getMessage()).contains("8 أحرف");
+                });
+
+        verifyNoInteractions(jdbc, tenantSchemaService, passwordEncoder);
     }
 
     @Test
@@ -185,5 +201,22 @@ class PlatformServiceTest {
                 });
 
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    void resetOwnerPassword_throwsNotFoundWhenNoTenantUserWasUpdated() {
+        when(jdbc.queryForObject(
+                eq("select schema_name from platform.tenants where id = ?"),
+                eq(String.class),
+                eq(22L))).thenReturn("tenant_abcdef123456");
+        when(passwordEncoder.encode("ChangeMe@2026!")).thenReturn("hash");
+        when(jdbc.update(anyString(), eq("hash"))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.resetOwnerPassword(22L, "ChangeMe@2026!"))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.NOT_FOUND);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                    assertThat(exception.getMessage()).isEqualTo("Tenant owner user not found");
+                });
     }
 }
