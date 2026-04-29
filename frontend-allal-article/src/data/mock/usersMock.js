@@ -103,8 +103,8 @@ export const allPermissions = [
   { code: "reports.view",           label: "عرض التقارير",                module: "التقارير والسجلات" },
   { code: "logs.view",              label: "عرض سجل العمليات",            module: "التقارير والسجلات" },
   // الشركاء
-  { code: "partnerships.view",      label: "عرض شبكة الشركاء",            module: "الشركاء" },
-  { code: "partnerships.manage",    label: "إدارة طلبات الشراكة",         module: "الشركاء" },
+  { code: "partners.view",          label: "عرض شبكة الشركاء",            module: "الشركاء" },
+  { code: "partners.manage",        label: "إدارة طلبات الشراكة",         module: "الشركاء" },
   // إدارة النظام
   { code: "users.manage",           label: "إدارة المستخدمين",            module: "إدارة النظام" },
   { code: "settings.general",       label: "الإعدادات العامة",            module: "إدارة النظام" },
@@ -136,7 +136,7 @@ export const roleDefaultPermissions = {
     "manufacturing.view", "manufacturing.manage",
     "accounting.view", "accounting.journals", "accounting.reports",
     "reports.view", "logs.view",
-    "partnerships.view",
+    "partners.view", "partners.manage",
     "settings.general", "settings.road_invoices",
     "company.profile",
   ],

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -11,7 +11,6 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import Switch from "@mui/material/Switch";
 import Tab from "@mui/material/Tab";
@@ -30,8 +29,6 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import LinkIcon from "@mui/icons-material/Link";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -41,27 +38,26 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { generateInviteCode } from "utils/inviteCodes";
+import partnershipsApi from "services/partnershipsApi";
+import { getApiErrorMessage } from "utils/formErrors";
 
-const supplierMatchLabels = {
-  partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
-  commercialRegister: "السجل التجاري", email: "البريد الإلكتروني",
-};
-const findSupplierIdentityMatch = () => null;
 const PERMISSION_DEFS = [
   { key: "view_inventory", labelAr: "عرض المخزون والكميات",    descAr: "يسمح للطرف الثاني برؤية الكميات المتاحة", risk: "low" },
   { key: "view_pricing",   labelAr: "عرض الأسعار",             descAr: "يسمح برؤية أسعار البيع",               risk: "medium" },
   { key: "view_sales_data",labelAr: "عرض بيانات المبيعات",     descAr: "إجمالي مبيعات الصنف وحركته الشهرية",   risk: "high" },
   { key: "clone_products", labelAr: "نسخ الأصناف",             descAr: "نسخ بيانات الأصناف إلى كتالوج الشريك", risk: "high" },
 ];
-const mockActivePartnerships = [];
-const mockPendingApprovals = [];
-const mockMyInviteCodes = [];
-const mockMyPendingRequests = [];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const riskColor = { low: "#82d616", medium: "#fb8c00", high: "#ea0606" };
 const riskLabel = { low: "منخفض", medium: "متوسط", high: "عالٍ" };
+const defaultPermissions = {
+  view_inventory: true,
+  view_pricing: false,
+  view_sales_data: false,
+  clone_products: false,
+  create_purchase_link: false,
+  create_sales_link: false,
+};
 
 function copyToClipboard(text) {
   if (!navigator.clipboard?.writeText) {
@@ -79,7 +75,7 @@ function PermBadge({ perm }) {
 }
 
 function PermissionSummary({ permissions }) {
-  const granted = PERMISSION_DEFS.filter((d) => permissions[d.key]);
+  const granted = PERMISSION_DEFS.filter((d) => permissions?.[d.key]);
   if (granted.length === 0) return <Box sx={{ fontSize: 11, color: "#adb5bd" }}>لا صلاحيات</Box>;
   return (
     <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
@@ -89,38 +85,42 @@ function PermissionSummary({ permissions }) {
 }
 
 // ─── Generate Code Dialog ─────────────────────────────────────────────────────
-function GenerateCodeDialog({ open, onClose }) {
+function GenerateCodeDialog({ open, onClose, onCreated }) {
   const [label, setLabel] = useState("");
   const [maxUses, setMaxUses] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
-  const [perms, setPerms] = useState({
-    view_inventory: true,
-    view_pricing: false,
-    view_sales_data: false,
-    clone_products: false,
-    create_purchase_link: false,
-    create_sales_link: false,
-  });
+  const [perms, setPerms] = useState(defaultPermissions);
   const [generated, setGenerated] = useState(null);
   const [generationError, setGenerationError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
 
   const togglePerm = (key) => setPerms((p) => ({ ...p, [key]: !p[key] }));
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setGenerationError("");
+    setLoading(true);
     try {
-      setGenerated(generateInviteCode());
-    } catch {
-      setGenerationError("تعذر إنشاء كود آمن في هذا المتصفح. حدّث المتصفح أو أعد المحاولة من جهاز آخر.");
+      const response = await partnershipsApi.createInviteCode({
+        label,
+        maxUses: maxUses ? Number(maxUses) : null,
+        expiresAt: expiresAt || null,
+        permissions: perms,
+      });
+      setGenerated(response.data);
+      onCreated?.();
+    } catch (error) {
+      setGenerationError(getApiErrorMessage(error, "تعذر إنشاء كود الربط"));
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCopy = async () => {
     setCopyError("");
     try {
-      await copyToClipboard(generated);
+      await copyToClipboard(generated.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -137,7 +137,7 @@ function GenerateCodeDialog({ open, onClose }) {
     setExpiresAt("");
     setCopied(false);
     setCopyError("");
-    setPerms({ view_inventory: true, view_pricing: false, view_sales_data: false, clone_products: false, create_purchase_link: false, create_sales_link: false });
+    setPerms(defaultPermissions);
     onClose();
   };
 
@@ -209,7 +209,7 @@ function GenerateCodeDialog({ open, onClose }) {
               background: "#f8f9fa", border: "2px dashed #dee2e6", borderRadius: 2,
               px: 3, py: 2, mb: 2,
             }}>
-              <Box sx={{ fontSize: 22, fontWeight: 800, color: "#344767", letterSpacing: 2 }}>{generated}</Box>
+              <Box sx={{ fontSize: 22, fontWeight: 800, color: "#344767", letterSpacing: 2 }}>{generated.code}</Box>
               <Tooltip title={copied ? "تم النسخ!" : "نسخ"}>
                 <IconButton size="small" onClick={handleCopy}>
                   <ContentCopyIcon sx={{ fontSize: 18, color: copied ? "#82d616" : "#8392ab" }} />
@@ -234,9 +234,9 @@ function GenerateCodeDialog({ open, onClose }) {
               sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}>
               إلغاء
             </Box>
-            <Box component="button" onClick={handleGenerate}
-              sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 13, color: "#fff", fontWeight: 600 }}>
-              إنشاء الكود
+            <Box component="button" onClick={handleGenerate} disabled={loading}
+              sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, color: "#fff", fontWeight: 600, opacity: loading ? 0.7 : 1 }}>
+              {loading ? "جاري الإنشاء..." : "إنشاء الكود"}
             </Box>
           </>
         ) : (
@@ -251,13 +251,27 @@ function GenerateCodeDialog({ open, onClose }) {
 }
 
 // ─── Submit Code Dialog ───────────────────────────────────────────────────────
-function SubmitCodeDialog({ open, onClose }) {
+function SubmitCodeDialog({ open, onClose, onSubmitted }) {
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
-  const handleSubmit = () => setSubmitted(true);
-  const handleClose = () => { setCode(""); setMessage(""); setSubmitted(false); onClose(); };
+  const handleSubmit = async () => {
+    setSubmitError("");
+    setLoading(true);
+    try {
+      await partnershipsApi.submitRequest({ code, message });
+      setSubmitted(true);
+      onSubmitted?.();
+    } catch (error) {
+      setSubmitError(getApiErrorMessage(error, "تعذر إرسال طلب الربط"));
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleClose = () => { setCode(""); setMessage(""); setSubmitted(false); setSubmitError(""); setLoading(false); onClose(); };
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
@@ -283,6 +297,7 @@ function SubmitCodeDialog({ open, onClose }) {
               size="small" fullWidth multiline rows={2}
               placeholder="أهلاً، نرغب في الاطلاع على مخزونكم لتنسيق التوريد..."
             />
+            {submitError && <Alert severity="error">{submitError}</Alert>}
             <Box sx={{ background: "#e3f8fd", border: "1px solid #b2ebf9", borderRadius: 2, p: 1.5, fontSize: 11, color: "#344767" }}>
               <Box sx={{ fontWeight: 600, mb: 0.5 }}>بعد الإرسال:</Box>
               <Box>• سيصل طلبك للطرف المُصدِر للكود</Box>
@@ -305,9 +320,9 @@ function SubmitCodeDialog({ open, onClose }) {
               sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}>
               إلغاء
             </Box>
-            <Box component="button" onClick={handleSubmit} disabled={!code}
-              sx={{ background: code ? "linear-gradient(135deg, #17c1e8, #0ea5c9)" : "#dee2e6", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: code ? "pointer" : "default", fontSize: 13, color: "#fff", fontWeight: 600 }}>
-              إرسال الطلب
+            <Box component="button" onClick={handleSubmit} disabled={!code || loading}
+              sx={{ background: code && !loading ? "linear-gradient(135deg, #17c1e8, #0ea5c9)" : "#dee2e6", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: code && !loading ? "pointer" : "default", fontSize: 13, color: "#fff", fontWeight: 600 }}>
+              {loading ? "جاري الإرسال..." : "إرسال الطلب"}
             </Box>
           </>
         ) : (
@@ -322,25 +337,44 @@ function SubmitCodeDialog({ open, onClose }) {
 }
 
 // ─── Approval Dialog ──────────────────────────────────────────────────────────
-function ApprovalDialog({ request, onClose }) {
-  const [perms, setPerms] = useState({
-    view_inventory: true,
-    view_pricing: false,
-    view_sales_data: false,
-    clone_products: false,
-    create_purchase_link: false,
-    create_sales_link: false,
-  });
-  const [supplierLinkDecision, setSupplierLinkDecision] = useState("pending");
-  const supplierMatch = request ? findSupplierIdentityMatch(request) : null;
+function ApprovalDialog({ request, onClose, onApprove, onReject }) {
+  const [perms, setPerms] = useState(defaultPermissions);
+  const [actionError, setActionError] = useState("");
+  const [loading, setLoading] = useState("");
 
   useEffect(() => {
-    setSupplierLinkDecision("pending");
+    setPerms({ ...defaultPermissions, ...(request?.permissions ?? {}) });
+    setActionError("");
+    setLoading("");
   }, [request?.id]);
 
   if (!request) return null;
 
-  const supplierMatchLabel = supplierMatchLabels[supplierMatch?.matchedBy] || "بيانات تعريف";
+  const handleApprove = async () => {
+    setActionError("");
+    setLoading("approve");
+    try {
+      await onApprove?.(request.id, { permissions: perms });
+      onClose();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر قبول طلب الربط"));
+    } finally {
+      setLoading("");
+    }
+  };
+
+  const handleReject = async () => {
+    setActionError("");
+    setLoading("reject");
+    try {
+      await onReject?.(request.id);
+      onClose();
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر رفض طلب الربط"));
+    } finally {
+      setLoading("");
+    }
+  };
 
   return (
     <Dialog open={!!request} onClose={onClose} maxWidth="sm" fullWidth>
@@ -376,58 +410,7 @@ function ApprovalDialog({ request, onClose }) {
             </Box>
           )}
 
-          {supplierMatch && (
-            <Box sx={{
-              background: supplierLinkDecision === "accepted" ? "#f0fde4" : supplierLinkDecision === "skipped" ? "#f8f9fa" : "#fff8e1",
-              border: supplierLinkDecision === "accepted" ? "1px solid #82d61644" : supplierLinkDecision === "skipped" ? "1px solid #dee2e6" : "1px solid #fbc02d55",
-              borderRadius: 2,
-              p: 1.5,
-              display: "flex",
-              gap: 1.2,
-              alignItems: "flex-start",
-            }}>
-              {supplierLinkDecision === "accepted" ? (
-                <CheckIcon sx={{ fontSize: 18, color: "#82d616", flexShrink: 0, mt: 0.2 }} />
-              ) : (
-                <WarningAmberIcon sx={{ fontSize: 18, color: supplierLinkDecision === "skipped" ? "#8392ab" : "#fb8c00", flexShrink: 0, mt: 0.2 }} />
-              )}
-              <Box sx={{ flex: 1 }}>
-                <Box sx={{ fontSize: 12, fontWeight: 700, color: "#344767", mb: 0.4 }}>
-                  وجدنا مورداً محفوظاً قد يكون نفس هذا الشريك
-                </Box>
-                <Box sx={{ fontSize: 11, color: "#344767", lineHeight: 1.7 }}>
-                  بطاقة المورد: <Box component="span" sx={{ fontWeight: 700 }}>{supplierMatch.supplier.name}</Box>
-                  {" · "}التطابق عبر {supplierMatchLabel}: <Box component="span" sx={{ fontWeight: 700 }}>{supplierMatch.value}</Box>
-                  {supplierMatch.ambiguous && " · يوجد أكثر من مورد بنفس القيمة، يحتاج مراجعة"}
-                </Box>
-                <Box sx={{ fontSize: 10, color: "#8392ab", mt: 0.3 }}>
-                  الاسم ليس شرط الربط؛ القرار يعتمد على بيانات ثابتة وغير متكررة.
-                </Box>
-                {supplierLinkDecision === "pending" && !supplierMatch.ambiguous && (
-                  <Box sx={{ display: "flex", gap: 1, mt: 1.2, flexWrap: "wrap" }}>
-                    <Box component="button" onClick={() => setSupplierLinkDecision("accepted")}
-                      sx={{ background: "#82d616", border: "none", borderRadius: 1.5, px: 1.4, py: 0.55, cursor: "pointer", color: "#fff", fontSize: 11, fontWeight: 700 }}>
-                      نعم، اربطه تلقائياً
-                    </Box>
-                    <Box component="button" onClick={() => setSupplierLinkDecision("skipped")}
-                      sx={{ background: "#fff", border: "1px solid #dee2e6", borderRadius: 1.5, px: 1.4, py: 0.55, cursor: "pointer", color: "#8392ab", fontSize: 11, fontWeight: 600 }}>
-                      لا، أراجعه لاحقاً
-                    </Box>
-                  </Box>
-                )}
-                {supplierLinkDecision === "accepted" && (
-                  <Box sx={{ fontSize: 11, color: "#5faa0e", mt: 0.8, fontWeight: 600 }}>
-                    عند القبول سيتم حفظ معرف الشريك داخل بطاقة المورد تلقائياً.
-                  </Box>
-                )}
-                {supplierLinkDecision === "skipped" && (
-                  <Box sx={{ fontSize: 11, color: "#8392ab", mt: 0.8 }}>
-                    سيتم تفعيل الربط فقط، ويمكن ربط بطاقة المورد لاحقاً من صفحة الموردين.
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          )}
+          {actionError && <Alert severity="error">{actionError}</Alert>}
 
           <Divider />
 
@@ -449,13 +432,13 @@ function ApprovalDialog({ request, onClose }) {
         </Box>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
-        <Box component="button" onClick={onClose}
-          sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5 }}>
-          <CloseIcon sx={{ fontSize: 14 }} /> رفض
+        <Box component="button" onClick={handleReject} disabled={!!loading}
+          sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 2, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, opacity: loading ? 0.7 : 1 }}>
+          <CloseIcon sx={{ fontSize: 14 }} /> {loading === "reject" ? "جاري الرفض..." : "رفض"}
         </Box>
-        <Box component="button" onClick={onClose}
-          sx={{ background: "linear-gradient(135deg, #82d616, #5faa0e)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 12, color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, marginLeft: "auto" }}>
-          <CheckIcon sx={{ fontSize: 14 }} /> {supplierLinkDecision === "accepted" ? "قبول وتفعيل الربط + ربط المورد" : "قبول وتفعيل الربط"}
+        <Box component="button" onClick={handleApprove} disabled={!!loading}
+          sx={{ background: "linear-gradient(135deg, #82d616, #5faa0e)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 12, color: "#fff", fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, marginLeft: "auto", opacity: loading ? 0.7 : 1 }}>
+          <CheckIcon sx={{ fontSize: 14 }} /> {loading === "approve" ? "جاري القبول..." : "قبول وتفعيل الربط"}
         </Box>
       </DialogActions>
     </Dialog>
@@ -471,11 +454,42 @@ export default function Partnerships() {
   const [approvalTarget, setApprovalTarget] = useState(null);
   const [copyError, setCopyError] = useState("");
   const [copiedCodeId, setCopiedCodeId] = useState(null);
+  const [activePartnerships, setActivePartnerships] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [myInviteCodes, setMyInviteCodes] = useState([]);
+  const [myPendingRequests, setMyPendingRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
 
-  const pendingCount = mockPendingApprovals.length;
+  const loadPartnerships = useCallback(async () => {
+    setPageError("");
+    setLoading(true);
+    try {
+      const response = await partnershipsApi.summary();
+      const data = response.data ?? {};
+      setActivePartnerships(data.activePartnerships ?? []);
+      setPendingApprovals(data.pendingApprovals ?? []);
+      setMyInviteCodes(data.inviteCodes ?? []);
+      setMyPendingRequests(data.pendingRequests ?? []);
+    } catch (error) {
+      setPageError(getApiErrorMessage(error, "تعذر تحميل شبكة الشركاء"));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPartnerships();
+  }, [loadPartnerships]);
+
+  const pendingCount = pendingApprovals.length;
 
   const handleInviteCodeCopy = async (code, id) => {
     setCopyError("");
+    if (!code) {
+      setCopyError("الكود الكامل يظهر مرة واحدة عند الإنشاء فقط.");
+      return;
+    }
     try {
       await copyToClipboard(code);
       setCopiedCodeId(id);
@@ -483,6 +497,26 @@ export default function Partnerships() {
     } catch {
       setCopiedCodeId(null);
       setCopyError("تعذر نسخ الكود تلقائياً. انسخه يدوياً من الجدول.");
+    }
+  };
+
+  const handleReject = async (id) => {
+    await partnershipsApi.rejectRequest(id);
+    await loadPartnerships();
+  };
+
+  const handleApprove = async (id, body) => {
+    await partnershipsApi.approveRequest(id, body);
+    await loadPartnerships();
+  };
+
+  const handleRevoke = async (id) => {
+    setCopyError("");
+    try {
+      await partnershipsApi.revokePartnership(id);
+      await loadPartnerships();
+    } catch (error) {
+      setCopyError(getApiErrorMessage(error, "تعذر إلغاء الربط"));
     }
   };
 
@@ -516,6 +550,16 @@ export default function Partnerships() {
             {copyError}
           </Alert>
         )}
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+        {loading && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            جاري تحميل شبكة الشركاء...
+          </Alert>
+        )}
 
         {/* Info banner */}
         <Card sx={{ p: 2, mb: 2.5, background: "linear-gradient(135deg, #f0f7ff, #e8f4fd)", border: "1px solid #b2d8f0" }}>
@@ -537,7 +581,7 @@ export default function Partnerships() {
           <SoftBox borderBottom="1px solid #eee">
             <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="inherit"
               TabIndicatorProps={{ style: { background: "#17c1e8" } }}>
-              <Tab label={<SoftTypography variant="caption" fontWeight="medium">شركائي ({mockActivePartnerships.length})</SoftTypography>} />
+              <Tab label={<SoftTypography variant="caption" fontWeight="medium">شركائي ({activePartnerships.length})</SoftTypography>} />
               <Tab label={
                 <SoftBox display="flex" alignItems="center" gap={0.5}>
                   <SoftTypography variant="caption" fontWeight="medium">طلبات معلقة</SoftTypography>
@@ -548,8 +592,8 @@ export default function Partnerships() {
                   )}
                 </SoftBox>
               } />
-              <Tab label={<SoftTypography variant="caption" fontWeight="medium">كوداتي ({mockMyInviteCodes.length})</SoftTypography>} />
-              <Tab label={<SoftTypography variant="caption" fontWeight="medium">طلباتي ({mockMyPendingRequests.length})</SoftTypography>} />
+              <Tab label={<SoftTypography variant="caption" fontWeight="medium">كوداتي ({myInviteCodes.length})</SoftTypography>} />
+              <Tab label={<SoftTypography variant="caption" fontWeight="medium">طلباتي ({myPendingRequests.length})</SoftTypography>} />
             </Tabs>
           </SoftBox>
 
@@ -567,7 +611,7 @@ export default function Partnerships() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {mockActivePartnerships.map((p) => (
+                    {activePartnerships.map((p) => (
                       <TableRow key={p.id} sx={{ "&:hover": { background: "#f8f9fa" } }}>
                         <TableCell>
                           <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767" }}>{p.partnerName}</Box>
@@ -589,22 +633,29 @@ export default function Partnerships() {
                         <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>{p.approvedAt}</TableCell>
                         <TableCell>
                           <SoftBox display="flex" gap={0.5}>
-                            {p.permissions.view_inventory && (
+                            {p.direction === "requester" && p.permissions.view_inventory && (
                               <Tooltip title="عرض مخزون الشريك">
                                 <IconButton size="small" onClick={() => navigate(`/partnerships/inventory/${p.partnerUuid}`, { state: { partner: p } })}>
                                   <OpenInNewIcon sx={{ fontSize: 15 }} />
                                 </IconButton>
                               </Tooltip>
                             )}
-                            <Tooltip title="إدارة الصلاحيات">
-                              <IconButton size="small" onClick={() => setApprovalTarget({ ...mockPendingApprovals[0], partnerName: p.partnerName, partnerEmail: p.partnerEmail, partnerWilaya: p.partnerWilaya, inviteCode: p.inviteCode, requestedAt: p.approvedAt, message: "" })}>
-                                <InfoOutlinedIcon sx={{ fontSize: 15 }} />
+                            <Tooltip title="إلغاء الربط">
+                              <IconButton size="small" onClick={() => handleRevoke(p.id)}>
+                                <CloseIcon sx={{ fontSize: 15 }} />
                               </IconButton>
                             </Tooltip>
                           </SoftBox>
                         </TableCell>
                       </TableRow>
                     ))}
+                    {activePartnerships.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} sx={{ textAlign: "center", py: 5, color: "#8392ab", fontSize: 13 }}>
+                          لا توجد روابط نشطة
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -612,11 +663,11 @@ export default function Partnerships() {
 
             {/* ── Tab 1: Pending Approvals ───────────────────────────────── */}
             {tab === 1 && (
-              mockPendingApprovals.length === 0 ? (
+              pendingApprovals.length === 0 ? (
                 <Box sx={{ textAlign: "center", py: 5, color: "#8392ab", fontSize: 13 }}>لا توجد طلبات معلقة</Box>
               ) : (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                  {mockPendingApprovals.map((req) => (
+                  {pendingApprovals.map((req) => (
                     <Box key={req.id} sx={{
                       border: "1px solid #fb8c0044", borderRadius: 2, p: 2,
                       background: "#fff9f0", display: "flex", gap: 2, alignItems: "flex-start",
@@ -631,7 +682,7 @@ export default function Partnerships() {
                         )}
                       </Box>
                       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
-                        <Box component="button"
+                        <Box component="button" onClick={() => handleReject(req.id)}
                           sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 1.5, py: 0.6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                           رفض
                         </Box>
@@ -658,10 +709,10 @@ export default function Partnerships() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {mockMyInviteCodes.map((c) => (
+                    {myInviteCodes.map((c) => (
                       <TableRow key={c.id} sx={{ "&:hover": { background: "#f8f9fa" } }}>
                         <TableCell>
-                          <Box sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#344767", letterSpacing: 1 }}>{c.code}</Box>
+                          <Box sx={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "#344767", letterSpacing: c.code ? 1 : 0 }}>{c.code || "يظهر عند الإنشاء فقط"}</Box>
                         </TableCell>
                         <TableCell sx={{ fontSize: 12, color: "#344767" }}>{c.label}</TableCell>
                         <TableCell><PermissionSummary permissions={c.permissions} /></TableCell>
@@ -679,12 +730,19 @@ export default function Partnerships() {
                         <TableCell>
                           <Tooltip title={copiedCodeId === c.id ? "تم النسخ!" : "نسخ الكود"}>
                             <IconButton size="small" onClick={() => handleInviteCodeCopy(c.code, c.id)}>
-                              <ContentCopyIcon sx={{ fontSize: 14, color: copiedCodeId === c.id ? "#82d616" : "inherit" }} />
+                              <ContentCopyIcon sx={{ fontSize: 14, color: copiedCodeId === c.id ? "#82d616" : c.code ? "inherit" : "#adb5bd" }} />
                             </IconButton>
                           </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))}
+                    {myInviteCodes.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={7} sx={{ textAlign: "center", py: 5, color: "#8392ab", fontSize: 13 }}>
+                          لا توجد أكواد ربط
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -692,11 +750,11 @@ export default function Partnerships() {
 
             {/* ── Tab 3: My Submitted Requests ──────────────────────────── */}
             {tab === 3 && (
-              mockMyPendingRequests.length === 0 ? (
+              myPendingRequests.length === 0 ? (
                 <Box sx={{ textAlign: "center", py: 5, color: "#8392ab", fontSize: 13 }}>لم تقدم أي طلبات</Box>
               ) : (
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-                  {mockMyPendingRequests.map((req) => (
+                  {myPendingRequests.map((req) => (
                     <Box key={req.id} sx={{ border: "1px solid #b2ebf9", borderRadius: 2, p: 2, background: "#f0f7ff", display: "flex", gap: 2, alignItems: "center" }}>
                       <HourglassEmptyIcon sx={{ fontSize: 20, color: "#17c1e8", flexShrink: 0 }} />
                       <Box sx={{ flex: 1 }}>
@@ -704,7 +762,7 @@ export default function Partnerships() {
                         <Box sx={{ fontSize: 11, color: "#8392ab" }}>{req.partnerEmail} · {req.partnerWilaya}</Box>
                         <Box sx={{ fontSize: 11, color: "#344767", mt: 0.3 }}>
                           الكود: <Box component="span" sx={{ fontFamily: "monospace", fontWeight: 700 }}>{req.inviteCode}</Box>
-                          {" · "} أُرسل في {req.submittedAt}
+                          {" · "} أُرسل في {req.requestedAt}
                         </Box>
                       </Box>
                       <Chip label="في الانتظار" size="small" sx={{ background: "#fff3e0", color: "#fb8c00", fontWeight: 600, fontSize: 10 }} />
@@ -718,9 +776,9 @@ export default function Partnerships() {
         </Card>
       </SoftBox>
 
-      <GenerateCodeDialog open={genOpen} onClose={() => setGenOpen(false)} />
-      <SubmitCodeDialog open={submitOpen} onClose={() => setSubmitOpen(false)} />
-      <ApprovalDialog request={approvalTarget} onClose={() => setApprovalTarget(null)} />
+      <GenerateCodeDialog open={genOpen} onClose={() => setGenOpen(false)} onCreated={loadPartnerships} />
+      <SubmitCodeDialog open={submitOpen} onClose={() => setSubmitOpen(false)} onSubmitted={loadPartnerships} />
+      <ApprovalDialog request={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={handleApprove} onReject={handleReject} />
       <Footer />
     </DashboardLayout>
   );

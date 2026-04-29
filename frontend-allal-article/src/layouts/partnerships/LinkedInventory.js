@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -35,14 +36,28 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import partnershipsApi from "services/partnershipsApi";
+import { getApiErrorMessage } from "utils/formErrors";
 
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
 // ─── Clone Confirm Dialog ─────────────────────────────────────────────────────
-function CloneDialog({ products, onClose }) {
+function CloneDialog({ products, loading, error, clonedCount, onClose, onConfirm }) {
   const [cloned, setCloned] = useState(false);
+
+  useEffect(() => {
+    setCloned(false);
+  }, [products]);
+
   if (!products) return null;
+
+  const handleConfirm = async () => {
+    const count = await onConfirm?.(products.map((product) => product.id));
+    if (typeof count === "number") {
+      setCloned(true);
+    }
+  };
 
   return (
     <Dialog open={!!products} onClose={onClose} maxWidth="sm" fullWidth>
@@ -70,12 +85,13 @@ function CloneDialog({ products, onClose }) {
               الكميات لن تُنسخ — الكميات في مخزونك خاصة بك. فقط بيانات الصنف تُنسخ.
               إذا كان الصنف موجوداً مسبقاً، ستُحدَّث بياناته.
             </Box>
+            {error && <Alert severity="error">{error}</Alert>}
           </Box>
         ) : (
           <Box sx={{ textAlign: "center", py: 3 }}>
             <CheckCircleIcon sx={{ fontSize: 52, color: "#82d616", mb: 1 }} />
             <Box sx={{ fontSize: 15, fontWeight: 700, color: "#344767", mb: 0.5 }}>تمت النسخة بنجاح</Box>
-            <Box sx={{ fontSize: 12, color: "#8392ab" }}>تم إضافة/تحديث {products.length} صنف في مخزونك</Box>
+            <Box sx={{ fontSize: 12, color: "#8392ab" }}>تم إضافة/تحديث {clonedCount ?? products.length} صنف في مخزونك</Box>
           </Box>
         )}
       </DialogContent>
@@ -86,9 +102,9 @@ function CloneDialog({ products, onClose }) {
               sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}>
               إلغاء
             </Box>
-            <Box component="button" onClick={() => setCloned(true)}
-              sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: "pointer", fontSize: 13, color: "#fff", fontWeight: 600 }}>
-              تأكيد النسخ
+            <Box component="button" onClick={handleConfirm} disabled={loading}
+              sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, color: "#fff", fontWeight: 600, opacity: loading ? 0.7 : 1 }}>
+              {loading ? "جاري النسخ..." : "تأكيد النسخ"}
             </Box>
           </>
         ) : (
@@ -130,18 +146,64 @@ export default function LinkedInventory() {
   const { partnerId } = useParams();
   const { state } = useLocation();
 
-  const partner = state?.partner ?? null;
-  const products = [];
-  const perms = partner?.permissions ?? {};
+  const [partner, setPartner] = useState(state?.partner ?? null);
+  const [products, setProducts] = useState([]);
+  const [perms, setPerms] = useState(state?.partner?.permissions ?? {});
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
 
   const [search, setSearch] = useState("");
   const [filterStock, setFilterStock] = useState("all"); // all | available | out
   const [cloneTarget, setCloneTarget] = useState(null);
+  const [cloneError, setCloneError] = useState("");
+  const [cloneLoading, setCloneLoading] = useState(false);
+  const [clonedCount, setClonedCount] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadInventory() {
+      setPageError("");
+      setLoading(true);
+      try {
+        const response = await partnershipsApi.linkedInventory(partnerId);
+        if (!active) return;
+        setPartner(response.data.partner);
+        setPerms(response.data.permissions ?? {});
+        setProducts(response.data.products ?? []);
+      } catch (error) {
+        if (active) {
+          setPageError(getApiErrorMessage(error, "تعذر تحميل مخزون الشريك"));
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadInventory();
+    return () => { active = false; };
+  }, [partnerId]);
+
+  const handleClone = async (productIds) => {
+    setCloneError("");
+    setCloneLoading(true);
+    try {
+      const response = await partnershipsApi.cloneProducts(partnerId, productIds);
+      const count = response.data?.clonedCount ?? productIds.length;
+      setClonedCount(count);
+      return count;
+    } catch (error) {
+      setCloneError(getApiErrorMessage(error, "تعذر نسخ الأصناف"));
+      return null;
+    } finally {
+      setCloneLoading(false);
+    }
+  };
 
   const filtered = products.filter((p) => {
     if (filterStock === "available" && p.stock === 0) return false;
     if (filterStock === "out" && p.stock > 0) return false;
-    if (search && !p.nameAr.includes(search) && !p.code.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !p.nameAr?.includes(search) && !p.code?.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -168,6 +230,17 @@ export default function LinkedInventory() {
             عرض للقراءة فقط — بيانات مخزون الشريك حسب الصلاحيات الممنوحة
           </SoftTypography>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+        {loading && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            جاري تحميل مخزون الشريك...
+          </Alert>
+        )}
 
         {/* Permission badges */}
         <Card sx={{ p: 1.5, mb: 2.5, display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
@@ -196,13 +269,15 @@ export default function LinkedInventory() {
           {perms.clone_products && (
             <Box
               component="button"
-              onClick={() => setCloneTarget(products)}
+              onClick={() => { setClonedCount(null); setCloneError(""); setCloneTarget(products); }}
+              disabled={products.length === 0 || loading}
               sx={{
                 display: "flex", alignItems: "center", gap: 0.8,
                 background: "linear-gradient(135deg, #7928ca, #5e1e9e)",
                 border: "none", borderRadius: "10px", px: 2.5, py: 1,
-                cursor: "pointer", color: "#fff", fontWeight: 600, fontSize: 13,
+                cursor: products.length === 0 || loading ? "not-allowed" : "pointer", color: "#fff", fontWeight: 600, fontSize: 13,
                 alignSelf: "stretch",
+                opacity: products.length === 0 || loading ? 0.65 : 1,
               }}
             >
               <ContentCopyIcon sx={{ fontSize: 16 }} /> نسخ كل الأصناف لمخزوني
@@ -293,7 +368,7 @@ export default function LinkedInventory() {
                     {perms.clone_products && (
                       <TableCell>
                         <Tooltip title="نسخ هذا الصنف فقط">
-                          <IconButton size="small" onClick={() => setCloneTarget([product])}>
+                          <IconButton size="small" onClick={() => { setClonedCount(null); setCloneError(""); setCloneTarget([product]); }}>
                             <ContentCopyIcon sx={{ fontSize: 14 }} />
                           </IconButton>
                         </Tooltip>
@@ -325,7 +400,14 @@ export default function LinkedInventory() {
 
       </SoftBox>
 
-      <CloneDialog products={cloneTarget} onClose={() => setCloneTarget(null)} />
+      <CloneDialog
+        products={cloneTarget}
+        loading={cloneLoading}
+        error={cloneError}
+        clonedCount={clonedCount}
+        onClose={() => { setCloneTarget(null); setCloneError(""); setCloneLoading(false); }}
+        onConfirm={handleClone}
+      />
       <Footer />
     </DashboardLayout>
   );
