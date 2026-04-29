@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState, useEffect, useCallback } from "react";
 
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -32,6 +33,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { priceListsApi, suppliersApi, customersApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const formatDZD = (v) =>
   Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " دج";
@@ -167,6 +169,7 @@ function PriceLists() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialog, setAssignDialog] = useState(false);
   const [listForm, setListForm] = useState({ name: "", type: "sales", code: "" });
+  const [listErrors, setListErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [suppliers, setSuppliers] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -219,7 +222,12 @@ function PriceLists() {
   }, [items, search]);
 
   const setProductPrice = useCallback((item, value) => {
-    const price = Math.max(0, Number(value || 0));
+    const rawPrice = Number(value || 0);
+    if (!Number.isFinite(rawPrice) || rawPrice < 0) {
+      setSnack("السعر يجب أن يكون رقماً موجباً");
+      return;
+    }
+    const price = Math.max(0, rawPrice);
     priceListsApi.upsertItem(selectedId, item.product_id, price)
       .then(() => {
         setItems((prev) =>
@@ -231,10 +239,23 @@ function PriceLists() {
       .catch(() => setSnack("فشل حفظ السعر"));
   }, [selectedId]);
 
+  const setListField = (field, value) => {
+    setListForm((current) => ({ ...current, [field]: value }));
+    if (listErrors[field] || listErrors._global) {
+      setListErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
+  };
+
   const saveNewList = () => {
     const name = listForm.name.trim();
-    if (!name) return;
+    const nextErrors = {};
+    if (isBlank(name)) nextErrors.name = "اسم قائمة الأسعار مطلوب";
+    if (listForm.code && lists.some((list) => list.code === listForm.code.trim())) {
+      nextErrors.code = "هذا الكود مستعمل من قبل";
+    }
+    if (hasErrors(nextErrors)) { setListErrors(nextErrors); return; }
     setSaving(true);
+    setListErrors({});
     priceListsApi.create({
       name,
       code: listForm.code.trim() || `PL-${Date.now()}`,
@@ -247,7 +268,10 @@ function PriceLists() {
         setDialogOpen(false);
         setSnack("تم إنشاء قائمة الأسعار");
       })
-      .catch(() => setSnack("فشل إنشاء القائمة"))
+      .catch((error) => {
+        applyApiErrors(error, setListErrors, "فشل إنشاء القائمة");
+        setSnack("فشل إنشاء القائمة");
+      })
       .finally(() => setSaving(false));
   };
 
@@ -283,7 +307,7 @@ function PriceLists() {
             </SoftTypography>
           </SoftBox>
           <SoftButton variant="gradient" color="info" startIcon={<AddIcon />}
-            onClick={() => { setListForm({ name: "", type: "sales", code: "" }); setDialogOpen(true); }}>
+            onClick={() => { setListForm({ name: "", type: "sales", code: "" }); setListErrors({}); setDialogOpen(true); }}>
             قائمة أسعار جديدة
           </SoftButton>
         </SoftBox>
@@ -313,7 +337,7 @@ function PriceLists() {
               أنشئ قائمة أسعار لتطبيق أسعار مخصصة على الزبائن أو الموردين
             </SoftTypography>
             <SoftButton variant="gradient" color="info" startIcon={<AddIcon />}
-              onClick={() => { setListForm({ name: "", type: "sales", code: "" }); setDialogOpen(true); }}>
+              onClick={() => { setListForm({ name: "", type: "sales", code: "" }); setListErrors({}); setDialogOpen(true); }}>
               إنشاء قائمة أولى
             </SoftButton>
           </Card>
@@ -458,19 +482,30 @@ function PriceLists() {
         <DialogTitle>قائمة أسعار جديدة</DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2}>
+            {listErrors._global && (
+              <Grid item xs={12}>
+                <Alert severity="error">{listErrors._global}</Alert>
+              </Grid>
+            )}
             <Grid item xs={12} sm={8}>
               <TextField fullWidth size="small" label="اسم القائمة" value={listForm.name}
-                onChange={(e) => setListForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="مثال: أسعار الجملة" />
+                onChange={(e) => setListField("name", e.target.value)}
+                placeholder="مثال: أسعار الجملة"
+                error={!!listErrors.name}
+                helperText={listErrors.name || ""} />
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth size="small" label="الكود" value={listForm.code}
-                onChange={(e) => setListForm((f) => ({ ...f, code: e.target.value }))}
-                placeholder="اختياري" />
+                onChange={(e) => setListField("code", e.target.value)}
+                placeholder="اختياري"
+                error={!!listErrors.code}
+                helperText={listErrors.code || ""} />
             </Grid>
             <Grid item xs={12}>
               <TextField fullWidth select size="small" label="نوع القائمة" value={listForm.type}
-                onChange={(e) => setListForm((f) => ({ ...f, type: e.target.value }))}>
+                onChange={(e) => setListField("type", e.target.value)}
+                error={!!listErrors.type}
+                helperText={listErrors.type || ""}>
                 <MenuItem value="sales">بيع</MenuItem>
                 <MenuItem value="purchase">شراء</MenuItem>
                 <MenuItem value="both">بيع وشراء</MenuItem>

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Collapse from "@mui/material/Collapse";
@@ -50,6 +51,7 @@ import {
   suggestChildCode,
 } from "./mockData";
 import { accountingApi } from "services";
+import { applyApiErrors } from "utils/formErrors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let nextId = 1000;
@@ -337,42 +339,58 @@ function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, 
 
   const [form, setForm]       = useState(initForm);
   const [touched, setTouched] = useState(false);
+  const [errors, setErrors]   = useState({});
+  const [saving, setSaving]   = useState(false);
 
   // Reset when dialog reopens
-  useMemo(() => { if (open) { setForm(initForm()); setTouched(false); } }, [open]); // eslint-disable-line
+  useMemo(() => { if (open) { setForm(initForm()); setTouched(false); setErrors({}); setSaving(false); } }, [open]); // eslint-disable-line
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => {
+    setForm((p) => ({ ...p, [k]: v }));
+    if (errors[k] || errors._global || (k === "nameAr" && errors.name)) {
+      setErrors((current) => ({ ...current, [k]: "", ...(k === "nameAr" ? { name: "" } : {}), _global: "" }));
+    }
+  };
 
   // Validation
   const codeEmpty     = !form.code.trim();
   const codeDuplicate = isDuplicateCode(form.code.trim(), allAccounts, isEdit ? editAccount.id : null);
   const nameEmpty     = !form.nameAr.trim();
-  const codeError     = touched && (codeEmpty ? "الكود مطلوب" : codeDuplicate ? "الكود موجود مسبقاً" : "");
-  const nameError     = touched && nameEmpty ? "الاسم مطلوب" : "";
+  const codeError     = errors.code || (touched && (codeEmpty ? "الكود مطلوب" : codeDuplicate ? "الكود موجود مسبقاً" : ""));
+  const nameError     = errors.nameAr || errors.name || (touched && nameEmpty ? "الاسم مطلوب" : "");
   const hasError      = codeEmpty || codeDuplicate || nameEmpty;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setTouched(true);
     if (hasError) return;
 
     const parentId = isEdit ? editAccount.parent_id : (parentAccount?.id ?? null);
     const level    = isEdit ? editAccount.level : ((parentAccount?.level ?? 0) + 1);
 
-    onSave({
-      ...(isEdit ? editAccount : {}),
-      id:          isEdit ? editAccount.id : newId(),
-      code:        form.code.trim(),
-      nameAr:      form.nameAr.trim(),
-      parent_id:   parentId,
-      parent_code: isEdit ? editAccount.parent_code : (parentAccount?.code ?? null),
-      level,
-      type:        form.type,
-      list:        form.list,
-      department:  form.department,
-      side:        form.side,
-      is_active:   form.is_active,
-      balance:     isEdit ? (editAccount.balance ?? 0) : 0,
-    });
+    setSaving(true);
+    setErrors({});
+    try {
+      await onSave({
+        ...(isEdit ? editAccount : {}),
+        id:          isEdit ? editAccount.id : newId(),
+        code:        form.code.trim(),
+        nameAr:      form.nameAr.trim(),
+        parent_id:   parentId,
+        parent_code: isEdit ? editAccount.parent_code : (parentAccount?.code ?? null),
+        level,
+        type:        form.type,
+        list:        form.list,
+        department:  form.department,
+        side:        form.side,
+        is_active:   form.is_active,
+        balance:     isEdit ? (editAccount.balance ?? 0) : 0,
+      });
+      onClose();
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ الحساب");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Fields inherited from parent (shown with indicator)
@@ -398,6 +416,11 @@ function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, 
 
       <DialogContent dividers>
         <Grid container spacing={2} mt={0}>
+          {errors._global && (
+            <Grid item xs={12}>
+              <Alert severity="error">{errors._global}</Alert>
+            </Grid>
+          )}
 
           {/* Code */}
           <Grid item xs={4}>
@@ -545,10 +568,11 @@ function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, 
         <SoftButton variant="text" color="secondary" onClick={onClose}>إلغاء</SoftButton>
         <SoftButton
           variant="gradient" color="info"
+          disabled={saving}
           onClick={handleSave}
           startIcon={<CheckCircleOutlineIcon />}
         >
-          {isEdit ? "حفظ التعديلات" : "إضافة الحساب"}
+          {saving ? "جارٍ الحفظ..." : isEdit ? "حفظ التعديلات" : "إضافة الحساب"}
         </SoftButton>
       </DialogActions>
     </Dialog>
@@ -593,7 +617,7 @@ export default function AccountsTree() {
     const apiCall = isEdit
       ? accountingApi.updateAccount(formData.id, apiData).then((r) => r.data)
       : accountingApi.createAccount(apiData).then((r) => r.data);
-    apiCall
+    return apiCall
       .then((saved) => {
         setAccounts((prev) => {
           const exists = prev.some((a) => a.id === saved.id);
@@ -601,8 +625,7 @@ export default function AccountsTree() {
         });
         setSelected(saved);
         setDialog(null);
-      })
-      .catch(console.error);
+      });
   };
 
   // ── Filtered flat list ────────────────────────────────────────────────────

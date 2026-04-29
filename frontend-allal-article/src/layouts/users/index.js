@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from "react";
 
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -12,6 +13,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import FormHelperText from "@mui/material/FormHelperText";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -50,6 +52,7 @@ import {
   roleDefaultPermissions,
 } from "data/config/permissionsConfig";
 import { usersApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 
@@ -195,18 +198,60 @@ function PermissionsDialog({ user, onClose, onSave }) {
 function UserFormDialog({ open, user, onClose, onSave }) {
   const isEdit = Boolean(user);
   const [showPass, setShowPass] = useState(false);
-  const [form, setForm] = useState(() => user ? { ...user } : {
+  const buildForm = () => user ? { ...user, password: "" } : {
     name: "", email: "", phone: "", role: "salesperson", status: "active",
     assignedWilaya: "", maxDiscountPct: 0, canViewAllOrders: false, lang: "ar", notes: "",
     password: "",
-  });
+  };
+  const [form, setForm] = useState(buildForm);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
-  const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
+  useEffect(() => {
+    if (open) {
+      setForm(buildForm());
+      setErrors({});
+      setSaving(false);
+    }
+  }, [open, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSave = () => {
-    if (!form.name.trim() || !form.email.trim()) return;
-    onSave && onSave({ ...form, id: user?.id || Date.now(), lastLogin: user?.lastLogin || "—", ordersCount: user?.ordersCount || 0, customPermissions: user?.customPermissions || [] });
-    onClose();
+  const set = (k, v) => {
+    setForm((prev) => ({ ...prev, [k]: v }));
+    if (errors[k] || errors._global || (k === "role" && errors.roleId)) {
+      setErrors((current) => ({ ...current, [k]: "", ...(k === "role" ? { roleId: "" } : {}), _global: "" }));
+    }
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+    if (isBlank(form.name)) nextErrors.name = "اسم المستخدم مطلوب";
+    if (isBlank(form.email)) nextErrors.email = "البريد الإلكتروني مطلوب";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = "البريد الإلكتروني غير صالح";
+    if (!form.role) nextErrors.role = "الدور مطلوب";
+    if (!isEdit && isBlank(form.password)) nextErrors.password = "كلمة المرور مطلوبة";
+    if (form.password && form.password.length < 8) nextErrors.password = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+    return nextErrors;
+  };
+
+  const handleSave = async () => {
+    const nextErrors = validate();
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setSaving(true);
+    setErrors({});
+    try {
+      await onSave?.({
+        ...form,
+        id: user?.id || Date.now(),
+        lastLogin: user?.lastLogin || "—",
+        ordersCount: user?.ordersCount || 0,
+        customPermissions: user?.customPermissions || [],
+      });
+      onClose();
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ المستخدم");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const rc = roleConfig[form.role] || roleConfig.salesperson;
@@ -227,6 +272,11 @@ function UserFormDialog({ open, user, onClose, onSave }) {
       </DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
         <Grid container spacing={2}>
+          {errors._global && (
+            <Grid item xs={12}>
+              <Alert severity="error">{errors._global}</Alert>
+            </Grid>
+          )}
           {/* ── الهوية ── */}
           <Grid item xs={12}>
             <SoftTypography variant="caption" fontWeight="bold" color="secondary">الهوية</SoftTypography>
@@ -234,15 +284,21 @@ function UserFormDialog({ open, user, onClose, onSave }) {
           </Grid>
           <Grid item xs={12}>
             <TextField fullWidth size="small" label="الاسم الكامل *" value={form.name}
-              onChange={(e) => set("name", e.target.value)} />
+              onChange={(e) => set("name", e.target.value)}
+              error={!!errors.name}
+              helperText={errors.name || ""} />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth size="small" label="البريد الإلكتروني *" value={form.email}
-              onChange={(e) => set("email", e.target.value)} />
+              onChange={(e) => set("email", e.target.value)}
+              error={!!errors.email}
+              helperText={errors.email || ""} />
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth size="small" label="رقم الهاتف" value={form.phone}
-              onChange={(e) => set("phone", e.target.value)} />
+              onChange={(e) => set("phone", e.target.value)}
+              error={!!errors.phone}
+              helperText={errors.phone || ""} />
           </Grid>
 
           {/* ── الدور والحالة ── */}
@@ -251,7 +307,7 @@ function UserFormDialog({ open, user, onClose, onSave }) {
             <Divider sx={{ mt: 0.5, mb: 1.5 }} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <FormControl size="small" fullWidth>
+            <FormControl size="small" fullWidth error={!!errors.role || !!errors.roleId}>
               <InputLabel>الدور *</InputLabel>
               <Select value={form.role} label="الدور *" onChange={(e) => set("role", e.target.value)}>
                 {Object.entries(roleConfig).map(([key, cfg]) => (
@@ -262,6 +318,7 @@ function UserFormDialog({ open, user, onClose, onSave }) {
                   </MenuItem>
                 ))}
               </Select>
+              {(errors.role || errors.roleId) && <FormHelperText>{errors.role || errors.roleId}</FormHelperText>}
             </FormControl>
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -349,6 +406,8 @@ function UserFormDialog({ open, user, onClose, onSave }) {
               type={showPass ? "text" : "password"}
               value={form.password || ""}
               onChange={(e) => set("password", e.target.value)}
+              error={!!errors.password}
+              helperText={errors.password || ""}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><LockIcon fontSize="small" sx={{ color: "#94a3b8" }} /></InputAdornment>,
                 endAdornment: (
@@ -371,9 +430,9 @@ function UserFormDialog({ open, user, onClose, onSave }) {
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
         <SoftButton variant="gradient" color="info" size="small"
-          disabled={!form.name.trim() || !form.email.trim()}
+          disabled={saving}
           onClick={handleSave}>
-          {isEdit ? "حفظ التعديلات" : "إضافة المستخدم"}
+          {saving ? "جارٍ الحفظ..." : isEdit ? "حفظ التعديلات" : "إضافة المستخدم"}
         </SoftButton>
       </DialogActions>
     </Dialog>
@@ -425,17 +484,31 @@ function Users() {
   });
 
   const upsertUser = async (u) => {
-    try {
-      const roleObj = roles.find((r) => r.code === u.role);
-      const req = { name: u.name, email: u.email, phone: u.phone || "", roleId: roleObj?.id, userType: u.userType || "staff" };
-      if (u.password) req.password = u.password;
-      if (u.id && u.id < 1e13) {
-        await usersApi.update(u.id, req);
-      } else {
-        await usersApi.create(req);
-      }
-      loadUsers();
-    } catch (e) { console.error(e); }
+    const roleObj = roles.find((r) => r.code === u.role);
+    if (!roleObj?.id) {
+      const error = new Error("Role is required");
+      error.response = {
+        data: {
+          message: "يرجى تصحيح الأخطاء الموضحة في الحقول",
+          errors: [{ field: "role", message: "الدور مطلوب أو غير موجود" }],
+        },
+      };
+      throw error;
+    }
+    const req = {
+      name: u.name.trim(),
+      email: u.email.trim(),
+      phone: u.phone?.trim() || "",
+      roleId: roleObj.id,
+      userType: u.userType || "staff",
+    };
+    if (u.password) req.password = u.password;
+    if (u.id && u.id < 1e13) {
+      await usersApi.update(u.id, req);
+    } else {
+      await usersApi.create(req);
+    }
+    loadUsers();
   };
 
   const toggleStatus = async (userId) => {
@@ -610,7 +683,7 @@ function Users() {
         open={!!formDialog}
         user={typeof formDialog === "object" ? formDialog : null}
         onClose={() => setFormDialog(null)}
-        onSave={(u) => { upsertUser(u); setFormDialog(null); }}
+        onSave={upsertUser}
       />
       <PermissionsDialog
         user={permDialog}

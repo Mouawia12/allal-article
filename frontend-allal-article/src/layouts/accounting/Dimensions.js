@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -30,6 +31,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const DIM_TYPE_META = {
   cost_center:   { color: "#17c1e8" },
@@ -44,6 +46,28 @@ const fmt = (n) =>
 
 function DimDialog({ item, onClose, onSave }) {
   const [form, setForm] = useState(item ?? { code: "", name: "", active: true });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const set = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
+  const save = async () => {
+    const nextErrors = {};
+    if (isBlank(form.code)) nextErrors.code = "الكود مطلوب";
+    if (isBlank(form.name)) nextErrors.name = "الاسم مطلوب";
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setSaving(true);
+    setErrors({});
+    try {
+      await onSave(form);
+      onClose();
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ البعد");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -52,14 +76,17 @@ function DimDialog({ item, onClose, onSave }) {
       </DialogTitle>
       <DialogContent>
         <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+          {errors._global && <Alert severity="error">{errors._global}</Alert>}
           <TextField label="الكود" size="small" fullWidth value={form.code}
-            onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+            onChange={(e) => set("code", e.target.value)}
+            error={!!errors.code} helperText={errors.code || ""} />
           <TextField label="الاسم" size="small" fullWidth value={form.name}
-            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+            onChange={(e) => set("name", e.target.value)}
+            error={!!errors.name} helperText={errors.name || ""} />
           <SoftBox display="flex" gap={1} justifyContent="flex-end">
             <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-            <SoftButton variant="gradient" color="info" size="small" onClick={() => onSave(form)}>
-              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ
+            <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={save}>
+              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
@@ -130,13 +157,9 @@ export default function Dimensions() {
 
   const handleSave = (form) => {
     if (dialog === "new") {
-      accountingApi.addDimensionItem(currentType.code, form)
-        .then(reload).catch(console.error);
-    } else {
-      accountingApi.updateDimensionItem(dialog.id, form)
-        .then(reload).catch(console.error);
+      return accountingApi.addDimensionItem(currentType.code, form).then(reload);
     }
-    setDialog(null);
+    return accountingApi.updateDimensionItem(dialog.id, form).then(reload);
   };
 
   return (

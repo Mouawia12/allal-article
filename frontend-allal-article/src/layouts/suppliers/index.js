@@ -41,10 +41,20 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { purchasesApi, suppliersApi, referenceApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const formatDZD = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "0");
 const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
 const getSupplierBalance = () => 0;
+
+function openingBalanceDirection(value) {
+  return Number(value) < 0 ? "debit" : "credit";
+}
+
+function signedOpeningBalance(amount, direction) {
+  const value = Math.abs(Number(amount) || 0);
+  return direction === "debit" ? -value : value;
+}
 
 const supplierMatchLabels = {
   partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
@@ -79,6 +89,7 @@ const emptySupplierForm = {
   category: "",
   paymentTerms: "",
   openingBalance: "",
+  openingBalanceDirection: "credit",
 };
 
 function buildSupplierForm(supplier = null) {
@@ -95,7 +106,8 @@ function buildSupplierForm(supplier = null) {
     address: supplier.address || "",
     category: supplier.category || "",
     paymentTerms: supplier.paymentTerms || "",
-    openingBalance: supplier.openingBalance || "",
+    openingBalance: Math.abs(Number(supplier.openingBalance) || 0) || "",
+    openingBalanceDirection: openingBalanceDirection(supplier.openingBalance),
   };
 }
 
@@ -329,28 +341,42 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
 function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = [] }) {
   const [form, setForm] = useState(() => buildSupplierForm(supplier));
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
   const isEdit = Boolean(supplier);
 
   useEffect(() => {
     if (open) {
       setForm(buildSupplierForm(supplier));
       setErrors({});
+      setSaving(false);
     }
   }, [open, supplier]);
 
   const set = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if (errors[key]) setErrors((e) => ({ ...e, [key]: "" }));
+    if (errors[key] || errors._global) setErrors((e) => ({ ...e, [key]: "", _global: "" }));
   };
 
-  const save = () => {
+  const save = async () => {
     const errs = {};
-    if (!form.name.trim()) errs.name = "اسم المورد مطلوب";
-    if (!form.phone.trim()) errs.phone = "رقم الهاتف مطلوب";
+    if (isBlank(form.name)) errs.name = "اسم المورد مطلوب";
+    if (isBlank(form.phone)) errs.phone = "رقم الهاتف مطلوب";
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "بريد إلكتروني غير صالح";
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    onSave(form);
-    setForm(buildSupplierForm(null));
+    if (form.openingBalance && !Number.isFinite(Number(form.openingBalance))) {
+      errs.openingBalance = "الرصيد الافتتاحي يجب أن يكون رقماً";
+    }
+    if (hasErrors(errs)) { setErrors(errs); return; }
+    setSaving(true);
+    setErrors({});
+    try {
+      await onSave(form);
+      setForm(buildSupplierForm(null));
+      onClose();
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ المورد");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -358,6 +384,11 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
       <DialogTitle>{isEdit ? "تعديل المورد" : "إضافة مورد جديد"}</DialogTitle>
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
+          {errors._global && (
+            <Grid item xs={12}>
+              <Alert severity="error">{errors._global}</Alert>
+            </Grid>
+          )}
           <Grid item xs={12}>
             <TextField fullWidth autoFocus size="small" label="اسم المورد *" value={form.name}
               onChange={(e) => set("name", e.target.value)} error={!!errors.name} helperText={errors.name} />
@@ -407,7 +438,21 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth size="small" label="الرصيد الافتتاحي (دج)" type="number"
-              value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)} />
+              value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)}
+              error={!!errors.openingBalance} helperText={errors.openingBalance || ""} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>طبيعة الرصيد</InputLabel>
+              <Select
+                value={form.openingBalanceDirection}
+                label="طبيعة الرصيد"
+                onChange={(e) => set("openingBalanceDirection", e.target.value)}
+              >
+                <MenuItem value="credit">دائن - نحنا نخلصوه</MenuItem>
+                <MenuItem value="debit">مدين - هو يخلصنا</MenuItem>
+              </Select>
+            </FormControl>
           </Grid>
           <Grid item xs={12} sm={6}>
             <TextField fullWidth size="small" label="شروط الدفع" value={form.paymentTerms}
@@ -417,8 +462,8 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" onClick={save}>
-          {isEdit ? "حفظ التعديلات" : "حفظ المورد"}
+        <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={save}>
+          {saving ? "جارٍ الحفظ..." : isEdit ? "حفظ التعديلات" : "حفظ المورد"}
         </SoftButton>
       </DialogActions>
     </Dialog>
@@ -495,14 +540,17 @@ function Suppliers() {
       address: formData.address || null,
       category: formData.category || "عام",
       paymentTerms: formData.paymentTerms || null,
-      openingBalance: Number(formData.openingBalance) || 0,
+      openingBalance: signedOpeningBalance(formData.openingBalance, formData.openingBalanceDirection),
     };
     const apiCall = existingSupplier?.id
       ? suppliersApi.update(existingSupplier.id, apiData).then((r) => normalizeSupplier({ ...existingSupplier, ...r.data }))
       : suppliersApi.create(apiData).then((r) => normalizeSupplier(r.data));
-    apiCall
+    return apiCall
       .then((s) => { upsertSupplier(s); showToast("تم حفظ المورد بنجاح"); })
-      .catch((e) => showToast(e.response?.data?.message || "حدث خطأ أثناء الحفظ", "error"));
+      .catch((e) => {
+        showToast(e.response?.data?.message || "حدث خطأ أثناء الحفظ", "error");
+        throw e;
+      });
   };
 
   return (
@@ -588,20 +636,14 @@ function Suppliers() {
         open={addDialog}
         wilayas={wilayas}
         onClose={() => setAddDialog(false)}
-        onSave={(formData) => {
-          handleSaveSupplier(formData, null);
-          setAddDialog(false);
-        }}
+        onSave={(formData) => handleSaveSupplier(formData, null)}
       />
       <SupplierFormDialog
         open={!!editSupplier}
         supplier={editSupplier}
         wilayas={wilayas}
         onClose={() => setEditSupplier(null)}
-        onSave={(formData) => {
-          handleSaveSupplier(formData, editSupplier);
-          setEditSupplier(null);
-        }}
+        onSave={(formData) => handleSaveSupplier(formData, editSupplier)}
       />
 
       <Snackbar open={toast.open} autoHideDuration={4000}

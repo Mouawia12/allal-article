@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -50,6 +51,7 @@ import {
   emptyNewCustomerForm,
 } from "./NewOrder";
 import { ordersApi, customersApi, productsApi } from "services";
+import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,7 +86,7 @@ function getCustomerDebt(customer) {
 }
 
 // ─── Row Component ────────────────────────────────────────────────────────────
-function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef, apiProducts }) {
+function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef, apiProducts, errors = {} }) {
   const product = row.product;
   const stockColor = !product ? "inherit" : product.stock === 0 ? "#ea0606" : product.stock < 10 ? "#fb8c00" : "#66BB6A";
   const priceInfo = product ? resolveProductPrice(product, priceListId, "sales") : null;
@@ -143,6 +145,8 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
               {...params}
               placeholder="اكتب اسم الصنف أو الكود..."
               variant="outlined"
+              error={!!errors.productId}
+              helperText={errors.productId || ""}
               sx={{
                 "& .MuiOutlinedInput-root": { fontSize: 13, borderRadius: 1.5 },
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: "#e0e0e0" },
@@ -164,6 +168,8 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
           inputRef={qtyRef}
           placeholder="الكمية"
           disabled={!product}
+          error={!!errors.qty}
+          helperText={errors.qty || ""}
           inputProps={{ min: 1, style: { textAlign: "center" } }}
           onChange={(e) => onChange(row.id, "qty", e.target.value)}
           onKeyDown={(e) => {
@@ -280,6 +286,10 @@ export default function AdminNewOrder() {
   const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [orderErrors, setOrderErrors] = useState({});
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [newCustomerErrors, setNewCustomerErrors] = useState({});
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const selectedPriceList = salesPriceLists.find((l) => l.id === selectedPriceListId) || salesPriceLists[0];
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
@@ -316,6 +326,13 @@ export default function AdminNewOrder() {
   }, [rows]);
 
   const handleChange = useCallback((rowId, field, value) => {
+    setOrderErrors((current) => {
+      const next = { ...current, _global: "" };
+      delete next.items;
+      delete next[`line-${rowId}-productId`];
+      delete next[`line-${rowId}-qty`];
+      return next;
+    });
     setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
   }, []);
 
@@ -362,8 +379,17 @@ export default function AdminNewOrder() {
   const totalItems = filledRows.length;
 
   const handleSave = (action) => {
-    if (!customer) { alert("الرجاء اختيار الزبون أولاً"); return; }
-    if (filledRows.length === 0) { alert("الرجاء إضافة صنف واحد على الأقل"); return; }
+    const validationErrors = {};
+    if (!customer?.id) validationErrors._global = "الرجاء اختيار الزبون أولاً";
+    if (filledRows.length === 0) validationErrors.items = "الرجاء إضافة صنف واحد على الأقل";
+    filledRows.forEach((row) => {
+      if (!row.product?.id) validationErrors[`line-${row.id}-productId`] = "الصنف مطلوب";
+      if (!isPositiveNumber(row.qty)) validationErrors[`line-${row.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+    });
+
+    setOrderErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
     const payload = {
       customerId: customer.id,
       notes,
@@ -374,18 +400,39 @@ export default function AdminNewOrder() {
         return { productId: row.product.id, qty: Number(row.qty), unitPrice: priceInfo.unitPrice };
       }),
     };
-    ordersApi.create(payload).then(() => navigate("/orders")).catch(console.error);
+    setOrderSaving(true);
+    ordersApi.create(payload)
+      .then(() => navigate("/orders"))
+      .catch((error) => applyApiErrors(error, setOrderErrors, "فشل حفظ الطلبية"))
+      .finally(() => setOrderSaving(false));
   };
 
   const updateNewCustomerField = (field, value) => {
     setNewCustomerForm((current) => ({ ...current, [field]: value }));
+    if (newCustomerErrors[field] || newCustomerErrors._global) {
+      setNewCustomerErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
   };
 
   const addNewCustomer = () => {
     const name = newCustomerForm.name.trim();
     const phone = newCustomerForm.phone.trim();
     const wilaya = newCustomerForm.wilaya.trim();
-    if (!name || !phone || !wilaya) return;
+    const validationErrors = {};
+    if (isBlank(name)) validationErrors.name = "اسم الزبون مطلوب";
+    if (isBlank(phone)) validationErrors.phone = "رقم الهاتف مطلوب";
+    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
+    if (newCustomerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerForm.email)) {
+      validationErrors.email = "البريد الإلكتروني غير صالح";
+    }
+    if (newCustomerForm.openingBalance && Number(newCustomerForm.openingBalance) < 0) {
+      validationErrors.openingBalance = "الرصيد الافتتاحي لا يمكن أن يكون سالباً";
+    }
+
+    setNewCustomerErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
+    setNewCustomerSaving(true);
     customersApi.create({
       name, phone,
       phone2: newCustomerForm.phone2.trim(),
@@ -401,8 +448,10 @@ export default function AdminNewOrder() {
       setCustomer(newCustomer);
       setCustomerInfoOpen(false);
       setNewCustomerForm({ ...emptyNewCustomerForm });
+      setNewCustomerErrors({});
       setNewCustomerDialog(false);
-    }).catch(console.error);
+    }).catch((error) => applyApiErrors(error, setNewCustomerErrors, "فشل إضافة الزبون"))
+      .finally(() => setNewCustomerSaving(false));
   };
 
   return (
@@ -423,16 +472,22 @@ export default function AdminNewOrder() {
           </SoftBox>
 
           <SoftBox display="flex" gap={1.5}>
-            <SoftButton variant="outlined" color="secondary" size="small" onClick={() => handleSave("draft")}>
+            <SoftButton variant="outlined" color="secondary" size="small" disabled={orderSaving} onClick={() => handleSave("draft")}>
               <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} />
-              حفظ كمسودة
+              {orderSaving ? "جارٍ الحفظ..." : "حفظ كمسودة"}
             </SoftButton>
-            <SoftButton variant="gradient" color="success" size="small" onClick={() => handleSave("confirm")}>
+            <SoftButton variant="gradient" color="success" size="small" disabled={orderSaving} onClick={() => handleSave("confirm")}>
               <CheckCircleOutlineIcon sx={{ mr: 0.5, fontSize: 16 }} />
-              تأكيد الطلبية
+              {orderSaving ? "جارٍ الحفظ..." : "تأكيد الطلبية"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {(orderErrors._global || orderErrors.items) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {orderErrors._global || orderErrors.items}
+          </Alert>
+        )}
 
         {/* ── Customer + Notes ── */}
         <Card sx={{ mb: 2, p: 2.5 }}>
@@ -449,6 +504,7 @@ export default function AdminNewOrder() {
                   onChange={(_, v) => {
                     setCustomer(v);
                     setCustomerInfoOpen(false);
+                    setOrderErrors((current) => ({ ...current, _global: "" }));
                     // auto-apply customer's linked price list, fallback to MAIN
                     setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
                   }}
@@ -758,6 +814,10 @@ export default function AdminNewOrder() {
                     onProductConfirmed={handleProductConfirmed}
                     onQtyEnter={handleQtyEnter}
                     apiProducts={apiProducts}
+                    errors={{
+                      productId: orderErrors[`line-${row.id}-productId`],
+                      qty: orderErrors[`line-${row.id}-qty`],
+                    }}
                     qtyRef={(el) => {
                       if (el) qtyRefs.current[row.id] = el;
                     }}
@@ -798,52 +858,63 @@ export default function AdminNewOrder() {
           <SoftButton variant="text" color="secondary" onClick={() => navigate("/orders")}>
             إلغاء
           </SoftButton>
-          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => handleSave("draft")}>
+          <SoftButton variant="outlined" color="secondary" size="small" disabled={orderSaving} onClick={() => handleSave("draft")}>
             <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} />
-            حفظ كمسودة
+            {orderSaving ? "جارٍ الحفظ..." : "حفظ كمسودة"}
           </SoftButton>
-          <SoftButton variant="gradient" color="success" size="small" onClick={() => handleSave("confirm")}>
+          <SoftButton variant="gradient" color="success" size="small" disabled={orderSaving} onClick={() => handleSave("confirm")}>
             <CheckCircleOutlineIcon sx={{ mr: 0.5, fontSize: 16 }} />
-            تأكيد الطلبية
+            {orderSaving ? "جارٍ الحفظ..." : "تأكيد الطلبية"}
           </SoftButton>
         </SoftBox>
       </SoftBox>
 
       <Dialog open={newCustomerDialog} onClose={() => setNewCustomerDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>إضافة زبون جديد</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid item xs={12}>
-              <TextField
+	        <DialogTitle>إضافة زبون جديد</DialogTitle>
+	        <DialogContent>
+	          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+	            {newCustomerErrors._global && (
+	              <Grid item xs={12}>
+	                <Alert severity="error">{newCustomerErrors._global}</Alert>
+	              </Grid>
+	            )}
+	            <Grid item xs={12}>
+	              <TextField
                 fullWidth
                 autoFocus
                 label="اسم الزبون / الشركة *"
-                value={newCustomerForm.name}
-                onChange={(event) => updateNewCustomerField("name", event.target.value)}
-                size="small"
-              />
+	                value={newCustomerForm.name}
+	                onChange={(event) => updateNewCustomerField("name", event.target.value)}
+	                error={!!newCustomerErrors.name}
+	                helperText={newCustomerErrors.name}
+	                size="small"
+	              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="رقم الهاتف *"
-                value={newCustomerForm.phone}
-                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
-                size="small"
-              />
+	                value={newCustomerForm.phone}
+	                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
+	                error={!!newCustomerErrors.phone}
+	                helperText={newCustomerErrors.phone}
+	                size="small"
+	              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="الهاتف الثاني"
-                value={newCustomerForm.phone2}
-                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>الولاية *</InputLabel>
+	                value={newCustomerForm.phone2}
+	                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
+	                error={!!newCustomerErrors.phone2}
+	                helperText={newCustomerErrors.phone2}
+	                size="small"
+	              />
+	            </Grid>
+	            <Grid item xs={12} sm={6}>
+	              <FormControl size="small" fullWidth error={!!(newCustomerErrors.wilaya || newCustomerErrors.wilayaId)}>
+	                <InputLabel>الولاية *</InputLabel>
                 <Select
                   value={newCustomerForm.wilaya}
                   label="الولاية *"
@@ -852,11 +923,16 @@ export default function AdminNewOrder() {
                   {WILAYAS.map((wilaya) => (
                     <MenuItem key={wilaya.code} value={wilaya.name}>
                       {wilaya.code} - {wilaya.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+	                    </MenuItem>
+	                  ))}
+	                </Select>
+	                {(newCustomerErrors.wilaya || newCustomerErrors.wilayaId) && (
+	                  <SoftTypography variant="caption" color="error" mt={0.5}>
+	                    {newCustomerErrors.wilaya || newCustomerErrors.wilayaId}
+	                  </SoftTypography>
+	                )}
+	              </FormControl>
+	            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -880,21 +956,24 @@ export default function AdminNewOrder() {
               <TextField
                 fullWidth
                 label="البريد الإلكتروني"
-                value={newCustomerForm.email}
-                onChange={(event) => updateNewCustomerField("email", event.target.value)}
-                size="small"
-              />
+	                value={newCustomerForm.email}
+	                onChange={(event) => updateNewCustomerField("email", event.target.value)}
+	                error={!!newCustomerErrors.email}
+	                helperText={newCustomerErrors.email}
+	                size="small"
+	              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="الرصيد الافتتاحي (دج)"
                 type="number"
-                value={newCustomerForm.openingBalance}
-                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
-                helperText="رصيد سابق قبل بدء التسجيل في البرنامج"
-                size="small"
-              />
+	                value={newCustomerForm.openingBalance}
+	                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
+	                error={!!newCustomerErrors.openingBalance}
+	                helperText={newCustomerErrors.openingBalance || "رصيد سابق قبل بدء التسجيل في البرنامج"}
+	                size="small"
+	              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -915,11 +994,11 @@ export default function AdminNewOrder() {
             variant="gradient"
             color="info"
             size="small"
-            disabled={!newCustomerForm.name.trim() || !newCustomerForm.phone.trim() || !newCustomerForm.wilaya.trim()}
-            onClick={addNewCustomer}
-          >
-            إضافة وتحديد
-          </SoftButton>
+	            disabled={newCustomerSaving}
+	            onClick={addNewCustomer}
+	          >
+	            {newCustomerSaving ? "جارٍ الإضافة..." : "إضافة وتحديد"}
+	          </SoftButton>
         </DialogActions>
       </Dialog>
 

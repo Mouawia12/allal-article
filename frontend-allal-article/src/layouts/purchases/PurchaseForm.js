@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
@@ -38,6 +39,7 @@ const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
 const resolveSupplierLink = () => ({ isLinked: false });
 const supplierMatchLabels = {};
 import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
+import { applyApiErrors, hasErrors, isPositiveNumber } from "utils/formErrors";
 
 let lineId = 1;
 
@@ -55,7 +57,7 @@ function createLine(product = null) {
   };
 }
 
-function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnterLastField, productOptions }) {
+function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnterLastField, productOptions, errors = {} }) {
   const set = (key, value) => onChange(line.id, key, value);
   const lineTotal = calcLineTotal({
     qty: line.qty,
@@ -85,7 +87,14 @@ function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnte
             set("__product_with_price", { product: null, unitPrice: "", pricingSource: "product_default", qty: "" });
           }}
           getOptionLabel={(option) => option ? `${option.id} - ${option.name}` : ""}
-          renderInput={(params) => <TextField {...params} placeholder="اكتب كود أو اسم الصنف..." />}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              placeholder="اكتب كود أو اسم الصنف..."
+              error={!!errors.productId}
+              helperText={errors.productId}
+            />
+          )}
         />
       </td>
       <td style={{ padding: "10px 8px", width: 90 }}>
@@ -94,6 +103,8 @@ function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnte
           type="number"
           value={line.qty}
           onChange={(event) => set("qty", event.target.value)}
+          error={!!errors.qty}
+          helperText={errors.qty}
           inputProps={{ min: 0, step: "0.01" }}
         />
       </td>
@@ -106,6 +117,8 @@ function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnte
           type="number"
           value={line.unitPrice}
           onChange={(event) => set("unitPrice", event.target.value)}
+          error={!!errors.unitPrice}
+          helperText={errors.unitPrice}
           inputProps={{ min: 0 }}
         />
         <SoftTypography variant="caption" color="secondary" display="block" mt={0.3}>
@@ -168,6 +181,8 @@ export default function PurchaseForm() {
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState([createLine()]);
   const [savedId, setSavedId] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     suppliersApi.list().then((r) => setSupplierOptions(r.data?.content ?? r.data ?? [])).catch(console.error);
@@ -225,7 +240,17 @@ export default function PurchaseForm() {
     return { validLines, untaxed, tax: total - untaxed, total };
   }, [lines]);
 
+  const activeProducts = productOptions;
+
   const changeLine = (lineToChange, key, value) => {
+    setErrors((current) => {
+      const next = { ...current, _global: "" };
+      delete next[`line-${lineToChange}-productId`];
+      delete next[`line-${lineToChange}-qty`];
+      delete next[`line-${lineToChange}-unitPrice`];
+      delete next.items;
+      return next;
+    });
     setLines((items) =>
       items.map((line) =>
         line.id === lineToChange && key === "__product_with_price"
@@ -246,9 +271,22 @@ export default function PurchaseForm() {
   };
 
   const save = (mode) => {
-    if (!supplier || totals.validLines.length === 0) return;
+    const validationErrors = {};
     const supplierId = typeof supplier === "object" ? supplier.id : null;
-    if (!supplierId) return;
+    if (!supplierId) validationErrors.supplierId = "المورد مطلوب";
+    if (totals.validLines.length === 0) validationErrors.items = "أضف صنفاً واحداً على الأقل";
+    lines.forEach((line) => {
+      if (!line.product && !line.qty && !line.unitPrice) return;
+      if (!line.product?.id) validationErrors[`line-${line.id}-productId`] = "الصنف مطلوب";
+      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+      if (line.unitPrice !== "" && Number(line.unitPrice) < 0) {
+        validationErrors[`line-${line.id}-unitPrice`] = "السعر لا يمكن أن يكون سالباً";
+      }
+    });
+
+    setErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
     const payload = {
       supplierId,
       expectedDate: expectedDate || null,
@@ -260,6 +298,7 @@ export default function PurchaseForm() {
         notes: l.notes || null,
       })),
     };
+    setSaving(true);
     purchasesApi.create(payload)
       .then((r) => {
         const newId = r.data?.id;
@@ -269,7 +308,8 @@ export default function PurchaseForm() {
         return newId;
       })
       .then((newId) => setSavedId(newId))
-      .catch(console.error);
+      .catch((error) => applyApiErrors(error, setErrors, "فشل حفظ أمر الشراء"))
+      .finally(() => setSaving(false));
   };
 
   return (
@@ -289,14 +329,20 @@ export default function PurchaseForm() {
             </SoftTypography>
           </SoftBox>
           <SoftBox display="flex" gap={1} flexWrap="wrap">
-            <SoftButton variant="outlined" color="secondary" size="small" startIcon={<SaveIcon />} onClick={() => save("draft")}>
-              حفظ كمسودة
+            <SoftButton variant="outlined" color="secondary" size="small" startIcon={<SaveIcon />} disabled={saving} onClick={() => save("draft")}>
+              {saving ? "جارٍ الحفظ..." : "حفظ كمسودة"}
             </SoftButton>
-            <SoftButton variant="gradient" color="success" size="small" startIcon={<CheckCircleIcon />} onClick={() => save("confirm")}>
-              حفظ وتأكيد
+            <SoftButton variant="gradient" color="success" size="small" startIcon={<CheckCircleIcon />} disabled={saving} onClick={() => save("confirm")}>
+              {saving ? "جارٍ الحفظ..." : "حفظ وتأكيد"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {(errors._global || errors.items) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global || errors.items}
+          </Alert>
+        )}
 
         <Grid container spacing={2}>
           <Grid item xs={12} lg={8}>
@@ -337,7 +383,15 @@ export default function PurchaseForm() {
                         </li>
                       );
                     }}
-                    renderInput={(params) => <TextField {...params} label="المورد" placeholder="اختر أو اكتب المورد..." />}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="المورد"
+                        placeholder="اختر أو اكتب المورد..."
+                        error={!!(errors.supplierId || errors.supplier)}
+                        helperText={errors.supplierId || errors.supplier}
+                      />
+                    )}
                     freeSolo
                   />
                   {/* Linked partner banner */}
@@ -435,6 +489,11 @@ export default function PurchaseForm() {
                         onDelete={deleteLine}
                         onEnterLastField={addLine}
                         productOptions={activeProducts}
+                        errors={{
+                          productId: errors[`line-${line.id}-productId`],
+                          qty: errors[`line-${line.id}-qty`],
+                          unitPrice: errors[`line-${line.id}-unitPrice`],
+                        }}
                       />
                     ))}
                   </tbody>
@@ -477,7 +536,9 @@ export default function PurchaseForm() {
               </SoftBox>
               <SoftBox p={1.5} sx={{ background: supplier && totals.validLines.length ? "#f0fde4" : "#fff3e0", borderRadius: 1 }}>
                 <SoftTypography variant="caption" sx={{ color: supplier && totals.validLines.length ? "#67a814" : "#fb8c00" }}>
-                  {supplier && totals.validLines.length
+                  {errors.supplierId || errors.items || errors._global
+                    ? errors.supplierId || errors.items || errors._global
+                    : supplier && totals.validLines.length
                     ? "الأمر جاهز للحفظ التجريبي."
                     : "اختر المورد وأضف صنفا واحدا على الأقل قبل الحفظ."}
                 </SoftTypography>

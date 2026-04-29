@@ -26,6 +26,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
 import { planColors } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
+import { applyApiErrors, hasErrors } from "utils/formErrors";
 
 const fmt = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "∞");
 
@@ -46,13 +47,24 @@ function EditPlanDialog({ plan, onClose, onSaved }) {
     max_products:       plan?.max_products ?? "",
   });
   const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState("");
+  const [errors, setErrors] = useState({});
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    if (errors[k] || errors._global) setErrors((current) => ({ ...current, [k]: "", _global: "" }));
+  };
 
   const handleSave = async () => {
+    const nextErrors = {};
+    ["price_monthly", "max_users", "max_orders_monthly", "max_products"].forEach((field) => {
+      const value = form[field];
+      if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+        nextErrors[field] = "القيمة يجب أن تكون رقماً موجباً أو فارغة";
+      }
+    });
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setSaving(true);
-    setError("");
+    setErrors({});
     try {
       await ownerApi.updatePlan(plan.id, {
         price_monthly:      form.price_monthly === "" ? null : Number(form.price_monthly),
@@ -63,7 +75,7 @@ function EditPlanDialog({ plan, onClose, onSaved }) {
       onSaved?.();
       onClose();
     } catch (e) {
-      setError(e.response?.data?.message || "حدث خطأ أثناء الحفظ");
+      applyApiErrors(e, setErrors, "حدث خطأ أثناء الحفظ");
     } finally {
       setSaving(false);
     }
@@ -83,15 +95,16 @@ function EditPlanDialog({ plan, onClose, onSaved }) {
             value={form.price_monthly}
             onChange={set("price_monthly")}
             size="small" fullWidth type="number"
-            helperText="اتركه فارغاً لخطة مجانية أو مخصصة السعر"
+            error={!!errors.price_monthly}
+            helperText={errors.price_monthly || "اتركه فارغاً لخطة مجانية أو مخصصة السعر"}
           />
-          <TextField label="أقصى مستخدمين (فارغ = ∞)"       value={form.max_users}          onChange={set("max_users")}          size="small" fullWidth type="number" />
-          <TextField label="أقصى طلبيات/شهر (فارغ = ∞)"     value={form.max_orders_monthly} onChange={set("max_orders_monthly")} size="small" fullWidth type="number" />
-          <TextField label="أقصى أصناف (فارغ = ∞)"          value={form.max_products}       onChange={set("max_products")}       size="small" fullWidth type="number" />
-          {error && (
-            <Box sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5, fontSize: 12, color: "#ea0606" }}>
-              {error}
-            </Box>
+          <TextField label="أقصى مستخدمين (فارغ = ∞)"       value={form.max_users}          onChange={set("max_users")}          size="small" fullWidth type="number" error={!!errors.max_users} helperText={errors.max_users || ""} />
+          <TextField label="أقصى طلبيات/شهر (فارغ = ∞)"     value={form.max_orders_monthly} onChange={set("max_orders_monthly")} size="small" fullWidth type="number" error={!!errors.max_orders_monthly} helperText={errors.max_orders_monthly || ""} />
+          <TextField label="أقصى أصناف (فارغ = ∞)"          value={form.max_products}       onChange={set("max_products")}       size="small" fullWidth type="number" error={!!errors.max_products} helperText={errors.max_products || ""} />
+          {errors._global && (
+            <Alert severity="error">
+              {errors._global}
+            </Alert>
           )}
         </Box>
       </DialogContent>
@@ -123,7 +136,7 @@ function EditPlanDialog({ plan, onClose, onSaved }) {
 }
 
 // ─── Plan Card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, onEdit, onToggle }) {
+function PlanCard({ plan, onEdit, onToggle, onToggleError }) {
   const { t } = useI18n();
   const [toggling, setToggling] = useState(false);
   const color    = planColors[plan.code] ?? "#8392ab";
@@ -135,8 +148,8 @@ function PlanCard({ plan, onEdit, onToggle }) {
     try {
       await ownerApi.updatePlan(plan.id, { is_active: newVal });
       onToggle?.();
-    } catch {
-      // revert is handled by parent reload
+    } catch (error) {
+      onToggleError?.(error.response?.data?.message || "تعذر تحديث حالة الخطة");
     } finally {
       setToggling(false);
     }
@@ -270,6 +283,7 @@ export default function OwnerPlans() {
                 plan={plan}
                 onEdit={() => setEditPlan(plan)}
                 onToggle={handleToggle}
+                onToggleError={(msg) => setToast({ open: true, msg, severity: "error" })}
               />
             ))}
           </Box>

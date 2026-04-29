@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import FormControl from "@mui/material/FormControl";
 import MenuItem from "@mui/material/MenuItem";
@@ -23,12 +24,15 @@ import Footer from "examples/Footer";
 
 import { classificationLabels, fmt } from "./mockData";
 import { accountingApi } from "services";
+import { applyApiErrors } from "utils/formErrors";
 
 export default function OpeningBalances() {
   const [fiscalYears, setFiscalYears] = useState([]);
   const [postable, setPostable] = useState([]);
   const [fyId, setFyId] = useState(null);
   const [balances, setBalances] = useState({});
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     accountingApi.listFiscalYears()
@@ -58,12 +62,32 @@ export default function OpeningBalances() {
 
   const isLocked = fiscalYears.find((y) => y.id === fyId)?.closed;
 
-  const setVal = (id, side, val) => setBalances((p) => ({ ...p, [id]: { ...p[id], [side]: Number(val) || 0 } }));
+  const setVal = (id, side, val) => {
+    setBalances((p) => ({ ...p, [id]: { ...p[id], [side]: Number(val) || 0 } }));
+    if (errors._global || errors.items) setErrors({});
+  };
 
   const totalDebit  = useMemo(() => postable.reduce((s, a) => s + (balances[a.id]?.debit  || 0), 0), [balances]);
   const totalCredit = useMemo(() => postable.reduce((s, a) => s + (balances[a.id]?.credit || 0), 0), [balances]);
   const diff        = Math.abs(totalDebit - totalCredit);
   const isBalanced  = diff < 0.01;
+
+  const handleSave = async () => {
+    if (!fyId) { setErrors({ _global: "اختر السنة المالية أولاً" }); return; }
+    if (!isBalanced) { setErrors({ items: "الأرصدة الافتتاحية غير متوازنة، يجب تساوي المدين والدائن" }); return; }
+    const items = postable
+      .filter((a) => (balances[a.id]?.debit || 0) + (balances[a.id]?.credit || 0) > 0)
+      .map((a) => ({ accountId: a.id, debit: balances[a.id]?.debit || 0, credit: balances[a.id]?.credit || 0 }));
+    setSaving(true);
+    setErrors({});
+    try {
+      await accountingApi.saveOpeningBalances({ fiscalYearId: fyId, items });
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ الأرصدة الافتتاحية");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -83,13 +107,8 @@ export default function OpeningBalances() {
               </Select>
             </FormControl>
             {!isLocked && (
-              <SoftButton variant="gradient" color="info" size="small" onClick={() => {
-                const items = postable
-                  .filter((a) => (balances[a.id]?.debit || 0) + (balances[a.id]?.credit || 0) > 0)
-                  .map((a) => ({ accountId: a.id, debit: balances[a.id]?.debit || 0, credit: balances[a.id]?.credit || 0 }));
-                accountingApi.saveOpeningBalances({ fiscalYearId: fyId, items }).catch(console.error);
-              }}>
-                <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ الأرصدة
+              <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={handleSave}>
+                <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ الأرصدة"}
               </SoftButton>
             )}
           </SoftBox>
@@ -101,6 +120,12 @@ export default function OpeningBalances() {
               🔒 السنة مغلقة — الأرصدة للقراءة فقط
             </SoftTypography>
           </SoftBox>
+        )}
+
+        {(errors._global || errors.items) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global || errors.items}
+          </Alert>
         )}
 
         {/* Balance indicator */}

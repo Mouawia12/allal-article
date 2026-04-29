@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -35,6 +36,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
 import { statusConfig } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
@@ -43,23 +45,32 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
   const { t } = useI18n();
   const [form, setForm] = useState({ companyName:"", contactEmail:"", contactPhone:"", wilayaCode:"", planCode:"trial", ownerName:"", ownerPassword:"" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
   const [result, setResult] = useState(null);
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    if (errors[k] || errors._global) setErrors((current) => ({ ...current, [k]: "", _global: "" }));
+  };
 
   const handleCreate = async () => {
-    if (!form.companyName || !form.contactEmail) return setError("اسم الشركة والبريد الإلكتروني مطلوبان");
-    setLoading(true); setError("");
+    const nextErrors = {};
+    if (isBlank(form.companyName)) nextErrors.companyName = "اسم الشركة مطلوب";
+    if (isBlank(form.contactEmail)) nextErrors.contactEmail = "البريد الإلكتروني مطلوب";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) nextErrors.contactEmail = "البريد الإلكتروني غير صالح";
+    if (form.ownerPassword && form.ownerPassword.length < 8) nextErrors.ownerPassword = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+    if (form.wilayaCode && !/^\d{1,2}$/.test(form.wilayaCode)) nextErrors.wilayaCode = "رمز الولاية يجب أن يكون رقماً";
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setLoading(true); setErrors({});
     try {
       const r = await ownerApi.createTenant(form);
       setResult(r.data);
       onCreated?.();
     } catch (e) {
-      setError(e.response?.data?.message || "حدث خطأ أثناء الإنشاء");
+      applyApiErrors(e, setErrors, "حدث خطأ أثناء الإنشاء");
     } finally { setLoading(false); }
   };
 
-  const handleClose = () => { setForm({ companyName:"", contactEmail:"", contactPhone:"", wilayaCode:"", planCode:"trial", ownerName:"", ownerPassword:"" }); setResult(null); setError(""); onClose(); };
+  const handleClose = () => { setForm({ companyName:"", contactEmail:"", contactPhone:"", wilayaCode:"", planCode:"trial", ownerName:"", ownerPassword:"" }); setResult(null); setErrors({}); onClose(); };
 
   return localizeNode((
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -80,12 +91,13 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
           </Box>
         ) : (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-            <TextField label="اسم الشركة *" value={form.companyName} onChange={set("companyName")} size="small" fullWidth />
-            <TextField label="البريد الإلكتروني للتواصل *" value={form.contactEmail} onChange={set("contactEmail")} size="small" fullWidth type="email" />
-            <TextField label="رقم الهاتف" value={form.contactPhone} onChange={set("contactPhone")} size="small" fullWidth />
-            <TextField label="الولاية (رمز)" value={form.wilayaCode} onChange={set("wilayaCode")} size="small" fullWidth placeholder="16" />
+            {errors._global && <Alert severity="error">{errors._global}</Alert>}
+            <TextField label="اسم الشركة *" value={form.companyName} onChange={set("companyName")} size="small" fullWidth error={!!errors.companyName} helperText={errors.companyName || ""} />
+            <TextField label="البريد الإلكتروني للتواصل *" value={form.contactEmail} onChange={set("contactEmail")} size="small" fullWidth type="email" error={!!errors.contactEmail} helperText={errors.contactEmail || ""} />
+            <TextField label="رقم الهاتف" value={form.contactPhone} onChange={set("contactPhone")} size="small" fullWidth error={!!errors.contactPhone} helperText={errors.contactPhone || ""} />
+            <TextField label="الولاية (رمز)" value={form.wilayaCode} onChange={set("wilayaCode")} size="small" fullWidth placeholder="16" error={!!errors.wilayaCode} helperText={errors.wilayaCode || ""} />
             <TextField label="اسم مدير الحساب الأول" value={form.ownerName} onChange={set("ownerName")} size="small" fullWidth placeholder="يُستخدم اسم الشركة افتراضياً" />
-            <TextField label="كلمة مرور المدير (اختياري)" value={form.ownerPassword} onChange={set("ownerPassword")} size="small" fullWidth placeholder="تُولَّد تلقائياً إن تُركت فارغة" />
+            <TextField label="كلمة مرور المدير (اختياري)" value={form.ownerPassword} onChange={set("ownerPassword")} size="small" fullWidth placeholder="تُولَّد تلقائياً إن تُركت فارغة" error={!!errors.ownerPassword} helperText={errors.ownerPassword || ""} />
             <FormControl size="small" fullWidth>
               <Select value={form.planCode} onChange={set("planCode")}>
                 {(plans ?? []).map((p) => (
@@ -95,7 +107,6 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
                 ))}
               </Select>
             </FormControl>
-            {error && <Box sx={{ color: "#ea0606", fontSize: 12 }}>{error}</Box>}
             <Box sx={{ background: "#e3f8fd", border: "1px solid #b2ebf9", borderRadius: 2, p: 1.5, fontSize: 12, color: "#344767" }}>
               <Box sx={{ fontWeight: 600, mb: 0.5 }}>سيتم تلقائياً:</Box>
               <Box>• إنشاء مخطط قاعدة البيانات المنفصل</Box>
@@ -127,24 +138,26 @@ function ResetPasswordDialog({ tenant, onClose }) {
   const [password, setPassword] = useState("");
   const [confirm,  setConfirm]  = useState("");
   const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const [errors,   setErrors]   = useState({});
   const [done,     setDone]     = useState(false);
 
   if (!tenant) return null;
 
   const handleReset = async () => {
-    if (password.length < 8) return setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
-    if (password !== confirm) return setError("كلمتا المرور غير متطابقتين");
-    setLoading(true); setError("");
+    const nextErrors = {};
+    if (password.length < 8) nextErrors.password = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+    if (password !== confirm) nextErrors.confirm = "كلمتا المرور غير متطابقتان";
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setLoading(true); setErrors({});
     try {
       await ownerApi.resetPassword(tenant.id, password);
       setDone(true);
     } catch (e) {
-      setError(e.response?.data?.message || "حدث خطأ أثناء تغيير كلمة المرور");
+      applyApiErrors(e, setErrors, "حدث خطأ أثناء تغيير كلمة المرور");
     } finally { setLoading(false); }
   };
 
-  const handleClose = () => { setPassword(""); setConfirm(""); setError(""); setDone(false); onClose(); };
+  const handleClose = () => { setPassword(""); setConfirm(""); setErrors({}); setDone(false); onClose(); };
 
   return localizeNode((
     <Dialog open={!!tenant} onClose={handleClose} maxWidth="xs" fullWidth>
@@ -167,21 +180,24 @@ function ResetPasswordDialog({ tenant, onClose }) {
               label="كلمة المرور الجديدة *"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); if (errors.password || errors._global) setErrors((current) => ({ ...current, password: "", _global: "" })); }}
               size="small" fullWidth
-              helperText="8 أحرف على الأقل"
+              error={!!errors.password}
+              helperText={errors.password || "8 أحرف على الأقل"}
             />
             <TextField
               label="تأكيد كلمة المرور *"
               type="password"
               value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
+              onChange={(e) => { setConfirm(e.target.value); if (errors.confirm || errors._global) setErrors((current) => ({ ...current, confirm: "", _global: "" })); }}
               size="small" fullWidth
+              error={!!errors.confirm}
+              helperText={errors.confirm || ""}
             />
-            {error && (
-              <Box sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5, fontSize: 12, color: "#ea0606" }}>
-                {error}
-              </Box>
+            {errors._global && (
+              <Alert severity="error">
+                {errors._global}
+              </Alert>
             )}
           </Box>
         )}
@@ -310,6 +326,7 @@ export default function OwnerTenants() {
   const [detail, setDetail]           = useState(null);
   const [tenants, setTenants]         = useState([]);
   const [plans, setPlans]             = useState([]);
+  const [pageError, setPageError]     = useState("");
 
   const load = () => {
     ownerApi.listTenants().then((r) => setTenants(r.data ?? [])).catch(console.error);
@@ -318,8 +335,14 @@ export default function OwnerTenants() {
   useEffect(load, []);
 
   const handleStatusChange = async (id, status) => {
-    try { await ownerApi.updateStatus(id, status, null); load(); setDetail(null); }
-    catch (e) { console.error(e); }
+    try {
+      setPageError("");
+      await ownerApi.updateStatus(id, status, null);
+      load();
+      setDetail(null);
+    } catch (e) {
+      setPageError(e.response?.data?.message || "تعذر تحديث حالة المشترك");
+    }
   };
 
   const filtered = tenants.filter((t) => {
@@ -377,6 +400,12 @@ export default function OwnerTenants() {
             {filtered.length} مشترك
           </Box>
         </Box>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* Table */}
         <Card>

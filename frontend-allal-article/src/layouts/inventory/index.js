@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
@@ -40,6 +41,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { inventoryApi } from "services";
+import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 
 
 function formatNumber(value) {
@@ -132,6 +134,7 @@ function Inventory() {
   const [warehouseDialog, setWarehouseDialog] = useState(false);
   const [editingWarehouseId, setEditingWarehouseId] = useState(null);
   const [warehouseForm, setWarehouseForm] = useState({
+    code: "",
     name: "",
     type: "تشغيلي",
     city: "",
@@ -139,6 +142,8 @@ function Inventory() {
     capacity: 1000,
     isDefault: false,
   });
+  const [warehouseErrors, setWarehouseErrors] = useState({});
+  const [warehouseSaving, setWarehouseSaving] = useState(false);
   const [transferLog, setTransferLog] = useState([]);
 
   useEffect(() => {
@@ -319,13 +324,15 @@ function Inventory() {
   const openWarehouseDialog = (warehouse = null) => {
     setEditingWarehouseId(warehouse?.id || null);
     setWarehouseForm({
+      code: warehouse?.code || "",
       name: warehouse?.name || "",
-      type: warehouse?.type || "تشغيلي",
+      type: warehouse?.type || warehouse?.warehouseType || "تشغيلي",
       city: warehouse?.city || "",
       manager: warehouse?.manager || "",
-      capacity: warehouse?.capacity || 1000,
+      capacity: warehouse?.capacity ?? warehouse?.capacityQty ?? 1000,
       isDefault: Boolean(warehouse?.isDefault),
     });
+    setWarehouseErrors({});
     setWarehouseDialog(true);
   };
 
@@ -337,22 +344,34 @@ function Inventory() {
   const setWarehouseField = (field) => (event) => {
     const value = field === "isDefault" ? event.target.checked : event.target.value;
     setWarehouseForm((form) => ({ ...form, [field]: value }));
+    if (warehouseErrors[field] || warehouseErrors._global) {
+      setWarehouseErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
   };
 
   const saveWarehouse = () => {
+    const code = warehouseForm.code.trim();
     const name = warehouseForm.name.trim();
-    if (!name) return;
+    const validationErrors = {};
+    if (isBlank(code)) validationErrors.code = "كود المستودع مطلوب";
+    if (isBlank(name)) validationErrors.name = "اسم المستودع مطلوب";
+    if (!isPositiveNumber(warehouseForm.capacity)) validationErrors.capacityQty = "الطاقة الاستيعابية يجب أن تكون أكبر من صفر";
+
+    setWarehouseErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
     const payload = {
+      code,
       name,
-      type: warehouseForm.type,
+      warehouseType: warehouseForm.type,
       city: warehouseForm.city.trim() || "غير محدد",
-      manager: warehouseForm.manager.trim() || "غير محدد",
-      capacity: Math.max(1, Number(warehouseForm.capacity || 1)),
+      capacityQty: Number(warehouseForm.capacity || 1),
       isDefault: Boolean(warehouseForm.isDefault),
     };
     const apiCall = editingWarehouseId
       ? inventoryApi.updateWarehouse(editingWarehouseId, payload)
       : inventoryApi.createWarehouse(payload);
+    setWarehouseSaving(true);
     apiCall
       .then((r) => {
         const saved = r.data;
@@ -365,9 +384,11 @@ function Inventory() {
             ? updated.map((w) => ({ ...w, isDefault: w.id === saved.id }))
             : updated;
         });
+        setWarehouseErrors({});
         closeWarehouseDialog();
       })
-      .catch(console.error);
+      .catch((error) => applyApiErrors(error, setWarehouseErrors, "فشل حفظ المستودع"))
+      .finally(() => setWarehouseSaving(false));
   };
 
   const warehouseRows = warehouses.map((warehouse) => {
@@ -880,7 +901,24 @@ function Inventory() {
         </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={8}>
+            {warehouseErrors._global && (
+              <Grid item xs={12}>
+                <Alert severity="error">{warehouseErrors._global}</Alert>
+              </Grid>
+            )}
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                size="small"
+                label="كود المستودع"
+                value={warehouseForm.code}
+                onChange={setWarehouseField("code")}
+                placeholder="MAIN"
+                error={!!warehouseErrors.code}
+                helperText={warehouseErrors.code}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
               <TextField
                 fullWidth
                 size="small"
@@ -888,6 +926,8 @@ function Inventory() {
                 value={warehouseForm.name}
                 onChange={setWarehouseField("name")}
                 placeholder="مثال: مخزن الدهانات"
+                error={!!warehouseErrors.name}
+                helperText={warehouseErrors.name}
               />
             </Grid>
             <Grid item xs={12} sm={4}>
@@ -927,6 +967,8 @@ function Inventory() {
                 label="الطاقة الاستيعابية"
                 value={warehouseForm.capacity}
                 onChange={setWarehouseField("capacity")}
+                error={!!(warehouseErrors.capacity || warehouseErrors.capacityQty)}
+                helperText={warehouseErrors.capacity || warehouseErrors.capacityQty}
                 inputProps={{ min: 1 }}
               />
             </Grid>
@@ -951,8 +993,8 @@ function Inventory() {
           <SoftButton variant="outlined" color="secondary" size="small" onClick={closeWarehouseDialog}>
             إلغاء
           </SoftButton>
-          <SoftButton variant="gradient" color="info" size="small" disabled={!warehouseForm.name.trim()} onClick={saveWarehouse}>
-            {editingWarehouseId ? "حفظ التعديل" : "إضافة المستودع"}
+          <SoftButton variant="gradient" color="info" size="small" disabled={warehouseSaving} onClick={saveWarehouse}>
+            {warehouseSaving ? "جارٍ الحفظ..." : editingWarehouseId ? "حفظ التعديل" : "إضافة المستودع"}
           </SoftButton>
         </DialogActions>
       </Dialog>

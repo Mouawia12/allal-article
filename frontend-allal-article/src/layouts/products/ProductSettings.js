@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -35,24 +36,36 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { productSettings, updateProductSettings } from "./mockProductData";
+import { hasErrors, isBlank } from "utils/formErrors";
 
 // ─── Units Tab ────────────────────────────────────────────────────────────────
 function UnitsTab() {
   const [units, setUnits] = useState(productSettings.units);
   const [dialog, setDialog] = useState(null); // null | { mode, item }
   const [form, setForm] = useState({ name: "", symbol: "" });
+  const [errors, setErrors] = useState({});
 
-  const openAdd  = () => { setForm({ name: "", symbol: "" }); setDialog({ mode: "add" }); };
-  const openEdit = (u) => { setForm({ name: u.name, symbol: u.symbol }); setDialog({ mode: "edit", item: u }); };
+  const openAdd  = () => { setForm({ name: "", symbol: "" }); setErrors({}); setDialog({ mode: "add" }); };
+  const openEdit = (u) => { setForm({ name: u.name, symbol: u.symbol }); setErrors({}); setDialog({ mode: "edit", item: u }); };
+  const setField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
 
   const save = () => {
-    if (!form.name.trim()) return;
+    const nextErrors = {};
+    const name = form.name.trim();
+    if (isBlank(name)) nextErrors.name = "اسم الوحدة مطلوب";
+    if (units.some((u) => u.id !== dialog.item?.id && u.name.trim() === name)) {
+      nextErrors.name = "هذه الوحدة موجودة من قبل";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     let next;
     if (dialog.mode === "add") {
-      const newU = { id: Date.now(), name: form.name.trim(), symbol: form.symbol.trim(), isSystem: false };
+      const newU = { id: Date.now(), name, symbol: form.symbol.trim(), isSystem: false };
       next = [...units, newU];
     } else {
-      next = units.map((u) => u.id === dialog.item.id ? { ...u, ...form } : u);
+      next = units.map((u) => u.id === dialog.item.id ? { ...u, name, symbol: form.symbol.trim() } : u);
     }
     setUnits(next);
     updateProductSettings({ units: next });
@@ -121,10 +134,12 @@ function UnitsTab() {
         <DialogTitle>{dialog?.mode === "add" ? "وحدة جديدة" : "تعديل الوحدة"}</DialogTitle>
         <DialogContent>
           <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+            {errors._global && <Alert severity="error">{errors._global}</Alert>}
             <TextField label="اسم الوحدة *" size="small" fullWidth value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="مثال: دزينة، كيس..." />
+              onChange={(e) => setField("name", e.target.value)} placeholder="مثال: دزينة، كيس..."
+              error={!!errors.name} helperText={errors.name || ""} />
             <TextField label="الرمز" size="small" fullWidth value={form.symbol}
-              onChange={(e) => setForm((p) => ({ ...p, symbol: e.target.value }))} placeholder="مثال: DZ, KG..." />
+              onChange={(e) => setField("symbol", e.target.value)} placeholder="مثال: DZ, KG..." />
           </SoftBox>
         </DialogContent>
         <DialogActions>
@@ -141,17 +156,28 @@ function CategoriesTab() {
   const [cats, setCats] = useState(productSettings.categories);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({ name: "", color: "#17c1e8" });
+  const [errors, setErrors] = useState({});
 
-  const openAdd  = () => { setForm({ name: "", color: "#17c1e8" }); setDialog({ mode: "add" }); };
-  const openEdit = (c) => { setForm({ name: c.name, color: c.color }); setDialog({ mode: "edit", item: c }); };
+  const openAdd  = () => { setForm({ name: "", color: "#17c1e8" }); setErrors({}); setDialog({ mode: "add" }); };
+  const openEdit = (c) => { setForm({ name: c.name, color: c.color }); setErrors({}); setDialog({ mode: "edit", item: c }); };
+  const setField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
 
   const save = () => {
-    if (!form.name.trim()) return;
+    const nextErrors = {};
+    const name = form.name.trim();
+    if (isBlank(name)) nextErrors.name = "اسم التصنيف مطلوب";
+    if (cats.some((c) => c.id !== dialog.item?.id && c.name.trim() === name)) {
+      nextErrors.name = "هذا التصنيف موجود من قبل";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     let next;
     if (dialog.mode === "add") {
-      next = [...cats, { id: Date.now(), name: form.name.trim(), color: form.color }];
+      next = [...cats, { id: Date.now(), name, color: form.color }];
     } else {
-      next = cats.map((c) => c.id === dialog.item.id ? { ...c, ...form } : c);
+      next = cats.map((c) => c.id === dialog.item.id ? { ...c, name, color: form.color } : c);
     }
     setCats(next);
     updateProductSettings({ categories: next });
@@ -192,12 +218,14 @@ function CategoriesTab() {
         <DialogTitle>{dialog?.mode === "add" ? "تصنيف جديد" : "تعديل التصنيف"}</DialogTitle>
         <DialogContent>
           <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+            {errors._global && <Alert severity="error">{errors._global}</Alert>}
             <TextField label="اسم التصنيف *" size="small" fullWidth value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              onChange={(e) => setField("name", e.target.value)}
+              error={!!errors.name} helperText={errors.name || ""} />
             <SoftBox display="flex" alignItems="center" gap={1}>
               <SoftTypography variant="caption" color="secondary">اللون:</SoftTypography>
               <input type="color" value={form.color}
-                onChange={(e) => setForm((p) => ({ ...p, color: e.target.value }))}
+                onChange={(e) => setField("color", e.target.value)}
                 style={{ width: 40, height: 32, border: "none", borderRadius: 4, cursor: "pointer" }} />
               <SoftTypography variant="caption" color="secondary" sx={{ fontFamily: "monospace" }}>{form.color}</SoftTypography>
             </SoftBox>
@@ -217,18 +245,30 @@ function VariantAttrsTab() {
   const [attrs, setAttrs] = useState(productSettings.variantAttributes);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({ name: "", valuesStr: "" });
+  const [errors, setErrors] = useState({});
 
-  const openAdd  = () => { setForm({ name: "", valuesStr: "" }); setDialog({ mode: "add" }); };
-  const openEdit = (a) => { setForm({ name: a.name, valuesStr: a.values.join(", ") }); setDialog({ mode: "edit", item: a }); };
+  const openAdd  = () => { setForm({ name: "", valuesStr: "" }); setErrors({}); setDialog({ mode: "add" }); };
+  const openEdit = (a) => { setForm({ name: a.name, valuesStr: a.values.join(", ") }); setErrors({}); setDialog({ mode: "edit", item: a }); };
+  const setField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
 
   const save = () => {
-    if (!form.name.trim()) return;
+    const nextErrors = {};
+    const name = form.name.trim();
     const values = form.valuesStr.split(",").map((v) => v.trim()).filter(Boolean);
+    if (isBlank(name)) nextErrors.name = "اسم الخاصية مطلوب";
+    if (attrs.some((a) => a.id !== dialog.item?.id && a.name.trim() === name)) {
+      nextErrors.name = "هذه الخاصية موجودة من قبل";
+    }
+    if (!values.length) nextErrors.valuesStr = "أضف قيمة واحدة على الأقل";
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     let next;
     if (dialog.mode === "add") {
-      next = [...attrs, { id: Date.now(), name: form.name.trim(), values }];
+      next = [...attrs, { id: Date.now(), name, values }];
     } else {
-      next = attrs.map((a) => a.id === dialog.item.id ? { ...a, name: form.name.trim(), values } : a);
+      next = attrs.map((a) => a.id === dialog.item.id ? { ...a, name, values } : a);
     }
     setAttrs(next);
     updateProductSettings({ variantAttributes: next });
@@ -272,12 +312,15 @@ function VariantAttrsTab() {
         <DialogTitle>{dialog?.mode === "add" ? "خاصية جديدة" : "تعديل الخاصية"}</DialogTitle>
         <DialogContent>
           <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+            {errors._global && <Alert severity="error">{errors._global}</Alert>}
             <TextField label="اسم الخاصية *" size="small" fullWidth value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="مثال: اللون، المقاس..." />
+              onChange={(e) => setField("name", e.target.value)} placeholder="مثال: اللون، المقاس..."
+              error={!!errors.name} helperText={errors.name || ""} />
             <TextField label="القيم (افصل بفواصل)" size="small" fullWidth value={form.valuesStr}
-              onChange={(e) => setForm((p) => ({ ...p, valuesStr: e.target.value }))}
+              onChange={(e) => setField("valuesStr", e.target.value)}
               placeholder="مثال: أحمر, أزرق, أخضر" multiline rows={2}
-              helperText="اكتب القيم مفصولة بفاصلة ثم حفظ" />
+              error={!!errors.valuesStr}
+              helperText={errors.valuesStr || "اكتب القيم مفصولة بفاصلة ثم حفظ"} />
           </SoftBox>
         </DialogContent>
         <DialogActions>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Card from "@mui/material/Card";
+import Alert from "@mui/material/Alert";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -49,6 +50,7 @@ import {
   productSettings,
 } from "./mockProductData";
 import { productsApi, inventoryApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let unitRowId = 100;
@@ -678,6 +680,8 @@ export default function ProductForm() {
   const [images, setImages] = useState(isEdit ? [{ color: "#FF6B6B88" }] : []);
   const [touched, setTouched] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     inventoryApi.listWarehouses().then((r) => {
@@ -690,9 +694,9 @@ export default function ProductForm() {
       productsApi.getById(id).then((r) => {
         const p = r.data;
         setForm({
-          name: p.name ?? "", code: p.code ?? "", category: p.category ?? "",
+          name: p.name ?? "", code: p.sku ?? p.code ?? "", category: p.categoryName ?? p.category ?? "",
           description: p.description ?? "", barcode: p.barcode ?? "",
-          baseUnit: p.baseUnit ?? p.unit ?? "", weightPerUnit: p.weightPerUnit ?? "",
+          baseUnit: p.baseUnitName ?? p.baseUnit ?? p.unit ?? "", weightPerUnit: p.weightPerUnit ?? "",
           unitsPerPackage: p.unitsPerPackage ?? "", packageUnit: p.packageUnit ?? "كرطون",
           initialStock: String(p.stock ?? 0), initialWarehouseId: p.warehouseId ?? "",
         });
@@ -703,7 +707,18 @@ export default function ProductForm() {
     }
   }, [id, isEdit]);
 
-  const set = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
+  const set = (field) => (e) => {
+    setForm((p) => ({ ...p, [field]: e.target.value }));
+    if (errors[field] || errors._global || (field === "code" && errors.sku) || (field === "baseUnit" && errors.baseUnitId)) {
+      setErrors((current) => ({
+        ...current,
+        [field]: "",
+        ...(field === "code" ? { sku: "" } : {}),
+        ...(field === "baseUnit" ? { baseUnitId: "" } : {}),
+        _global: "",
+      }));
+    }
+  };
   const addImage    = () => setImages((p) => [...p, { color: ["#FF6B6B88","#4ECDC488","#FFE66D88","#A8E6CF88"][p.length % 4] }]);
   const removeImage = (i) => setImages((p) => p.filter((_, idx) => idx !== i));
 
@@ -740,24 +755,57 @@ export default function ProductForm() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setTouched(true);
-    if (!form.name.trim() || !form.baseUnit) return;
+    const selectedUnit = productSettings.units.find((u) => u.name === form.baseUnit);
+    const selectedCategory = productSettings.categories.find((c) => c.name === form.category);
+    const baseUnitPrice = units.find((u) => u.isBase)?.price;
+    const unitsPerPackageValue = form.unitsPerPackage === "" ? 1 : Number(form.unitsPerPackage);
+    const weightPerUnitValue = form.weightPerUnit === "" ? 0 : Number(form.weightPerUnit);
+    const currentPriceAmount = baseUnitPrice === "" || baseUnitPrice === undefined ? null : Number(baseUnitPrice);
+    const nextErrors = {};
+
+    if (isBlank(form.name)) nextErrors.name = "اسم الصنف مطلوب";
+    if (isBlank(form.code)) nextErrors.sku = "الكود مطلوب";
+    if (isBlank(form.baseUnit)) nextErrors.baseUnitId = "وحدة القياس مطلوبة";
+    else if (!selectedUnit?.id) nextErrors.baseUnitId = "اختر وحدة موجودة من القائمة";
+    if (!Number.isFinite(unitsPerPackageValue) || unitsPerPackageValue <= 0) {
+      nextErrors.unitsPerPackage = "عدد الوحدات في التعليبة يجب أن يكون رقماً أكبر من صفر";
+    }
+    if (!Number.isFinite(weightPerUnitValue) || weightPerUnitValue < 0) {
+      nextErrors.weightPerUnit = "الوزن يجب أن يكون رقماً غير سالب";
+    }
+    if (currentPriceAmount !== null && (!Number.isFinite(currentPriceAmount) || currentPriceAmount < 0)) {
+      nextErrors._global = "سعر الوحدة الأساسية يجب أن يكون رقماً غير سالب";
+    }
+    if (hasErrors(nextErrors)) {
+      setErrors(nextErrors);
+      return;
+    }
+
     const payload = {
+      sku: form.code.trim(),
       name: form.name.trim(),
-      code: form.code.trim(),
-      category: form.category,
-      description: form.description,
-      barcode: form.barcode,
-      unit: form.baseUnit,
-      weightPerUnit: Number(form.weightPerUnit) || 0,
-      unitsPerPackage: Number(form.unitsPerPackage) || 1,
-      packageUnit: form.packageUnit,
+      categoryId: selectedCategory?.id ?? null,
+      baseUnitId: selectedUnit.id,
+      barcode: form.barcode.trim() || null,
+      unitsPerPackage: unitsPerPackageValue,
+      currentPriceAmount,
+      minStockQty: 0,
+      description: form.description.trim() || null,
+      status: "active",
     };
-    const apiCall = isEdit
-      ? productsApi.update(id, payload)
-      : productsApi.create(payload);
-    apiCall.then(() => navigate("/products")).catch(console.error);
+    setSaving(true);
+    setErrors({});
+    try {
+      if (isEdit) await productsApi.update(id, payload);
+      else await productsApi.create(payload);
+      navigate("/products");
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ الصنف");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cats   = productSettings.categories.map((c) => c.name);
@@ -803,11 +851,17 @@ export default function ProductForm() {
               إلغاء
             </SoftButton>
             <SoftButton variant="gradient" color="info" size="small"
-              startIcon={<SaveIcon />} onClick={handleSave}>
-              حفظ الصنف
+              startIcon={<SaveIcon />} disabled={saving} onClick={handleSave}>
+              {saving ? "جارٍ الحفظ..." : "حفظ الصنف"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {errors._global && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global}
+          </Alert>
+        )}
 
         <Grid container spacing={3}>
           {/* ── Left: Main Form ── */}
@@ -826,14 +880,16 @@ export default function ProductForm() {
                   <TextField
                     fullWidth label="اسم الصنف *" value={form.name}
                     onChange={set("name")} size="small"
-                    error={touched && !form.name.trim()}
-                    helperText={touched && !form.name.trim() ? "الاسم مطلوب" : ""}
+                    error={!!errors.name || (touched && !form.name.trim())}
+                    helperText={errors.name || (touched && !form.name.trim() ? "الاسم مطلوب" : "")}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
                   <TextField
-                    fullWidth label="الكود / المرجع" value={form.code}
+                    fullWidth label="الكود / المرجع *" value={form.code}
                     onChange={set("code")} size="small" placeholder="مثال: BRG-010"
+                    error={!!errors.sku || !!errors.code}
+                    helperText={errors.sku || errors.code || ""}
                   />
                 </Grid>
 
@@ -848,8 +904,8 @@ export default function ProductForm() {
                   <TextField
                     fullWidth select label="وحدة القياس الأساسية *"
                     value={form.baseUnit} onChange={set("baseUnit")} size="small"
-                    error={touched && !form.baseUnit}
-                    helperText={touched && !form.baseUnit ? "الوحدة مطلوبة" : ""}
+                    error={!!errors.baseUnitId || !!errors.baseUnit || (touched && !form.baseUnit)}
+                    helperText={errors.baseUnitId || errors.baseUnit || (touched && !form.baseUnit ? "الوحدة مطلوبة" : "")}
                   >
                     {units_.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
                   </TextField>
@@ -914,6 +970,8 @@ export default function ProductForm() {
                     fullWidth type="number" label="وزن الوحدة (كغ)"
                     value={form.weightPerUnit} onChange={set("weightPerUnit")}
                     size="small" inputProps={{ min: 0, step: 0.001 }}
+                    error={!!errors.weightPerUnit}
+                    helperText={errors.weightPerUnit || ""}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -921,6 +979,8 @@ export default function ProductForm() {
                     fullWidth type="number" label="وحدات في التعليبة"
                     value={form.unitsPerPackage} onChange={set("unitsPerPackage")}
                     size="small" inputProps={{ min: 1 }}
+                    error={!!errors.unitsPerPackage}
+                    helperText={errors.unitsPerPackage || ""}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>

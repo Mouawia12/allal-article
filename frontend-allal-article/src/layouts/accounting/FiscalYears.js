@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -33,6 +34,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { accountingApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 // ─── Close Year Dialog ────────────────────────────────────────────────────────
 const CLOSE_STEPS = ["التحقق من القيود", "قفل الفترات", "توليد قيود الإقفال", "إنشاء أرصدة سنة جديدة", "تأكيد القفل"];
@@ -41,6 +43,8 @@ function CloseYearDialog({ year, onClose }) {
   const [step, setStep] = useState(0);
   const [reason, setReason] = useState("");
   const [checking, setChecking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const checks = [
     { label: "لا توجد قيود مسودة", ok: true },
@@ -124,12 +128,15 @@ function CloseYearDialog({ year, onClose }) {
 
         {step === 4 && (
           <SoftBox>
+            {errors._global && <Alert severity="error" sx={{ mb: 2 }}>{errors._global}</Alert>}
             <SoftTypography variant="button" fontWeight="bold" display="block" mb={1.5}>تأكيد القفل</SoftTypography>
             <TextField
               fullWidth multiline rows={2} size="small"
               label="سبب القفل (إلزامي)"
-              value={reason} onChange={(e) => setReason(e.target.value)}
+              value={reason} onChange={(e) => { setReason(e.target.value); if (errors.reason || errors._global) setErrors({}); }}
               placeholder="مثال: انتهاء السنة المالية 2025 — تمت المراجعة والمطابقة"
+              error={!!errors.reason}
+              helperText={errors.reason || ""}
             />
             <SoftBox mt={1.5} p={1} sx={{ background: "#fff3e0", borderRadius: 1 }}>
               <SoftTypography variant="caption" sx={{ color: "#fb8c00", fontWeight: 600 }}>
@@ -148,13 +155,21 @@ function CloseYearDialog({ year, onClose }) {
             {checking ? "جاري الفحص..." : "التالي"}
           </SoftButton>
         ) : (
-          <SoftButton variant="gradient" color="error" disabled={!reason.trim()}
-            onClick={() => {
-              accountingApi.closeFiscalYear(year.id)
-                .then(() => onClose())
-                .catch(console.error);
+          <SoftButton variant="gradient" color="error" disabled={saving}
+            onClick={async () => {
+              if (isBlank(reason)) { setErrors({ reason: "سبب القفل مطلوب" }); return; }
+              setSaving(true);
+              setErrors({});
+              try {
+                await accountingApi.closeFiscalYear(year.id);
+                onClose();
+              } catch (error) {
+                applyApiErrors(error, setErrors, "تعذر قفل السنة المالية");
+              } finally {
+                setSaving(false);
+              }
             }}>
-            <LockIcon sx={{ fontSize: 14, mr: 0.5 }} /> تأكيد القفل
+            <LockIcon sx={{ fontSize: 14, mr: 0.5 }} /> {saving ? "جارٍ القفل..." : "تأكيد القفل"}
           </SoftButton>
         )}
       </DialogActions>
@@ -166,14 +181,26 @@ function CloseYearDialog({ year, onClose }) {
 function AddFYDialog({ onClose, onSaved }) {
   const [form, setForm] = useState({ name: "", startDate: "", endDate: "" });
   const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const [errors, setErrors] = useState({});
+  const set = (k, v) => {
+    setForm((p) => ({ ...p, [k]: v }));
+    if (errors[k] || errors._global) setErrors((current) => ({ ...current, [k]: "", _global: "" }));
+  };
 
   const save = () => {
-    if (!form.name.trim() || !form.startDate || !form.endDate) return;
+    const nextErrors = {};
+    if (isBlank(form.name)) nextErrors.name = "اسم السنة المالية مطلوب";
+    if (isBlank(form.startDate)) nextErrors.startDate = "تاريخ البداية مطلوب";
+    if (isBlank(form.endDate)) nextErrors.endDate = "تاريخ النهاية مطلوب";
+    if (form.startDate && form.endDate && form.startDate > form.endDate) {
+      nextErrors.endDate = "تاريخ النهاية يجب أن يكون بعد تاريخ البداية";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setSaving(true);
+    setErrors({});
     accountingApi.createFiscalYear({ name: form.name.trim(), startDate: form.startDate, endDate: form.endDate })
       .then((r) => { onSaved(r.data); onClose(); })
-      .catch(console.error)
+      .catch((error) => applyApiErrors(error, setErrors, "تعذر حفظ السنة المالية"))
       .finally(() => setSaving(false));
   };
 
@@ -185,14 +212,18 @@ function AddFYDialog({ onClose, onSaved }) {
       </DialogTitle>
       <DialogContent dividers>
         <SoftBox display="flex" flexDirection="column" gap={2} mt={0.5}>
-          <TextField size="small" label="اسم السنة المالية" value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="مثال: السنة المالية 2026" />
-          <TextField size="small" type="date" label="تاريخ البداية" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} InputLabelProps={{ shrink: true }} />
-          <TextField size="small" type="date" label="تاريخ النهاية" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} InputLabelProps={{ shrink: true }} />
+          {errors._global && <Alert severity="error">{errors._global}</Alert>}
+          <TextField size="small" label="اسم السنة المالية" value={form.name} onChange={(e) => set("name", e.target.value)}
+            placeholder="مثال: السنة المالية 2026" error={!!errors.name} helperText={errors.name || ""} />
+          <TextField size="small" type="date" label="تاريخ البداية" value={form.startDate} onChange={(e) => set("startDate", e.target.value)}
+            InputLabelProps={{ shrink: true }} error={!!errors.startDate} helperText={errors.startDate || ""} />
+          <TextField size="small" type="date" label="تاريخ النهاية" value={form.endDate} onChange={(e) => set("endDate", e.target.value)}
+            InputLabelProps={{ shrink: true }} error={!!errors.endDate} helperText={errors.endDate || ""} />
         </SoftBox>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="text" color="secondary" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" disabled={!form.name.trim() || !form.startDate || !form.endDate || saving} onClick={save}>
+        <SoftButton variant="gradient" color="info" disabled={saving} onClick={save}>
           {saving ? "جارٍ الحفظ..." : "حفظ"}
         </SoftButton>
       </DialogActions>

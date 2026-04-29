@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from "react";
 import apiClient from "services/apiClient";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
@@ -28,6 +29,7 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const LEGAL_FORMS = [
   { value: "SARL",              label: "شركة ذات مسؤولية محدودة (SARL)" },
@@ -139,6 +141,7 @@ export default function CompanyProfile() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     apiClient.get("/api/settings/company")
@@ -153,13 +156,19 @@ export default function CompanyProfile() {
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setSaved(false);
+    if (errors[k] || errors._global) setErrors((current) => ({ ...current, [k]: "", _global: "" }));
   };
 
   const handleSave = () => {
+    const nextErrors = {};
+    if (isBlank(form.nameAr)) nextErrors.nameAr = "اسم الشركة بالعربية مطلوب";
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = "البريد الإلكتروني غير صالح";
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); setTab(nextErrors.nameAr ? 0 : 1); return; }
     setSaving(true);
+    setErrors({});
     apiClient.put("/api/settings/company", form)
       .then(() => setSaved(true))
-      .catch(console.error)
+      .catch((error) => applyApiErrors(error, setErrors, "تعذر حفظ معلومات الشركة"))
       .finally(() => setSaving(false));
   };
 
@@ -185,6 +194,7 @@ export default function CompanyProfile() {
           </SoftBox>
           <Box
             component="button"
+            disabled={saving}
             onClick={handleSave}
             sx={{
               background: saved
@@ -192,6 +202,7 @@ export default function CompanyProfile() {
                 : "linear-gradient(135deg, #17c1e8, #0ea5c9)",
               border: "none", borderRadius: "10px", px: 3, py: 1,
               cursor: "pointer", color: "#fff", fontWeight: 600, fontSize: 13,
+              opacity: saving ? 0.75 : 1,
               display: "flex", alignItems: "center", gap: 0.8,
               transition: "background 300ms",
             }}
@@ -199,6 +210,12 @@ export default function CompanyProfile() {
             {saved ? <><CheckCircleIcon sx={{ fontSize: 16 }} /> تم الحفظ</> : saving ? "جاري الحفظ..." : "حفظ التعديلات"}
           </Box>
         </SoftBox>
+
+        {errors._global && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global}
+          </Alert>
+        )}
 
         {/* Completeness */}
         <Card sx={{ p: 2, mb: 2.5 }}>
@@ -251,7 +268,9 @@ export default function CompanyProfile() {
                   <Box sx={{ fontSize: 13, fontWeight: 600, color: "#344767", mb: 1.5 }}>تسمية الشركة</Box>
                   <FieldRow>
                     <TextField label="الاسم بالعربية" value={form.nameAr} onChange={set("nameAr")} size="small" fullWidth required
-                      InputLabelProps={{ shrink: true }} />
+                      InputLabelProps={{ shrink: true }}
+                      error={!!errors.nameAr}
+                      helperText={errors.nameAr || ""} />
                     <TextField label="Nom en français" value={form.nameFr} onChange={set("nameFr")} size="small" fullWidth
                       InputLabelProps={{ shrink: true }} />
                   </FieldRow>
@@ -317,7 +336,9 @@ export default function CompanyProfile() {
                 <FieldRow>
                   <TextField label="الفاكس" value={form.fax} onChange={set("fax")} size="small" fullWidth InputLabelProps={{ shrink: true }} />
                   <TextField label="البريد الإلكتروني" value={form.email} onChange={set("email")} size="small" fullWidth
-                    InputLabelProps={{ shrink: true }} type="email" />
+                    InputLabelProps={{ shrink: true }} type="email"
+                    error={!!errors.email}
+                    helperText={errors.email || ""} />
                 </FieldRow>
                 <TextField label="الموقع الإلكتروني" value={form.website} onChange={set("website")} size="small" fullWidth
                   InputLabelProps={{ shrink: true }} />

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -32,6 +33,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const BOOK_TYPES = [
   { type: "sales",     label: "مبيعات",   color: "#17c1e8", isSystem: true },
@@ -51,7 +53,32 @@ function getTypeInfo(type) {
 
 function BookDialog({ book, onClose, onSave }) {
   const [form, setForm] = useState(book ?? { type: "manual", name: "", prefix: "", nextSeq: 1, requireApproval: false, allowManual: true, active: true });
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
   const typeInfo = getTypeInfo(form.type);
+  const set = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
+  const save = async () => {
+    const nextErrors = {};
+    if (isBlank(form.name)) nextErrors.name = "اسم الدفتر مطلوب";
+    if (isBlank(form.prefix)) nextErrors.prefix = "بادئة الترقيم مطلوبة";
+    if (!Number.isFinite(Number(form.nextSeq)) || Number(form.nextSeq) < 1) {
+      nextErrors.nextSeq = "الترقيم التالي يجب أن يكون رقماً أكبر من صفر";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setSaving(true);
+    setErrors({});
+    try {
+      await onSave(form);
+      onClose();
+    } catch (error) {
+      applyApiErrors(error, setErrors, "تعذر حفظ دفتر اليومية");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -63,18 +90,24 @@ function BookDialog({ book, onClose, onSave }) {
       </DialogTitle>
       <DialogContent>
         <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+          {errors._global && <Alert severity="error">{errors._global}</Alert>}
           <TextField
             label="اسم الدفتر" value={form.name} size="small" fullWidth
-            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+            onChange={(e) => set("name", e.target.value)}
+            error={!!errors.name}
+            helperText={errors.name || ""}
           />
           <TextField
             label="البادئة (Prefix)" value={form.prefix} size="small" fullWidth
-            helperText={`مثال: JRN → JRN-2025-0001`}
-            onChange={(e) => setForm((p) => ({ ...p, prefix: e.target.value.toUpperCase() }))}
+            helperText={errors.prefix || `مثال: JRN → JRN-2025-0001`}
+            onChange={(e) => set("prefix", e.target.value.toUpperCase())}
+            error={!!errors.prefix}
           />
           <TextField
             label="الترقيم التالي" type="number" value={form.nextSeq} size="small" fullWidth
-            onChange={(e) => setForm((p) => ({ ...p, nextSeq: parseInt(e.target.value) || 1 }))}
+            onChange={(e) => set("nextSeq", e.target.value)}
+            error={!!errors.nextSeq}
+            helperText={errors.nextSeq || ""}
           />
           <SoftBox sx={{ background: "#f8f9fa", p: 1.5, borderRadius: 2 }}>
             <SoftTypography variant="caption" color="secondary" display="block" mb={0.5}>معاينة الترقيم:</SoftTypography>
@@ -84,11 +117,11 @@ function BookDialog({ book, onClose, onSave }) {
           </SoftBox>
           <Divider />
           <FormControlLabel
-            control={<Switch checked={form.requireApproval} onChange={(e) => setForm((p) => ({ ...p, requireApproval: e.target.checked }))} />}
+            control={<Switch checked={form.requireApproval} onChange={(e) => set("requireApproval", e.target.checked)} />}
             label={<SoftTypography variant="caption">يتطلب موافقة قبل الترحيل</SoftTypography>}
           />
           <FormControlLabel
-            control={<Switch checked={form.allowManual} onChange={(e) => setForm((p) => ({ ...p, allowManual: e.target.checked }))} />}
+            control={<Switch checked={form.allowManual} onChange={(e) => set("allowManual", e.target.checked)} />}
             label={<SoftTypography variant="caption">يسمح بالقيود اليدوية</SoftTypography>}
           />
           {typeInfo.isSystem && (
@@ -101,8 +134,8 @@ function BookDialog({ book, onClose, onSave }) {
           )}
           <SoftBox display="flex" gap={1} justifyContent="flex-end" mt={1}>
             <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-            <SoftButton variant="gradient" color="info" size="small" onClick={() => onSave(form)}>
-              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ
+            <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={save}>
+              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
@@ -124,11 +157,12 @@ export default function JournalBooks() {
   const handleSave = (form) => {
     if (dialog === "new") {
       setBooks((p) => [...p, { ...form, id: Date.now() }]);
+      return Promise.resolve();
     } else {
-      accountingApi.updateJournalBook(dialog.id, form).catch(console.error);
-      setBooks((p) => p.map((b) => b.id === dialog.id ? { ...b, ...form } : b));
+      return accountingApi.updateJournalBook(dialog.id, form).then(() => {
+        setBooks((p) => p.map((b) => b.id === dialog.id ? { ...b, ...form } : b));
+      });
     }
-    setDialog(null);
   };
 
   return (

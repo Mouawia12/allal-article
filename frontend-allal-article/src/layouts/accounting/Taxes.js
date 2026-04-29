@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -33,6 +34,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { accountingApi } from "services";
+import { hasErrors, isBlank } from "utils/formErrors";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
@@ -72,6 +74,26 @@ function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
     payableAccountId: "", recoverableAccountId: "",
     priceIncludesTax: false, validFrom: "", validTo: "", active: true,
   });
+  const [errors, setErrors] = useState({});
+  const set = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+  };
+  const save = () => {
+    const nextErrors = {};
+    if (isBlank(form.code)) nextErrors.code = "كود الضريبة مطلوب";
+    if (isBlank(form.label)) nextErrors.label = "وصف الضريبة مطلوب";
+    if (!Number.isFinite(Number(form.rate)) || Number(form.rate) < 0) {
+      nextErrors.rate = "النسبة يجب أن تكون رقماً موجباً";
+    }
+    if (isBlank(form.validFrom)) nextErrors.validFrom = "تاريخ البداية مطلوب";
+    if (form.validTo && form.validFrom && form.validTo < form.validFrom) {
+      nextErrors.validTo = "تاريخ النهاية يجب أن يكون بعد تاريخ البداية";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    onSave({ ...form, rate: Number(form.rate) });
+    onClose();
+  };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
@@ -81,21 +103,25 @@ function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
       </DialogTitle>
       <DialogContent>
         <SoftBox display="flex" flexDirection="column" gap={2} mt={1}>
+          {errors._global && <Alert severity="error">{errors._global}</Alert>}
           <SoftBox display="flex" gap={1.5}>
             <TextField label="الكود" size="small" value={form.code}
-              onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} sx={{ flex: 1 }} />
+              onChange={(e) => set("code", e.target.value)} sx={{ flex: 1 }}
+              error={!!errors.code} helperText={errors.code || ""} />
             <TextField label="الوصف" size="small" value={form.label}
-              onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))} sx={{ flex: 2 }} />
+              onChange={(e) => set("label", e.target.value)} sx={{ flex: 2 }}
+              error={!!errors.label} helperText={errors.label || ""} />
           </SoftBox>
           <SoftBox display="flex" gap={1.5}>
             <TextField label="النسبة %" type="number" size="small" value={form.rate}
-              onChange={(e) => setForm((p) => ({ ...p, rate: e.target.value }))} sx={{ flex: 1 }} />
-            <Select size="small" value={form.type} onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))} sx={{ flex: 1 }}>
+              onChange={(e) => set("rate", e.target.value)} sx={{ flex: 1 }}
+              error={!!errors.rate} helperText={errors.rate || ""} />
+            <Select size="small" value={form.type} onChange={(e) => set("type", e.target.value)} sx={{ flex: 1 }}>
               {Object.entries(typeLabels).map(([k, v]) => <MenuItem key={k} value={k}>{v}</MenuItem>)}
             </Select>
           </SoftBox>
           <Select size="small" value={form.payableAccountId}
-            onChange={(e) => setForm((p) => ({ ...p, payableAccountId: e.target.value }))}
+            onChange={(e) => set("payableAccountId", e.target.value)}
             displayEmpty
           >
             <MenuItem value="">-- حساب الضريبة المحصلة --</MenuItem>
@@ -104,7 +130,7 @@ function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
             ))}
           </Select>
           <Select size="small" value={form.recoverableAccountId ?? ""}
-            onChange={(e) => setForm((p) => ({ ...p, recoverableAccountId: e.target.value || null }))}
+            onChange={(e) => set("recoverableAccountId", e.target.value || null)}
             displayEmpty
           >
             <MenuItem value="">-- حساب الضريبة القابلة للخصم (اختياري) --</MenuItem>
@@ -114,21 +140,23 @@ function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
           </Select>
           <SoftBox display="flex" gap={1.5}>
             <TextField label="ساري من" type="date" size="small" InputLabelProps={{ shrink: true }}
-              value={form.validFrom} onChange={(e) => setForm((p) => ({ ...p, validFrom: e.target.value }))} sx={{ flex: 1 }} />
+              value={form.validFrom} onChange={(e) => set("validFrom", e.target.value)} sx={{ flex: 1 }}
+              error={!!errors.validFrom} helperText={errors.validFrom || ""} />
             <TextField label="ساري حتى (فارغ = دائم)" type="date" size="small" InputLabelProps={{ shrink: true }}
-              value={form.validTo ?? ""} onChange={(e) => setForm((p) => ({ ...p, validTo: e.target.value || null }))} sx={{ flex: 1 }} />
+              value={form.validTo ?? ""} onChange={(e) => set("validTo", e.target.value || null)} sx={{ flex: 1 }}
+              error={!!errors.validTo} helperText={errors.validTo || ""} />
           </SoftBox>
           <FormControlLabel
-            control={<Switch checked={form.priceIncludesTax} onChange={(e) => setForm((p) => ({ ...p, priceIncludesTax: e.target.checked }))} />}
+            control={<Switch checked={form.priceIncludesTax} onChange={(e) => set("priceIncludesTax", e.target.checked)} />}
             label={<SoftTypography variant="caption">السعر شامل الضريبة</SoftTypography>}
           />
           <FormControlLabel
-            control={<Switch checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} />}
+            control={<Switch checked={form.active} onChange={(e) => set("active", e.target.checked)} />}
             label={<SoftTypography variant="caption">نشط</SoftTypography>}
           />
           <SoftBox display="flex" gap={1} justifyContent="flex-end">
             <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-            <SoftButton variant="gradient" color="info" size="small" onClick={() => onSave(form)}>
+            <SoftButton variant="gradient" color="info" size="small" onClick={save}>
               <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ
             </SoftButton>
           </SoftBox>
@@ -158,7 +186,6 @@ export default function Taxes() {
     } else {
       setTaxes((p) => p.map((t) => t.id === dialog.id ? { ...t, ...form } : t));
     }
-    setDialog(null);
   };
 
   const totalPayable = taxes.reduce((s, t) => s + t.collected, 0);

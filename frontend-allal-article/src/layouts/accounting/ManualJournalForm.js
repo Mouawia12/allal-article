@@ -2,6 +2,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
@@ -33,6 +34,7 @@ import Footer from "examples/Footer";
 
 import { fmt } from "./mockData";
 import { accountingApi } from "services";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 const JOURNAL_BOOKS = [
   { id: "manual",  label: "يومية عامة (يدوي)",   prefix: "MAN" },
@@ -144,6 +146,8 @@ export default function ManualJournalForm() {
     { id: 2, account: null, debit: "", credit: "", description: "" },
   ]);
   const [touched, setTouched] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     accountingApi.listFiscalYears()
@@ -169,20 +173,33 @@ export default function ManualJournalForm() {
   const isBalanced  = diff < 0.001;
   const hasLines    = lines.some((l) => l.account && (l.debit || l.credit));
 
-  const changeLine = (id, k, v) => setLines((prev) => prev.map((l) => l.id === id ? { ...l, [k]: v } : l));
+  const changeLine = (id, k, v) => {
+    setLines((prev) => prev.map((l) => l.id === id ? { ...l, [k]: v } : l));
+    if (errors.items || errors._global) setErrors((current) => ({ ...current, items: "", _global: "" }));
+  };
   const deleteLine = (id) => setLines((prev) => prev.filter((l) => l.id !== id));
   const addLine    = ()    => setLines((prev) => [...prev, emptyLine()]);
 
   const validate = () => {
     setTouched(true);
-    if (!isBalanced) { alert("القيد غير متوازن — مجموع المدين يجب أن يساوي مجموع الدائن"); return false; }
-    if (!hasLines)   { alert("أضف أسطراً للقيد أولاً"); return false; }
+    const nextErrors = {};
+    if (isBlank(date)) nextErrors.date = "تاريخ القيد مطلوب";
+    if (!fyId) nextErrors.fiscalYearId = "السنة المالية مطلوبة";
+    if (!isBalanced) nextErrors.items = "القيد غير متوازن، مجموع المدين يجب أن يساوي مجموع الدائن";
+    if (!hasLines) nextErrors.items = "أضف أسطراً للقيد أولاً";
     const bad = lines.find((l) => (l.debit || l.credit) && !l.account);
-    if (bad)         { alert("كل سطر يحتوي مبلغ يجب أن يحدد حساباً"); return false; }
+    if (bad) nextErrors.items = "كل سطر يحتوي مبلغ يجب أن يحدد حساباً";
+    const badAmount = lines.find((l) => Number(l.debit || 0) < 0 || Number(l.credit || 0) < 0);
+    if (badAmount) nextErrors.items = "المبالغ لا يمكن أن تكون سالبة";
+    if (hasErrors(nextErrors)) {
+      setErrors(nextErrors);
+      return false;
+    }
+    setErrors({});
     return true;
   };
 
-  const handleSave = (post) => {
+  const handleSave = async (post) => {
     if (!validate()) return;
     const payload = {
       date,
@@ -198,13 +215,16 @@ export default function ManualJournalForm() {
           description: l.description || null,
         })),
     };
-    accountingApi.createJournal(payload)
-      .then((r) => {
-        if (post) return accountingApi.postJournal(r.data.id);
-        return r;
-      })
-      .then(() => navigate("/accounting/journals"))
-      .catch((e) => alert(e?.response?.data?.message ?? "حدث خطأ أثناء الحفظ"));
+    setSaving(true);
+    try {
+      const journal = await accountingApi.createJournal(payload);
+      if (post) await accountingApi.postJournal(journal.data.id);
+      navigate("/accounting/journals");
+    } catch (error) {
+      applyApiErrors(error, setErrors, "حدث خطأ أثناء حفظ القيد");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -222,14 +242,20 @@ export default function ManualJournalForm() {
             </SoftBox>
           </SoftBox>
           <SoftBox display="flex" gap={1.5}>
-            <SoftButton variant="outlined" color="secondary" size="small" onClick={() => handleSave(false)}>
-              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ كمسودة
+            <SoftButton variant="outlined" color="secondary" size="small" disabled={saving} onClick={() => handleSave(false)}>
+              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ كمسودة"}
             </SoftButton>
-            <SoftButton variant="gradient" color="success" size="small" onClick={() => handleSave(true)} disabled={!isBalanced}>
-              <DoneAllIcon sx={{ mr: 0.5, fontSize: 16 }} /> ترحيل
+            <SoftButton variant="gradient" color="success" size="small" onClick={() => handleSave(true)} disabled={!isBalanced || saving}>
+              <DoneAllIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "ترحيل"}
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {(errors._global || errors.items || errors.date || errors.fiscalYearId) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global || errors.items || errors.date || errors.fiscalYearId}
+          </Alert>
+        )}
 
         {/* Header Card */}
         <Card sx={{ mb: 2, p: 2.5 }}>
@@ -243,7 +269,9 @@ export default function ManualJournalForm() {
               </Select>
             </FormControl>
             <TextField size="small" type="date" label="تاريخ القيد" value={date}
-              onChange={(e) => setDate(e.target.value)} sx={{ minWidth: 180 }} InputLabelProps={{ shrink: true }} />
+              onChange={(e) => { setDate(e.target.value); if (errors.date) setErrors((current) => ({ ...current, date: "" })); }}
+              sx={{ minWidth: 180 }} InputLabelProps={{ shrink: true }}
+              error={!!errors.date} helperText={errors.date || ""} />
             <TextField label="السنة المالية" value={activeFY?.name ?? "—"}
               sx={{ minWidth: 180 }} InputProps={{ readOnly: true }} size="small" />
             <TextField size="small" label="البيان / الوصف" value={notes}

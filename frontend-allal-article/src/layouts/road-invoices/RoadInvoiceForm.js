@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ordersApi } from "services";
+import { ordersApi, roadInvoicesApi } from "services";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
@@ -35,6 +36,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
+import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 
 // ─── Wilaya defaults (static config, no backend GET endpoint yet) ─────────────
 const wilayaDefaults = {
@@ -78,6 +80,8 @@ function SelectOrdersDialog({ open, onClose, onConfirm }) {
           category: "—",
           code: item.productSku ?? "—",
           qty: item.approvedQty ?? item.requestedQty ?? 0,
+          productId: item.productId,
+          orderId: o.id,
           price: Number(item.unitPrice ?? 0),
           weight: 0,
         }))
@@ -174,22 +178,41 @@ function RoadInvoiceForm() {
   const [wilaya, setWilaya] = useState("وهران");
   const [customer, setCustomer] = useState(wilayaDefaults["وهران"] || "");
   const [driver, setDriver] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
+  const [notes, setNotes] = useState("");
   const [lines, setLines] = useState([]);
   const [selectOrdersOpen, setSelectOrdersOpen] = useState(isFromOrders);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState(null);
 
   const handleWilayaChange = (w) => {
     setWilaya(w);
+    setErrors((current) => ({ ...current, wilaya: "", wilayaId: "", _global: "" }));
     if (wilayaDefaults[w]) setCustomer(wilayaDefaults[w]);
     else setCustomer("");
   };
 
-  const handleDeleteLine = (id) => setLines((prev) => prev.filter((l) => l.id !== id));
+  const handleDeleteLine = (id) => {
+    setErrors((current) => {
+      const next = { ...current, items: "", _global: "" };
+      delete next[`line-${id}-productId`];
+      delete next[`line-${id}-qty`];
+      delete next[`line-${id}-price`];
+      return next;
+    });
+    setLines((prev) => prev.filter((l) => l.id !== id));
+  };
 
-  const handleQtyChange = (id, qty) =>
+  const handleQtyChange = (id, qty) => {
+    setErrors((current) => ({ ...current, [`line-${id}-qty`]: "", items: "", _global: "" }));
     setLines((prev) => prev.map((l) => l.id === id ? { ...l, qty: Number(qty) } : l));
+  };
 
-  const handlePriceChange = (id, price) =>
+  const handlePriceChange = (id, price) => {
+    setErrors((current) => ({ ...current, [`line-${id}-price`]: "", items: "", _global: "" }));
     setLines((prev) => prev.map((l) => l.id === id ? { ...l, price: Number(price) } : l));
+  };
 
   // Merge items of same category — sum qty of duplicates, keep first, remove rest
   const handleMergeItems = () => {
@@ -207,6 +230,41 @@ function RoadInvoiceForm() {
 
   const totalWeight = lines.reduce((s, l) => s + l.qty * l.weight, 0).toFixed(1);
   const totalAmount = lines.reduce((s, l) => s + l.qty * l.price, 0).toLocaleString();
+  const selectedWilaya = WILAYAS.find((w) => w.name === wilaya);
+
+  const handleSave = () => {
+    const validationErrors = {};
+    if (isBlank(invoiceDate)) validationErrors.invoiceDate = "تاريخ الفاتورة مطلوب";
+    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
+    if (lines.length === 0) validationErrors.items = "أضف طلبية أو صنفاً واحداً على الأقل";
+    lines.forEach((line) => {
+      if (!line.productId) validationErrors[`line-${line.id}-productId`] = "الصنف غير مرتبط بمنتج صالح";
+      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+      if (Number(line.price) < 0) validationErrors[`line-${line.id}-price`] = "السعر لا يمكن أن يكون سالباً";
+    });
+
+    setErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
+    const payload = {
+      invoiceDate,
+      wilayaId: selectedWilaya?.code ? Number(selectedWilaya.code) : null,
+      notes: notes || null,
+      orderIds: [...new Set(lines.map((line) => line.orderId).filter(Boolean))],
+      items: lines.map((line) => ({
+        productId: line.productId,
+        quantity: Number(line.qty),
+        unitPrice: Number(line.price) || 0,
+        lineWeight: Number(line.qty || 0) * Number(line.weight || 0),
+      })),
+    };
+
+    setSaving(true);
+    roadInvoicesApi.create(payload)
+      .then((r) => setSavedId(r.data?.id || true))
+      .catch((error) => applyApiErrors(error, setErrors, "فشل حفظ فاتورة الطريق"))
+      .finally(() => setSaving(false));
+  };
 
   return (
     <DashboardLayout>
@@ -237,9 +295,17 @@ function RoadInvoiceForm() {
               sx={{ color: "#25D366", borderColor: "#25D366" }}>
               واتساب PDF
             </SoftButton>
-            <SoftButton variant="gradient" color="info" size="small">حفظ الفاتورة</SoftButton>
+            <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={handleSave}>
+              {saving ? "جارٍ الحفظ..." : "حفظ الفاتورة"}
+            </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {(errors._global || errors.items) && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {errors._global || errors.items}
+          </Alert>
+        )}
 
         <Grid container spacing={2}>
           {/* Left: Header Info */}
@@ -249,19 +315,27 @@ function RoadInvoiceForm() {
                 معلومات الفاتورة
               </SoftTypography>
               <SoftBox display="flex" flexDirection="column" gap={2}>
-                <FormControl size="small" fullWidth>
+                <FormControl size="small" fullWidth error={!!(errors.wilaya || errors.wilayaId)}>
                   <InputLabel>الولاية</InputLabel>
                   <Select value={wilaya} onChange={(e) => handleWilayaChange(e.target.value)} label="الولاية">
                     {WILAYAS.map((w) => (
                       <MenuItem key={w.code} value={w.name}>{w.code} - {w.name}</MenuItem>
                     ))}
                   </Select>
+                  {(errors.wilaya || errors.wilayaId) && (
+                    <SoftTypography variant="caption" color="error" mt={0.5}>
+                      {errors.wilaya || errors.wilayaId}
+                    </SoftTypography>
+                  )}
                 </FormControl>
                 <TextField
                   size="small"
                   label="الزبون"
                   value={customer}
-                  onChange={(e) => setCustomer(e.target.value)}
+                  onChange={(e) => {
+                    setCustomer(e.target.value);
+                    setErrors((current) => ({ ...current, customer: "", customerId: "", _global: "" }));
+                  }}
                   fullWidth
                   helperText={wilayaDefaults[wilaya] ? `تلقائي: ${wilayaDefaults[wilaya]}` : "لا يوجد زبون تلقائي لهذه الولاية"}
                 />
@@ -273,10 +347,16 @@ function RoadInvoiceForm() {
                   fullWidth
                 />
                 <TextField size="small" label="تاريخ الفاتورة" type="date" fullWidth
-                  defaultValue={new Date().toISOString().split("T")[0]}
+                  value={invoiceDate}
+                  onChange={(e) => {
+                    setInvoiceDate(e.target.value);
+                    setErrors((current) => ({ ...current, invoiceDate: "", _global: "" }));
+                  }}
+                  error={!!errors.invoiceDate}
+                  helperText={errors.invoiceDate}
                   InputLabelProps={{ shrink: true }}
                 />
-                <TextField size="small" label="ملاحظات" multiline rows={3} fullWidth />
+                <TextField size="small" label="ملاحظات" multiline rows={3} fullWidth value={notes} onChange={(e) => setNotes(e.target.value)} />
               </SoftBox>
             </Card>
           </Grid>
@@ -322,6 +402,11 @@ function RoadInvoiceForm() {
                         <td style={{ padding: "8px 10px" }}>
                           <SoftTypography variant="caption" fontWeight="bold">{l.product}</SoftTypography>
                           <SoftTypography variant="caption" color="secondary" display="block">{l.code}</SoftTypography>
+                          {errors[`line-${l.id}-productId`] && (
+                            <SoftTypography variant="caption" color="error" display="block">
+                              {errors[`line-${l.id}-productId`]}
+                            </SoftTypography>
+                          )}
                         </td>
                         <td style={{ padding: "8px 10px" }}>
                           <SoftTypography variant="caption" color="text">{l.category}</SoftTypography>
@@ -332,6 +417,8 @@ function RoadInvoiceForm() {
                             type="number"
                             value={l.qty}
                             onChange={(e) => handleQtyChange(l.id, e.target.value)}
+                            error={!!errors[`line-${l.id}-qty`]}
+                            helperText={errors[`line-${l.id}-qty`]}
                             inputProps={{ min: 1, style: { padding: "4px 8px", width: 70 } }}
                           />
                         </td>
@@ -341,6 +428,8 @@ function RoadInvoiceForm() {
                             type="number"
                             value={l.price}
                             onChange={(e) => handlePriceChange(l.id, e.target.value)}
+                            error={!!errors[`line-${l.id}-price`]}
+                            helperText={errors[`line-${l.id}-price`]}
                             inputProps={{ min: 0, style: { padding: "4px 8px", width: 80 } }}
                           />
                         </td>
@@ -392,6 +481,19 @@ function RoadInvoiceForm() {
           return [...prev, ...toAdd];
         })}
       />
+
+      <Dialog open={!!savedId} onClose={() => setSavedId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>تم الحفظ</DialogTitle>
+        <DialogContent dividers>
+          <SoftTypography variant="body2" color="text">تم حفظ فاتورة الطريق بنجاح.</SoftTypography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <SoftButton variant="text" color="secondary" onClick={() => navigate("/road-invoices")}>العودة للقائمة</SoftButton>
+          {savedId !== true && (
+            <SoftButton variant="gradient" color="info" onClick={() => navigate(`/road-invoices/${savedId}`)}>عرض الفاتورة</SoftButton>
+          )}
+        </DialogActions>
+      </Dialog>
 
       <Footer />
     </DashboardLayout>

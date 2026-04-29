@@ -60,6 +60,15 @@ function netCustomerBalance(customer) {
   return (customer.totalAmount || 0) + (customer.openingBalance || 0) - (customer.paidAmount || 0);
 }
 
+function openingBalanceDirection(value) {
+  return Number(value) < 0 ? "credit" : "debit";
+}
+
+function signedOpeningBalance(amount, direction) {
+  const value = Math.abs(Number(amount) || 0);
+  return direction === "credit" ? -value : value;
+}
+
 function positiveAmount(value) {
   return Math.abs(Number(value) || 0);
 }
@@ -670,7 +679,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
 // ─── Add / Edit Customer Dialog ───────────────────────────────────────────────
 const emptyForm = {
   name: "", phone: "", phone2: "", wilayaId: "", address: "",
-  shippingRoute: "", email: "", openingBalance: "", notes: "",
+  shippingRoute: "", email: "", openingBalance: "", openingBalanceDirection: "debit", notes: "",
 };
 
 function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
@@ -691,7 +700,8 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
           address: editCustomer.address || "",
           shippingRoute: editCustomer.shippingRoute || "",
           email: editCustomer.email || "",
-          openingBalance: editCustomer.openingBalance || "",
+          openingBalance: Math.abs(Number(editCustomer.openingBalance) || 0) || "",
+          openingBalanceDirection: openingBalanceDirection(editCustomer.openingBalance),
           notes: editCustomer.notes || "",
         });
       } else {
@@ -728,7 +738,7 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
         address: form.address.trim() || null,
         shippingRoute: form.shippingRoute.trim() || null,
         email: form.email.trim() || null,
-        openingBalance: Number(form.openingBalance) || 0,
+        openingBalance: signedOpeningBalance(form.openingBalance, form.openingBalanceDirection),
         notes: form.notes.trim() || null,
         salespersonId: null,
       };
@@ -798,6 +808,19 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
             <TextField fullWidth label="الرصيد الافتتاحي (دج)" type="number" size="small"
               value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)}
               error={!!errors.openingBalance} helperText={errors.openingBalance || "رصيد سابق قبل بدء التسجيل"} />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>طبيعة الرصيد</InputLabel>
+              <Select
+                value={form.openingBalanceDirection}
+                onChange={(e) => set("openingBalanceDirection", e.target.value)}
+                label="طبيعة الرصيد"
+              >
+                <MenuItem value="debit">مدين - هو يخلصنا</MenuItem>
+                <MenuItem value="credit">دائن - نحنا نخلصوه</MenuItem>
+              </Select>
+            </FormControl>
           </Grid>
           <Grid item xs={12}>
             <TextField fullWidth label="ملاحظات" size="small" multiline rows={2}

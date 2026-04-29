@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -47,6 +48,7 @@ import {
 } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
 import apiClient from "services/apiClient";
+import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
@@ -164,24 +166,43 @@ function EditProfile({ user, onSaved }) {
   const [confirmPass, setConfirmPass] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState({});
+
+  const setField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field] || errors._global) {
+      setErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
+  };
+
+  const setPasswordField = (field, value) => {
+    if (field === "currentPass") setCurrentPass(value);
+    if (field === "newPass") setNewPass(value);
+    if (field === "confirmPass") setConfirmPass(value);
+    if (errors[field] || errors.password || errors._global) {
+      setErrors((current) => ({ ...current, [field]: "", password: "", _global: "" }));
+    }
+  };
 
   const handleSave = async () => {
-    setError("");
+    const nextErrors = {};
+    if (isBlank(form.name)) nextErrors.name = "الاسم مطلوب";
+    if (newPass || confirmPass || currentPass) {
+      if (newPass.length < 8) nextErrors.newPass = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+      if (newPass !== confirmPass) nextErrors.confirmPass = "كلمتا المرور غير متطابقتان";
+    }
+    if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
+    setErrors({});
     setSaving(true);
     try {
-      const body = { name: form.name, phone: form.phone };
-      if (newPass) {
-        if (newPass.length < 8) { setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل"); setSaving(false); return; }
-        if (newPass !== confirmPass) { setError("كلمتا المرور غير متطابقتين"); setSaving(false); return; }
-        body.password = newPass;
-      }
+      const body = { name: form.name.trim(), phone: form.phone?.trim() || "" };
+      if (newPass) body.password = newPass;
       await apiClient.patch("/api/users/me", body);
       setSaved(true);
       onSaved?.();
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
-      setError(e.response?.data?.message || "حدث خطأ أثناء الحفظ");
+      applyApiErrors(e, setErrors, "حدث خطأ أثناء الحفظ");
     } finally {
       setSaving(false);
     }
@@ -195,25 +216,32 @@ function EditProfile({ user, onSaved }) {
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth size="small" label="الاسم الكامل"
-            value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            value={form.name} onChange={(e) => setField("name", e.target.value)}
+            error={!!errors.name}
+            helperText={errors.name || ""} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth size="small" label="رقم الهاتف"
-            value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+            value={form.phone} onChange={(e) => setField("phone", e.target.value)}
+            error={!!errors.phone}
+            helperText={errors.phone || ""} />
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField fullWidth size="small" label="البريد الإلكتروني"
-            value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+            value={form.email} disabled
+            helperText="تعديل البريد يتم من إدارة المستخدمين" />
         </Grid>
         <Grid item xs={12} sm={6}>
           <FormControl size="small" fullWidth>
             <InputLabel>لغة الواجهة</InputLabel>
-            <Select value={form.lang} label="لغة الواجهة"
-              onChange={(e) => setForm((f) => ({ ...f, lang: e.target.value }))}>
+            <Select value={form.lang} label="لغة الواجهة" disabled>
               <MenuItem value="ar">العربية</MenuItem>
               <MenuItem value="fr">Français</MenuItem>
               <MenuItem value="en">English</MenuItem>
             </Select>
+            <SoftTypography variant="caption" color="secondary" mt={0.5}>
+              إعداد اللغة غير مرتبط بالحفظ حالياً
+            </SoftTypography>
           </FormControl>
         </Grid>
       </Grid>
@@ -225,7 +253,7 @@ function EditProfile({ user, onSaved }) {
         <Grid item xs={12} sm={4}>
           <TextField fullWidth size="small" label="كلمة المرور الحالية"
             type={showPass ? "text" : "password"} value={currentPass}
-            onChange={(e) => setCurrentPass(e.target.value)}
+            onChange={(e) => setPasswordField("currentPass", e.target.value)}
             InputProps={{
               startAdornment: <InputAdornment position="start"><LockIcon fontSize="small" sx={{ color: "#94a3b8" }} /></InputAdornment>,
               endAdornment: (
@@ -240,20 +268,22 @@ function EditProfile({ user, onSaved }) {
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth size="small" label="كلمة المرور الجديدة"
-            type="password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
+            type="password" value={newPass} onChange={(e) => setPasswordField("newPass", e.target.value)}
+            error={!!errors.newPass || !!errors.password}
+            helperText={errors.newPass || errors.password || ""} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth size="small" label="تأكيد كلمة المرور"
-            type="password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)}
-            error={confirmPass && confirmPass !== newPass}
-            helperText={confirmPass && confirmPass !== newPass ? "كلمتا المرور غير متطابقتان" : ""} />
+            type="password" value={confirmPass} onChange={(e) => setPasswordField("confirmPass", e.target.value)}
+            error={!!errors.confirmPass || Boolean(confirmPass && confirmPass !== newPass)}
+            helperText={errors.confirmPass || (confirmPass && confirmPass !== newPass ? "كلمتا المرور غير متطابقتان" : "")} />
         </Grid>
       </Grid>
 
-      {error && (
-        <SoftBox mb={1} sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5 }}>
-          <SoftTypography variant="caption" sx={{ color: "#ea0606" }}>{error}</SoftTypography>
-        </SoftBox>
+      {errors._global && (
+        <Alert severity="error" sx={{ mb: 1 }}>
+          {errors._global}
+        </Alert>
       )}
       <SoftBox display="flex" justifyContent="flex-end" gap={1}>
         {saved && (

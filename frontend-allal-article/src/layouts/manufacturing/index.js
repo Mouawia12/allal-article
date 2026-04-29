@@ -1,6 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useMemo, useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -51,7 +53,8 @@ import {
   manufacturingStatusOrder,
   manufacturingTypeConfig,
 } from "data/config/manufacturingConfig";
-import { manufacturingApi } from "services";
+import { manufacturingApi, productsApi } from "services";
+import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 
 const priorityConfig = {
   low:    { label: "منخفضة", color: "#8392ab", bg: "#f8f9fa" },
@@ -61,6 +64,7 @@ const priorityConfig = {
 };
 
 const defaultForm = {
+  productId: "",
   productName: "رف معدني خاص",
   productCode: "MFG-ITEM",
   qty: 50,
@@ -79,6 +83,31 @@ const defaultForm = {
   depositAmount: 0,
   notes: "",
 };
+
+function normalizeManufacturingRequest(req = {}) {
+  const statusMeta = manufacturingStatusConfig[req.status] || manufacturingStatusConfig.draft;
+  const destinationLabel = req.destinationLabel || req.destinationBranch || req.destinationWarehouse || "";
+
+  return {
+    materials: [],
+    timeline: [],
+    priority: "normal",
+    sourceType: "stock_replenishment",
+    ...req,
+    depositPaid: req.depositPaidAmount ?? req.depositPaid ?? 0,
+    productName: req.productName || "—",
+    productCode: req.productCode || req.productSku || (req.productId ? String(req.productId) : "—"),
+    qty: req.qty ?? req.requestedQty ?? 0,
+    unit: req.unit ?? req.unitName ?? "وحدة",
+    factory: req.factory ?? req.factoryName ?? "—",
+    destinationBranch: req.destinationBranch ?? destinationLabel,
+    destinationWarehouse: req.destinationWarehouse ?? destinationLabel,
+    customerName: req.customerName ?? req.customerSnapshot ?? "",
+    progress: req.progress ?? statusMeta.progress,
+    producedQty: req.producedQty ?? 0,
+    receivedQty: req.receivedQty ?? 0,
+  };
+}
 
 // ─── KPI Stat Card ────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, icon: Icon, color }) {
@@ -468,7 +497,7 @@ function ManufacturingTimeline({ events }) {
 }
 
 // ─── New Request Dialog ───────────────────────────────────────────────────────
-function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
+function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit, errors = {}, saving, productOptions = [] }) {
   const setField = (field) => (event) => {
     const value = field === "depositRequired" ? event.target.value === "yes" : event.target.value;
     onChange({ ...form, [field]: value });
@@ -497,26 +526,55 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
       </DialogTitle>
       <DialogContent sx={{ pt: "20px !important" }}>
         <Grid container spacing={1.6}>
+          {errors._global && (
+            <Grid item xs={12}>
+              <Alert severity="error">{errors._global}</Alert>
+            </Grid>
+          )}
           <Grid item xs={12} md={6}>
-            <TextField fullWidth size="small" label="الصنف المطلوب" value={form.productName} onChange={setField("productName")} />
+            <Autocomplete
+              size="small"
+              options={productOptions}
+              value={productOptions.find((product) => product.id === form.productId) || null}
+              onChange={(_, product) => {
+                onChange({
+                  ...form,
+                  productId: product?.id || "",
+                  productName: product?.name || "",
+                  productCode: product?.code || "",
+                  unit: product?.unit || form.unit,
+                });
+              }}
+              getOptionLabel={(option) => option ? `${option.code || option.id} - ${option.name}` : ""}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="الصنف المطلوب"
+                  error={!!(errors.productId || errors.productName)}
+                  helperText={errors.productId || errors.productName || "اختر صنفاً من القائمة"}
+                />
+              )}
+            />
           </Grid>
           <Grid item xs={12} md={3}>
-            <TextField fullWidth size="small" label="كود الصنف" value={form.productCode} onChange={setField("productCode")} />
+            <TextField fullWidth size="small" label="كود الصنف" value={form.productCode} onChange={setField("productCode")} disabled />
           </Grid>
           <Grid item xs={6} md={2}>
-            <TextField fullWidth size="small" label="الكمية" type="number" value={form.qty} onChange={setField("qty")} />
+            <TextField fullWidth size="small" label="الكمية" type="number" value={form.qty} onChange={setField("qty")}
+              error={!!(errors.qty || errors.requestedQty)} helperText={errors.qty || errors.requestedQty} />
           </Grid>
           <Grid item xs={6} md={1}>
             <TextField fullWidth size="small" label="وحدة" value={form.unit} onChange={setField("unit")} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <FormControl fullWidth size="small">
+            <FormControl fullWidth size="small" error={!!errors.sourceType}>
               <InputLabel>سبب التصنيع</InputLabel>
               <Select label="سبب التصنيع" value={form.sourceType} onChange={setField("sourceType")}>
                 {Object.entries(manufacturingTypeConfig).map(([key, cfg]) => (
                   <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
                 ))}
               </Select>
+              {errors.sourceType && <SoftTypography variant="caption" color="error" mt={0.5}>{errors.sourceType}</SoftTypography>}
             </FormControl>
           </Grid>
           <Grid item xs={12} md={4}>
@@ -532,7 +590,8 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
             <TextField fullWidth size="small" label="الفرع / المقر" value={form.destinationBranch} onChange={setField("destinationBranch")} />
           </Grid>
           <Grid item xs={12} md={4}>
-            <TextField fullWidth size="small" label="تاريخ التسليم" type="date" value={form.dueDate} onChange={setField("dueDate")} InputLabelProps={{ shrink: true }} />
+            <TextField fullWidth size="small" label="تاريخ التسليم" type="date" value={form.dueDate} onChange={setField("dueDate")} InputLabelProps={{ shrink: true }}
+              error={!!errors.dueDate} helperText={errors.dueDate} />
           </Grid>
           <Grid item xs={12} md={4}>
             <TextField fullWidth size="small" label="المصنع" value={form.factory} onChange={setField("factory")} />
@@ -571,6 +630,8 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
               value={form.depositAmount}
               onChange={setField("depositAmount")}
               disabled={!form.depositRequired}
+              error={!!errors.depositAmount}
+              helperText={errors.depositAmount}
             />
           </Grid>
           <Grid item xs={12}>
@@ -580,7 +641,9 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit }) {
       </DialogContent>
       <DialogActions sx={{ p: 2, borderTop: "1px solid #eee" }}>
         <SoftButton variant="outlined" color="secondary" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" onClick={onSubmit} startIcon={<AddIcon />}>إنشاء الطلب</SoftButton>
+        <SoftButton variant="gradient" color="info" onClick={onSubmit} disabled={saving} startIcon={<AddIcon />}>
+          {saving ? "جارٍ الإنشاء..." : "إنشاء الطلب"}
+        </SoftButton>
       </DialogActions>
     </Dialog>
   );
@@ -594,10 +657,7 @@ export default function Manufacturing() {
   useEffect(() => {
     manufacturingApi.list()
       .then((r) => {
-        const list = (r.data?.content ?? r.data ?? []).map((req) => ({
-          materials: [], timeline: [], priority: "normal", sourceType: "stock_replenishment",
-          ...req,
-        }));
+        const list = (r.data?.content ?? r.data ?? []).map(normalizeManufacturingRequest);
         setRequests(list);
         if (list.length > 0) setSelectedId(list[0].id);
       })
@@ -608,6 +668,23 @@ export default function Manufacturing() {
   const [timelineByRequest, setTimelineByRequest] = useState({});
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState(defaultForm);
+  const [productOptions, setProductOptions] = useState([]);
+  const [formErrors, setFormErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    productsApi.list()
+      .then((r) => {
+        const list = r.data?.content ?? r.data ?? [];
+        setProductOptions(list.map((p) => ({
+          ...p,
+          name: p.name ?? p.nameAr,
+          code: p.code ?? p.sku ?? String(p.id),
+          unit: p.unit ?? "وحدة",
+        })));
+      })
+      .catch(console.error);
+  }, []);
 
   const selectedRequest = requests.find((r) => r.id === selectedId) || requests[0] || {};
   const selectedStatus = manufacturingStatusConfig[selectedRequest.status] || manufacturingStatusConfig.draft;
@@ -620,7 +697,7 @@ export default function Manufacturing() {
     if (!selectedRequest.id || timelineByRequest[selectedRequest.id]) return;
     manufacturingApi.getEvents(selectedRequest.id)
       .then((r) => {
-        const events = r.data?.data ?? [];
+        const events = r.data?.data ?? r.data ?? [];
         setTimelineByRequest((prev) => ({ ...prev, [selectedRequest.id]: events }));
       })
       .catch(() => {});
@@ -665,14 +742,14 @@ export default function Manufacturing() {
       quality_check:  () => manufacturingApi.qualityCheck(id, {}),
       ready_to_ship:  () => manufacturingApi.readyToShip(id),
       in_transit:     () => manufacturingApi.ship(id),
-      received:       () => manufacturingApi.receive(id, { receivedQty: selectedRequest.qty }),
+      received:       () => manufacturingApi.receive(id, { receivedQty: Number(selectedRequest.qty || selectedRequest.requestedQty || 0) }),
       cancelled:      () => manufacturingApi.cancel(id, "إلغاء من لوحة التحكم"),
     };
     const apiCall = apiMap[nextStatus];
     if (!apiCall) return;
     apiCall()
       .then((r) => {
-        const updated = r.data;
+        const updated = normalizeManufacturingRequest(r.data);
         setRequests((prev) => prev.map((req) => req.id === id ? { ...req, ...updated } : req));
         const cfg = manufacturingStatusConfig[nextStatus] || {};
         appendTimeline(id, cfg.eventTitle ?? nextStatus, `تم تحديث الحالة إلى "${cfg.label ?? nextStatus}".`);
@@ -681,29 +758,43 @@ export default function Manufacturing() {
   };
 
   const createRequest = () => {
+    const validationErrors = {};
+    if (!form.productId) validationErrors.productId = "الصنف مطلوب";
+    if (isBlank(form.sourceType)) validationErrors.sourceType = "سبب التصنيع مطلوب";
+    if (!isPositiveNumber(form.qty)) validationErrors.requestedQty = "الكمية يجب أن تكون أكبر من صفر";
+    if (form.depositRequired && Number(form.depositAmount || 0) < 0) validationErrors.depositAmount = "العربون لا يمكن أن يكون سالباً";
+
+    setFormErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
+    setSaving(true);
     manufacturingApi.create({
-      productName: form.productName,
-      productCode: form.productCode,
-      qty: Number(form.qty),
-      unit: form.unit,
+      productId: form.productId,
+      requestedQty: Number(form.qty),
+      unitName: form.unit,
       sourceType: form.sourceType,
       salesOrderNumber: form.salesOrderNumber || null,
-      customerName: form.customerName || null,
-      destinationWarehouse: form.destinationWarehouse || null,
-      factory: form.factory || null,
+      customerSnapshot: form.customerName || null,
+      destinationLabel: form.destinationWarehouse || form.destinationBranch || null,
+      factoryName: form.factory || null,
       productionLine: form.productionLine || null,
-      responsible: form.responsible || null,
       priority: form.priority,
       dueDate: form.dueDate || null,
+      depositRequired: Boolean(form.depositRequired),
+      depositAmount: form.depositRequired ? Number(form.depositAmount || 0) : 0,
+      notes: form.notes || null,
+      materials: [],
     })
       .then((r) => {
-        const newReq = { materials: [], priority: "normal", sourceType: "stock_replenishment", ...r.data };
+        const newReq = normalizeManufacturingRequest(r.data);
         setRequests((prev) => [newReq, ...prev]);
         setSelectedId(newReq.id);
         setForm(defaultForm);
+        setFormErrors({});
         setNewOpen(false);
       })
-      .catch(console.error);
+      .catch((error) => applyApiErrors(error, setFormErrors, "فشل إنشاء طلب التصنيع"))
+      .finally(() => setSaving(false));
   };
 
   return (
@@ -1020,9 +1111,15 @@ export default function Manufacturing() {
       <NewManufacturingDialog
         open={newOpen}
         form={form}
-        onChange={setForm}
+        onChange={(next) => {
+          setForm(next);
+          setFormErrors({});
+        }}
         onClose={() => setNewOpen(false)}
         onSubmit={createRequest}
+        errors={formErrors}
+        saving={saving}
+        productOptions={productOptions}
       />
     </DashboardLayout>
   );

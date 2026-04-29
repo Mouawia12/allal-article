@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import Chip from "@mui/material/Chip";
@@ -56,6 +57,7 @@ import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 import useProductFavorites from "hooks/useProductFavorites";
 import { CustomerDetailDialog } from "layouts/customers";
+import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const getPriceListsFor = () => [];
 const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
@@ -527,6 +529,10 @@ function NewOrder() {
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [orderErrors, setOrderErrors] = useState({});
+  const [orderSaving, setOrderSaving] = useState(false);
+  const [newCustomerErrors, setNewCustomerErrors] = useState({});
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   useEffect(() => {
@@ -650,6 +656,13 @@ function NewOrder() {
       ...prev,
       [cartKey]: { product: qtyDialog.product, qty: nextQty, willShip: true, variant: qtyDialog.selectedVariant },
     }));
+    setOrderErrors((current) => {
+      const next = { ...current, _global: "" };
+      delete next.items;
+      delete next[`cart-${qtyDialog.product.id}-productId`];
+      delete next[`cart-${qtyDialog.product.id}-qty`];
+      return next;
+    });
     setQtyInput(String(nextQty));
     setQtyDialog(null);
     setReplaceQtyOnNextDigit(true);
@@ -727,6 +740,13 @@ function NewOrder() {
   };
 
   const removeFromCart = (productId) => {
+    setOrderErrors((current) => {
+      const next = { ...current, _global: "" };
+      delete next.items;
+      delete next[`cart-${productId}-productId`];
+      delete next[`cart-${productId}-qty`];
+      return next;
+    });
     setCart((prev) => {
       const next = { ...prev };
       delete next[productId];
@@ -742,6 +762,17 @@ function NewOrder() {
   };
 
   const handleSubmit = (isDraft) => {
+    const validationErrors = {};
+    if (!customer?.id) validationErrors._global = "الرجاء اختيار الزبون أولاً";
+    if (cartItems.length === 0) validationErrors.items = "الرجاء إضافة صنف واحد على الأقل";
+    cartItems.forEach((item) => {
+      if (!item.product?.id) validationErrors[`cart-${item.product?.id || "unknown"}-productId`] = "الصنف مطلوب";
+      if (!isPositiveNumber(item.qty)) validationErrors[`cart-${item.product?.id || "unknown"}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+    });
+
+    setOrderErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
     const payload = {
       customerId: customer?.id ?? null,
       notes: notes || null,
@@ -751,6 +782,7 @@ function NewOrder() {
         customerNote: item.notes || null,
       })),
     };
+    setOrderSaving(true);
     ordersApi.create(payload)
       .then((r) => {
         const newId = r.data?.id;
@@ -760,19 +792,35 @@ function NewOrder() {
         return newId;
       })
       .then(() => setSuccessDialog(isDraft ? "draft" : "submitted"))
-      .catch(console.error);
+      .catch((error) => applyApiErrors(error, setOrderErrors, "فشل حفظ الطلبية"))
+      .finally(() => setOrderSaving(false));
   };
 
   const updateNewCustomerField = (field, value) => {
     setNewCustomerForm((current) => ({ ...current, [field]: value }));
+    if (newCustomerErrors[field] || newCustomerErrors._global) {
+      setNewCustomerErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
   };
 
   const addNewCustomer = () => {
     const name = newCustomerForm.name.trim();
     const phone = newCustomerForm.phone.trim();
     const wilaya = newCustomerForm.wilaya.trim();
+    const validationErrors = {};
 
-    if (!name || !phone || !wilaya) return;
+    if (isBlank(name)) validationErrors.name = "اسم الزبون مطلوب";
+    if (isBlank(phone)) validationErrors.phone = "رقم الهاتف مطلوب";
+    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
+    if (newCustomerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerForm.email)) {
+      validationErrors.email = "البريد الإلكتروني غير صالح";
+    }
+    if (newCustomerForm.openingBalance && Number(newCustomerForm.openingBalance) < 0) {
+      validationErrors.openingBalance = "الرصيد الافتتاحي لا يمكن أن يكون سالباً";
+    }
+
+    setNewCustomerErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
 
     const apiData = {
       name,
@@ -785,15 +833,18 @@ function NewOrder() {
       shippingRoute: newCustomerForm.shippingRoute.trim() || `${wilaya} - عام`,
       openingBalance: Math.max(0, Number(newCustomerForm.openingBalance) || 0),
     };
+    setNewCustomerSaving(true);
     customersApi.create(apiData)
       .then((r) => {
         const newCust = { orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...r.data };
         setCustomers((prev) => [...prev, newCust]);
         setCustomer(newCust);
         setNewCustomerForm(emptyNewCustomerForm);
+        setNewCustomerErrors({});
         setNewCustomerDialog(false);
       })
-      .catch(console.error);
+      .catch((error) => applyApiErrors(error, setNewCustomerErrors, "فشل إضافة الزبون"))
+      .finally(() => setNewCustomerSaving(false));
   };
 
   const focusSearchInput = () => {
@@ -1128,6 +1179,7 @@ function NewOrder() {
                     value={customer}
                     onChange={(_, v) => {
                       setCustomer(v);
+                      setOrderErrors((current) => ({ ...current, _global: "" }));
                       // auto-apply customer's linked price list, fallback to MAIN
                       setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
                     }}
@@ -1315,6 +1367,8 @@ function NewOrder() {
                     {cartItems.map(({ product, qty, willShip }, index) => {
                       const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
                       const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
+                      const productError = orderErrors[`cart-${product.id}-productId`];
+                      const qtyError = orderErrors[`cart-${product.id}-qty`];
 
                       return (
                         <SoftBox
@@ -1363,10 +1417,13 @@ function NewOrder() {
                             <SoftBox display="flex" alignItems="center" gap={0.25} ml="auto">
                               <IconButton
                                 size="small"
-                                onClick={() => setCart(prev => ({
-                                  ...prev,
-                                  [product.id]: { ...prev[product.id], qty: Math.max(1, qty - 1) }
-                                }))}
+                                onClick={() => {
+                                  setOrderErrors((current) => ({ ...current, [`cart-${product.id}-qty`]: "", items: "", _global: "" }));
+                                  setCart(prev => ({
+                                    ...prev,
+                                    [product.id]: { ...prev[product.id], qty: Math.max(1, qty - 1) }
+                                  }));
+                                }}
                                 sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
                               >
                                 <RemoveIcon sx={{ fontSize: 11 }} />
@@ -1380,10 +1437,13 @@ function NewOrder() {
                               </SoftTypography>
                               <IconButton
                                 size="small"
-                                onClick={() => setCart(prev => ({
-                                  ...prev,
-                                  [product.id]: { ...prev[product.id], qty: qty + 1 }
-                                }))}
+                                onClick={() => {
+                                  setOrderErrors((current) => ({ ...current, [`cart-${product.id}-qty`]: "", items: "", _global: "" }));
+                                  setCart(prev => ({
+                                    ...prev,
+                                    [product.id]: { ...prev[product.id], qty: qty + 1 }
+                                  }));
+                                }}
                                 sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
                               >
                                 <AddIcon sx={{ fontSize: 11 }} />
@@ -1408,6 +1468,11 @@ function NewOrder() {
                           {product.unitsPerPackage > 0 && (
                             <SoftTypography variant="caption" sx={{ color: "#7928ca", fontSize: 9, display: "block", mt: 0.25 }}>
                               = {calcPackages(qty, product)} {product.packageUnit}
+                            </SoftTypography>
+                          )}
+                          {(productError || qtyError) && (
+                            <SoftTypography variant="caption" color="error" display="block" mt={0.5}>
+                              {productError || qtyError}
                             </SoftTypography>
                           )}
                         </SoftBox>
@@ -1447,25 +1512,30 @@ function NewOrder() {
                 )}
 
                 <SoftBox display="flex" flexDirection="column" gap={1}>
+                  {(orderErrors._global || orderErrors.items) && (
+                    <Alert severity="error" sx={{ py: 0.5 }}>
+                      {orderErrors._global || orderErrors.items}
+                    </Alert>
+                  )}
                   <SoftButton
                     variant="gradient"
                     color="info"
                     fullWidth
                     startIcon={<SendIcon />}
-                    disabled={cartItems.length === 0 || !customer}
+                    disabled={orderSaving}
                     onClick={() => handleSubmit(false)}
                   >
-                    إرسال للإدارة
+                    {orderSaving ? "جارٍ الحفظ..." : "إرسال للإدارة"}
                   </SoftButton>
                   <SoftButton
                     variant="outlined"
                     color="secondary"
                     fullWidth
                     startIcon={<SaveIcon />}
-                    disabled={cartItems.length === 0}
+                    disabled={orderSaving}
                     onClick={() => handleSubmit(true)}
                   >
-                    حفظ كمسودة
+                    {orderSaving ? "جارٍ الحفظ..." : "حفظ كمسودة"}
                   </SoftButton>
                 </SoftBox>
 
@@ -1666,53 +1736,69 @@ function NewOrder() {
 
       {/* ── New Customer Dialog ── */}
       <Dialog open={newCustomerDialog} onClose={() => setNewCustomerDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>إضافة زبون جديد</DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
+	        <DialogTitle>إضافة زبون جديد</DialogTitle>
+	        <DialogContent>
+	          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+	            {newCustomerErrors._global && (
+	              <Grid item xs={12}>
+	                <Alert severity="error">{newCustomerErrors._global}</Alert>
+	              </Grid>
+	            )}
+	            <Grid item xs={12}>
+	              <TextField
+	                fullWidth
                 autoFocus
                 label="اسم الزبون / الشركة *"
-                value={newCustomerForm.name}
-                onChange={(event) => updateNewCustomerField("name", event.target.value)}
-                size="small"
-              />
-            </Grid>
+	                value={newCustomerForm.name}
+	                onChange={(event) => updateNewCustomerField("name", event.target.value)}
+	                error={!!newCustomerErrors.name}
+	                helperText={newCustomerErrors.name}
+	                size="small"
+	              />
+	            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="رقم الهاتف *"
-                value={newCustomerForm.phone}
-                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
-                size="small"
-              />
-            </Grid>
+	                value={newCustomerForm.phone}
+	                onChange={(event) => updateNewCustomerField("phone", event.target.value)}
+	                error={!!newCustomerErrors.phone}
+	                helperText={newCustomerErrors.phone}
+	                size="small"
+	              />
+	            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="الهاتف الثاني"
-                value={newCustomerForm.phone2}
-                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
-                size="small"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>الولاية *</InputLabel>
-                <Select
-                  value={newCustomerForm.wilaya}
+	                value={newCustomerForm.phone2}
+	                onChange={(event) => updateNewCustomerField("phone2", event.target.value)}
+	                error={!!newCustomerErrors.phone2}
+	                helperText={newCustomerErrors.phone2}
+	                size="small"
+	              />
+	            </Grid>
+	            <Grid item xs={12} sm={6}>
+	              <FormControl size="small" fullWidth error={!!(newCustomerErrors.wilaya || newCustomerErrors.wilayaId)}>
+	                <InputLabel>الولاية *</InputLabel>
+	                <Select
+	                  value={newCustomerForm.wilaya}
                   label="الولاية *"
                   onChange={(event) => updateNewCustomerField("wilaya", event.target.value)}
                 >
                   {WILAYAS.map((wilaya) => (
                     <MenuItem key={wilaya.code} value={wilaya.name}>
                       {wilaya.code} - {wilaya.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
+	                    </MenuItem>
+	                  ))}
+	                </Select>
+	                {(newCustomerErrors.wilaya || newCustomerErrors.wilayaId) && (
+	                  <SoftTypography variant="caption" color="error" mt={0.5}>
+	                    {newCustomerErrors.wilaya || newCustomerErrors.wilayaId}
+	                  </SoftTypography>
+	                )}
+	              </FormControl>
+	            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -1736,21 +1822,24 @@ function NewOrder() {
               <TextField
                 fullWidth
                 label="البريد الإلكتروني"
-                value={newCustomerForm.email}
-                onChange={(event) => updateNewCustomerField("email", event.target.value)}
-                size="small"
-              />
-            </Grid>
+	                value={newCustomerForm.email}
+	                onChange={(event) => updateNewCustomerField("email", event.target.value)}
+	                error={!!newCustomerErrors.email}
+	                helperText={newCustomerErrors.email}
+	                size="small"
+	              />
+	            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="الرصيد الافتتاحي (دج)"
                 type="number"
-                value={newCustomerForm.openingBalance}
-                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
-                helperText="رصيد سابق قبل بدء التسجيل في البرنامج"
-                size="small"
-              />
+	                value={newCustomerForm.openingBalance}
+	                onChange={(event) => updateNewCustomerField("openingBalance", event.target.value)}
+	                error={!!newCustomerErrors.openingBalance}
+	                helperText={newCustomerErrors.openingBalance || "رصيد سابق قبل بدء التسجيل في البرنامج"}
+	                size="small"
+	              />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
@@ -1770,12 +1859,12 @@ function NewOrder() {
           <SoftButton
             variant="gradient"
             color="info"
-            size="small"
-            disabled={!newCustomerForm.name.trim() || !newCustomerForm.phone.trim() || !newCustomerForm.wilaya.trim()}
-            onClick={addNewCustomer}
-          >
-            إضافة وتحديد
-          </SoftButton>
+	            size="small"
+	            disabled={newCustomerSaving}
+	            onClick={addNewCustomer}
+	          >
+	            {newCustomerSaving ? "جارٍ الإضافة..." : "إضافة وتحديد"}
+	          </SoftButton>
         </DialogActions>
       </Dialog>
 
