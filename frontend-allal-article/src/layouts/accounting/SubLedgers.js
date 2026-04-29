@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -31,6 +32,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(Math.abs(Number(n ?? 0))) + " دج";
@@ -268,6 +270,7 @@ function BankTab({ bankAccounts }) {
 export default function SubLedgers() {
   const [tab, setTab]           = useState(0);
   const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [data, setData]         = useState({
     customers: [], customerControl: 0, customerTotal: 0,
     suppliers: [], supplierControl: 0, supplierTotal: 0,
@@ -277,9 +280,18 @@ export default function SubLedgers() {
 
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     accountingApi.listSubledgers()
       .then((r) => setData(r.data ?? {}))
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل الذمم والمطابقة"));
+        setData({
+          customers: [], customerControl: 0, customerTotal: 0,
+          suppliers: [], supplierControl: 0, supplierTotal: 0,
+          taxes: [],
+          bankAccounts: [],
+        });
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -311,6 +323,12 @@ export default function SubLedgers() {
             </SoftBox>
           )}
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {loading ? (
           <SoftBox display="flex" justifyContent="center" py={6}><CircularProgress /></SoftBox>

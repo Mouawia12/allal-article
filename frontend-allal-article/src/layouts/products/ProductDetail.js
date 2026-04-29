@@ -1,8 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { productsApi, inventoryApi, ordersApi, priceListsApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -70,15 +72,23 @@ function ProductDetail() {
   const [movements, setMovements] = useState([]);
   const [relatedOrders, setRelatedOrders] = useState([]);
   const [priceListRows, setPriceListRows] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const [relatedOrdersError, setRelatedOrdersError] = useState("");
+  const [priceListError, setPriceListError] = useState("");
   const { isFavorite, toggleFavorite } = useProductFavorites();
 
   const load = useCallback(() => {
     setLoading(true);
+    setLoadError("");
+    setPriceListError("");
     Promise.all([
       productsApi.getById(id),
       inventoryApi.getProductStock(id),
       inventoryApi.listMovements({ productId: id, size: 50 }),
-      priceListsApi.list().catch(() => ({ data: [] })),
+      priceListsApi.list().catch((error) => {
+        setPriceListError(getApiErrorMessage(error, "تعذر تحميل قوائم الأسعار"));
+        return { data: [] };
+      }),
     ])
       .then(([pRes, sRes, mRes, plRes]) => {
         const p = pRes.data;
@@ -124,15 +134,22 @@ function ProductDetail() {
                 source: entry ? "price_list" : "base_price",
               };
             })
-            .catch(() => null)
+            .catch((error) => {
+              setPriceListError(getApiErrorMessage(error, "تعذر تحميل بعض أسعار القوائم"));
+              return null;
+            })
         )).then((rows) => setPriceListRows(rows.filter(Boolean)));
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل تفاصيل الصنف"));
+        setProduct(null);
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
     if (tab === 1) {
+      setRelatedOrdersError("");
       ordersApi.list({ size: 100 })
         .then((r) => {
           const all = Array.isArray(r.data?.content) ? r.data.content
@@ -150,7 +167,10 @@ function ProductDetail() {
             status: o.orderStatus || o.status || "draft",
           })));
         })
-        .catch(console.error);
+        .catch((error) => {
+          setRelatedOrdersError(getApiErrorMessage(error, "تعذر تحميل الطلبيات المرتبطة"));
+          setRelatedOrders([]);
+        });
     }
   }, [tab, id]);
 
@@ -167,12 +187,29 @@ function ProductDetail() {
     draft: "مسودة", cancelled: "ملغاة", rejected: "مرفوضة",
   };
 
-  if (loading || !product) {
+  if (loading) {
     return (
       <DashboardLayout>
         <DashboardNavbar />
         <SoftBox display="flex" justifyContent="center" alignItems="center" py={10}>
           <CircularProgress />
+        </SoftBox>
+        <Footer />
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError || !product) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <SoftBox py={3}>
+          <SoftBox mb={2}>
+            <IconButton onClick={() => navigate("/products")} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+          </SoftBox>
+          <Alert severity="error">{loadError || "تعذر تحميل تفاصيل الصنف"}</Alert>
         </SoftBox>
         <Footer />
       </DashboardLayout>
@@ -471,6 +508,11 @@ function ProductDetail() {
               {/* Orders Tab */}
               {tab === 1 && (
                 <SoftBox p={3}>
+                  {relatedOrdersError && (
+                    <Alert severity="error" sx={{ mb: 2 }} onClose={() => setRelatedOrdersError("")}>
+                      {relatedOrdersError}
+                    </Alert>
+                  )}
                   {relatedOrders.length === 0 ? (
                     <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
                       لا توجد طلبيات مرتبطة بهذا الصنف
@@ -542,6 +584,11 @@ function ProductDetail() {
                       إذا كانت قيمة الصنف داخل القائمة غير موجودة أو 0، يظهر السعر الرئيسي تلقائياً في الطلبية.
                     </SoftTypography>
                   </SoftBox>
+                  {priceListError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {priceListError}
+                    </Alert>
+                  )}
                   {priceListRows.length === 0 ? (
                     <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
                       لا توجد قوائم أسعار مسجّلة

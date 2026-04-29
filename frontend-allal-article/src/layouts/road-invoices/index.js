@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
@@ -32,6 +33,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 import { roadInvoicesApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const statusConfig = {
   draft:     { label: "مسودة",  color: "secondary" },
@@ -83,11 +85,15 @@ function RoadInvoices() {
   const [search, setSearch]     = useState("");
   const [tab, setTab]           = useState(0);
   const [wilayaFilter, setWilayaFilter] = useState("all");
+  const [actionBusy, setActionBusy] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const tabStatus = ["all", "draft", "sent", "delivered"][tab];
 
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     const params = {};
     if (tabStatus !== "all") params.status = tabStatus;
     roadInvoicesApi.list(params)
@@ -97,7 +103,10 @@ function RoadInvoices() {
                   : [];
         setInvoices(raw.map(normalize));
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل فواتير الطريق"));
+        setInvoices([]);
+      })
       .finally(() => setLoading(false));
   }, [tabStatus]);
 
@@ -116,12 +125,33 @@ function RoadInvoices() {
   const sentCount      = invoices.filter((i) => i.status === "sent").length;
   const deliveredCount = invoices.filter((i) => i.status === "delivered").length;
 
-  const handlePrint = (inv) => {
-    roadInvoicesApi.recordPrint(inv.id).catch(console.error);
+  const handlePrint = async (inv) => {
+    setActionBusy(`print-${inv.id}`);
+    setActionError("");
+    try {
+      await roadInvoicesApi.recordPrint(inv.id);
+      setInvoices((current) =>
+        current.map((item) =>
+          item.id === inv.id ? { ...item, printCount: Number(item.printCount || 0) + 1 } : item
+        )
+      );
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر تسجيل طباعة فاتورة الطريق"));
+    } finally {
+      setActionBusy("");
+    }
   };
 
-  const handleWhatsapp = (inv) => {
-    roadInvoicesApi.sendWhatsapp(inv.id).catch(console.error);
+  const handleWhatsapp = async (inv) => {
+    setActionBusy(`whatsapp-${inv.id}`);
+    setActionError("");
+    try {
+      await roadInvoicesApi.sendWhatsapp(inv.id);
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر إرسال فاتورة الطريق عبر واتساب"));
+    } finally {
+      setActionBusy("");
+    }
   };
 
   return (
@@ -145,6 +175,12 @@ function RoadInvoices() {
           </SoftBox>
         </SoftBox>
 
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
+
         <Grid container spacing={2} mb={3}>
           <Grid item xs={6} sm={3}>
             <StatCard label="إجمالي الفواتير" value={invoices.length} color="#344767" icon={ReceiptIcon} />
@@ -159,6 +195,12 @@ function RoadInvoices() {
             <StatCard label="مسودات"     value={draftCount}     color="#fb8c00" icon={ReceiptIcon} />
           </Grid>
         </Grid>
+
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError("")}>
+            {actionError}
+          </Alert>
+        )}
 
         <Card>
           <SoftBox px={2} pt={2} borderBottom="1px solid #eee">
@@ -274,12 +316,22 @@ function RoadInvoices() {
                                 </IconButton>
                               </Tooltip>
                               <Tooltip title="طباعة">
-                                <IconButton size="small" sx={{ color: "#344767" }} onClick={() => handlePrint(inv)}>
+                                <IconButton
+                                  size="small"
+                                  sx={{ color: "#344767" }}
+                                  disabled={Boolean(actionBusy)}
+                                  onClick={() => handlePrint(inv)}
+                                >
                                   <PrintIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                               <Tooltip title="إرسال عبر واتساب">
-                                <IconButton size="small" sx={{ color: "#25D366" }} onClick={() => handleWhatsapp(inv)}>
+                                <IconButton
+                                  size="small"
+                                  sx={{ color: "#25D366" }}
+                                  disabled={Boolean(actionBusy)}
+                                  onClick={() => handleWhatsapp(inv)}
+                                >
                                   <WhatsAppIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>

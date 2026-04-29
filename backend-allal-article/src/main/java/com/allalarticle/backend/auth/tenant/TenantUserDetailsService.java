@@ -1,17 +1,22 @@
 package com.allalarticle.backend.auth.tenant;
 
-import lombok.RequiredArgsConstructor;
+import com.allalarticle.backend.tenant.TenantContext;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
-@RequiredArgsConstructor
 public class TenantUserDetailsService implements UserDetailsService {
 
     private final JdbcTemplate jdbc;
     private final String schema;
+
+    public TenantUserDetailsService(JdbcTemplate jdbc, String schema) {
+        TenantContext.requireValidSchema(schema);
+        this.jdbc = jdbc;
+        this.schema = schema;
+    }
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {

@@ -2,6 +2,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import Divider from "@mui/material/Divider";
@@ -41,6 +42,7 @@ import {
   statusConfig,
 } from "./mockData";
 import { purchasesApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 function InfoItem({ label, value }) {
   return (
@@ -134,8 +136,12 @@ export default function PurchaseDetail() {
   const [dialog, setDialog] = useState(null);
   const [note, setNote] = useState("");
   const [activity, setActivity] = useState([]);
+  const [actionSaving, setActionSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     purchasesApi.getById(id)
       .then((r) => {
         const raw = r.data;
@@ -166,7 +172,7 @@ export default function PurchaseDetail() {
           ...(p.receivedDate ? [{ time: p.receivedDate, user: "—", action: "سجل استلام البضاعة" }] : []),
         ]);
       })
-      .catch(console.error);
+      .catch((error) => setLoadError(getApiErrorMessage(error, "تعذر تحميل تفاصيل أمر الشراء")));
   }, [id]);
 
   const totals = useMemo(() => {
@@ -194,7 +200,21 @@ export default function PurchaseDetail() {
   const editLock = purchase ? getMockResourceLock("purchase_order", purchase.id) : null;
   const purchaseLockedForEdit = ["received", "cancelled"].includes(status);
 
-  if (!purchase) return <DashboardLayout><DashboardNavbar /><SoftBox py={3} px={3}><SoftTypography>جارٍ التحميل...</SoftTypography></SoftBox><Footer /></DashboardLayout>;
+  if (!purchase) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <SoftBox py={3} px={3}>
+          {loadError ? (
+            <Alert severity="error">{loadError}</Alert>
+          ) : (
+            <SoftTypography>جارٍ التحميل...</SoftTypography>
+          )}
+        </SoftBox>
+        <Footer />
+      </DashboardLayout>
+    );
+  }
   const returnableLines = receivedLines.filter(
     (line) => Number(line.receivedQty || 0) > Number(line.returnedQty || 0)
   );
@@ -260,43 +280,50 @@ export default function PurchaseDetail() {
     closeReturnDialog();
   };
 
-  const runAction = () => {
-    if (dialog === "confirm") {
-      purchasesApi.confirm(id)
-        .then(() => { setStatus("confirmed"); appendActivity("أرسل أمر الشراء للمورد"); })
-        .catch(console.error);
+  const openActionDialog = (nextDialog) => {
+    setActionError("");
+    setDialog(nextDialog);
+  };
+
+  const runAction = async () => {
+    setActionSaving(true);
+    setActionError("");
+    try {
+      if (dialog === "confirm") {
+        await purchasesApi.confirm(id);
+        setStatus("confirmed");
+        appendActivity("أرسل أمر الشراء للمورد");
+      }
+      if (dialog === "receive") {
+        await purchasesApi.receive(id, { receivedBy: "المستخدم الحالي" });
+        setStatus("received");
+        setReceivedBy("المستخدم الحالي");
+        setReceivedLines((lines) =>
+          lines.map((line) => ({ ...line, receivedQty: line.qty, returnedQty: line.returnedQty || 0 }))
+        );
+        appendActivity("سجل استلام كامل الكميات وأقفل تعديل أمر الشراء");
+      }
+      if (dialog === "invoice") {
+        const nextInvoice = invoiceNo || `BILL-${new Date().getFullYear()}-025`;
+        setInvoiceNo(nextInvoice);
+        appendActivity(`أنشأ فاتورة المورد ${nextInvoice}`);
+      }
+      if (dialog === "pay") {
+        setPaymentStatus("paid");
+        appendActivity("سجل دفع فاتورة المورد بالكامل");
+      }
+      if (dialog === "cancel") {
+        await purchasesApi.cancel(id);
+        setStatus("cancelled");
+        appendActivity(note.trim() ? `ألغى أمر الشراء: ${note.trim()}` : "ألغى أمر الشراء");
+      }
+      setDialog(null);
+      setNote("");
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر تنفيذ الإجراء"));
+    } finally {
+      setActionSaving(false);
     }
-    if (dialog === "receive") {
-      purchasesApi.receive(id, { receivedBy: "المستخدم الحالي" })
-        .then(() => {
-          setStatus("received");
-          setReceivedBy("المستخدم الحالي");
-          setReceivedLines((lines) =>
-            lines.map((line) => ({ ...line, receivedQty: line.qty, returnedQty: line.returnedQty || 0 }))
-          );
-          appendActivity("سجل استلام كامل الكميات وأقفل تعديل أمر الشراء");
-        })
-        .catch(console.error);
-    }
-    if (dialog === "invoice") {
-      const nextInvoice = invoiceNo || `BILL-${new Date().getFullYear()}-025`;
-      setInvoiceNo(nextInvoice);
-      appendActivity(`أنشأ فاتورة المورد ${nextInvoice}`);
-    }
-    if (dialog === "pay") {
-      setPaymentStatus("paid");
-      appendActivity("سجل دفع فاتورة المورد بالكامل");
-    }
-    if (dialog === "cancel") {
-      purchasesApi.cancel(id)
-        .then(() => {
-          setStatus("cancelled");
-          appendActivity(note.trim() ? `ألغى أمر الشراء: ${note.trim()}` : "ألغى أمر الشراء");
-        })
-        .catch(console.error);
-    }
-    setDialog(null);
-    setNote("");
   };
 
   return (
@@ -318,18 +345,18 @@ export default function PurchaseDetail() {
 
           <SoftBox display="flex" gap={1} flexWrap="wrap">
             {status === "pending" && (
-              <SoftButton size="small" variant="gradient" color="success" startIcon={<CheckCircleIcon />} onClick={() => setDialog("confirm")}>
+              <SoftButton size="small" variant="gradient" color="success" startIcon={<CheckCircleIcon />} onClick={() => openActionDialog("confirm")}>
                 إرسال للمورد
               </SoftButton>
             )}
             {status === "confirmed" && (
-              <SoftButton size="small" variant="gradient" color="info" startIcon={<LocalShippingIcon />} onClick={() => setDialog("receive")}>
+              <SoftButton size="small" variant="gradient" color="info" startIcon={<LocalShippingIcon />} onClick={() => openActionDialog("receive")}>
                 تسجيل الاستلام
               </SoftButton>
             )}
             {status !== "cancelled" && (
               <>
-                <SoftButton size="small" variant="outlined" color="info" startIcon={<ReceiptLongIcon />} onClick={() => setDialog("invoice")}>
+                <SoftButton size="small" variant="outlined" color="info" startIcon={<ReceiptLongIcon />} onClick={() => openActionDialog("invoice")}>
                   {invoiceNo ? "عرض فاتورة المورد" : "إنشاء فاتورة مورد"}
                 </SoftButton>
                 {hasReturnableQty && (
@@ -344,7 +371,7 @@ export default function PurchaseDetail() {
                   </SoftButton>
                 )}
                 {paymentStatus !== "paid" && (
-                  <SoftButton size="small" variant="outlined" color="success" startIcon={<PaymentIcon />} onClick={() => setDialog("pay")}>
+                  <SoftButton size="small" variant="outlined" color="success" startIcon={<PaymentIcon />} onClick={() => openActionDialog("pay")}>
                     تسجيل دفعة
                   </SoftButton>
                 )}
@@ -358,7 +385,7 @@ export default function PurchaseDetail() {
                 >
                   تعديل
                 </SoftButton>
-                <SoftButton size="small" variant="outlined" color="error" startIcon={<CancelIcon />} onClick={() => setDialog("cancel")}>
+                <SoftButton size="small" variant="outlined" color="error" startIcon={<CancelIcon />} onClick={() => openActionDialog("cancel")}>
                   إلغاء
                 </SoftButton>
               </>
@@ -542,7 +569,7 @@ export default function PurchaseDetail() {
         </Grid>
       </SoftBox>
 
-      <Dialog open={!!dialog} onClose={() => setDialog(null)} maxWidth="xs" fullWidth>
+      <Dialog open={!!dialog} onClose={() => { if (!actionSaving) setDialog(null); }} maxWidth="xs" fullWidth>
         <DialogTitle>
           <SoftTypography variant="h6" fontWeight="bold">{currentAction?.title}</SoftTypography>
         </DialogTitle>
@@ -560,11 +587,16 @@ export default function PurchaseDetail() {
               sx={{ mt: 2 }}
             />
           )}
+          {actionError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {actionError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <SoftButton variant="text" color="secondary" onClick={() => setDialog(null)}>تراجع</SoftButton>
-          <SoftButton variant="gradient" color={currentAction?.color || "info"} onClick={runAction}>
-            {currentAction?.button}
+          <SoftButton variant="text" color="secondary" disabled={actionSaving} onClick={() => setDialog(null)}>تراجع</SoftButton>
+          <SoftButton variant="gradient" color={currentAction?.color || "info"} disabled={actionSaving} onClick={runAction}>
+            {actionSaving ? "جارٍ التنفيذ..." : currentAction?.button}
           </SoftButton>
         </DialogActions>
       </Dialog>

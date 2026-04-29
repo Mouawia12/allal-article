@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useRef, useEffect } from "react";
 import apiClient from "services/apiClient";
+import { getApiErrorMessage } from "utils/formErrors";
 
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -30,6 +31,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const LEGAL_FORMS = [
   { value: "SARL",              label: "شركة ذات مسؤولية محدودة (SARL)" },
@@ -137,20 +139,23 @@ const EMPTY_FORM = {
 };
 
 export default function CompanyProfile() {
+  const { t } = useI18n();
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     apiClient.get("/api/settings/company")
       .then((r) => {
         if (r.data && typeof r.data === "object" && Object.keys(r.data).length > 0) {
           setForm((prev) => ({ ...prev, ...r.data }));
         }
       })
-      .catch(console.error);
+      .catch((error) => setLoadError(getApiErrorMessage(error, "تعذر تحميل معلومات الشركة")));
   }, []);
 
   const set = (k) => (e) => {
@@ -161,8 +166,8 @@ export default function CompanyProfile() {
 
   const handleSave = () => {
     const nextErrors = {};
-    if (isBlank(form.nameAr)) nextErrors.nameAr = "اسم الشركة بالعربية مطلوب";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = "البريد الإلكتروني غير صالح";
+    if (isBlank(form.nameAr)) nextErrors.nameAr = t("اسم الشركة بالعربية مطلوب");
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = t("البريد الإلكتروني غير صالح");
     if (hasErrors(nextErrors)) { setErrors(nextErrors); setTab(nextErrors.nameAr ? 0 : 1); return; }
     setSaving(true);
     setErrors({});
@@ -210,6 +215,12 @@ export default function CompanyProfile() {
             {saved ? <><CheckCircleIcon sx={{ fontSize: 16 }} /> تم الحفظ</> : saving ? "جاري الحفظ..." : "حفظ التعديلات"}
           </Box>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {errors._global && (
           <Alert severity="error" sx={{ mb: 2 }}>

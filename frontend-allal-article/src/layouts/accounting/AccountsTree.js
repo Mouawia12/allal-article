@@ -51,7 +51,8 @@ import {
   suggestChildCode,
 } from "./mockData";
 import { accountingApi } from "services";
-import { applyApiErrors } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let nextId = 1000;
@@ -317,6 +318,7 @@ function AccountDetail({ account, allAccounts, onEdit, onAddChild }) {
 
 // ─── Account Form Dialog ──────────────────────────────────────────────────────
 function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, allAccounts }) {
+  const { t } = useI18n();
   const isEdit    = !!editAccount;
   const siblings  = useMemo(
     () => !isEdit ? allAccounts.filter((a) => a.parent_id === (parentAccount?.id ?? null)) : [],
@@ -356,8 +358,8 @@ function AccountFormDialog({ open, onClose, onSave, editAccount, parentAccount, 
   const codeEmpty     = !form.code.trim();
   const codeDuplicate = isDuplicateCode(form.code.trim(), allAccounts, isEdit ? editAccount.id : null);
   const nameEmpty     = !form.nameAr.trim();
-  const codeError     = errors.code || (touched && (codeEmpty ? "الكود مطلوب" : codeDuplicate ? "الكود موجود مسبقاً" : ""));
-  const nameError     = errors.nameAr || errors.name || (touched && nameEmpty ? "الاسم مطلوب" : "");
+  const codeError     = errors.code || (touched && (codeEmpty ? t("الكود مطلوب") : codeDuplicate ? t("الكود موجود مسبقاً") : ""));
+  const nameError     = errors.nameAr || errors.name || (touched && nameEmpty ? t("الاسم مطلوب") : "");
   const hasError      = codeEmpty || codeDuplicate || nameEmpty;
 
   const handleSave = async () => {
@@ -589,17 +591,28 @@ export default function AccountsTree() {
   const [selected, setSelected]   = useState(null);
   const [dialog, setDialog]       = useState(null);
   const [activeFY, setActiveFY]   = useState(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل شجرة الحسابات"));
+        setAccounts([]);
+      });
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
         setActiveFY(fys.find((f) => !f.closed) ?? fys[0] ?? null);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل السنة المالية النشطة");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setActiveFY(null);
+      });
   }, []);
 
   // ── Save handler ──────────────────────────────────────────────────────────
@@ -683,6 +696,12 @@ export default function AccountsTree() {
             <AddIcon sx={{ mr: 0.5, fontSize: 16 }} /> حساب رئيسي
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2.5}>
           {/* ── Left: Tree panel ── */}

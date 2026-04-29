@@ -2,6 +2,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Chip from "@mui/material/Chip";
@@ -17,6 +18,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import apiClient from "services/apiClient";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const severityConfig = {
   info:            { label: "معلومة",       color: "#17c1e8", bg: "#e3f8fd" },
@@ -60,7 +62,7 @@ function StatTile({ label, value, color }) {
   );
 }
 
-function NotificationCard({ item, onOpen, onMarkRead }) {
+function NotificationCard({ item, onOpen, onMarkRead, markReadBusy }) {
   const severity  = severityConfig[item.severity]  || severityConfig.info;
   const category  = categoryConfig[item.category]  || { label: item.category, icon: "notifications" };
   const lifecycle = lifecycleConfig[item.state]    || lifecycleConfig.new;
@@ -111,8 +113,14 @@ function NotificationCard({ item, onOpen, onMarkRead }) {
             </SoftButton>
           )}
           {!item.isRead && (
-            <SoftButton variant="text" color="secondary" size="small" onClick={() => onMarkRead(item.id)}>
-              تعليم كمقروء
+            <SoftButton
+              variant="text"
+              color="secondary"
+              size="small"
+              onClick={() => onMarkRead(item.id)}
+              disabled={markReadBusy}
+            >
+              {markReadBusy ? "جارٍ التنفيذ..." : "تعليم كمقروء"}
             </SoftButton>
           )}
         </SoftBox>
@@ -129,11 +137,15 @@ export default function NotificationsInbox() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage]               = useState(0);
   const [totalElements, setTotal]     = useState(0);
+  const [loadError, setLoadError]     = useState("");
+  const [actionError, setActionError] = useState("");
+  const [busyAction, setBusyAction]   = useState("");
   const navigate = useNavigate();
 
   const fetch = useCallback((newPage, filterKey, reset) => {
     const setter = newPage === 0 ? setLoading : setLoadingMore;
     setter(true);
+    setLoadError("");
     const params = { page: newPage, size: 30 };
     if (filterKey && filterKey !== "all") params.filter = filterKey;
     apiClient.get("/api/notifications", { params })
@@ -145,7 +157,10 @@ export default function NotificationsInbox() {
         setNotifs((prev) => reset ? content : [...prev, ...content]);
         setPage(newPage);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل الإشعارات"));
+        if (reset) setNotifs([]);
+      })
       .finally(() => setter(false));
   }, []);
 
@@ -153,15 +168,35 @@ export default function NotificationsInbox() {
     fetch(0, filter, true);
   }, [fetch, filter]);
 
-  const handleMarkRead = (id) => {
-    apiClient.post(`/api/notifications/${id}/read`).catch(console.error);
-    setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true, state: "read" } : n));
+  const handleMarkRead = async (id) => {
+    const target = notifications.find((n) => n.id === id);
+    if (!target || target.isRead || busyAction) return;
+    setActionError("");
+    setBusyAction(`read:${id}`);
+    try {
+      await apiClient.post(`/api/notifications/${id}/read`);
+      setNotifs((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true, state: "read" } : n));
+      setStats((s) => ({ ...s, unread: Math.max(0, Number(s.unread || 0) - 1) }));
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر تعليم الإشعار كمقروء"));
+    } finally {
+      setBusyAction("");
+    }
   };
 
-  const handleMarkAllRead = () => {
-    apiClient.post("/api/notifications/read-all").catch(console.error);
-    setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true, state: n.state === "new" ? "read" : n.state })));
-    setStats((s) => ({ ...s, unread: 0 }));
+  const handleMarkAllRead = async () => {
+    if (busyAction) return;
+    setActionError("");
+    setBusyAction("read-all");
+    try {
+      await apiClient.post("/api/notifications/read-all");
+      setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true, state: n.state === "new" ? "read" : n.state })));
+      setStats((s) => ({ ...s, unread: 0 }));
+    } catch (error) {
+      setActionError(getApiErrorMessage(error, "تعذر تعليم كل الإشعارات كمقروءة"));
+    } finally {
+      setBusyAction("");
+    }
   };
 
   const visibleNotifications = useMemo(() => notifications, [notifications]);
@@ -179,8 +214,14 @@ export default function NotificationsInbox() {
           </SoftBox>
           <SoftBox display="flex" gap={1}>
             {stats.unread > 0 && (
-              <SoftButton variant="outlined" color="secondary" size="small" onClick={handleMarkAllRead}>
-                تعليم الكل كمقروء
+              <SoftButton
+                variant="outlined"
+                color="secondary"
+                size="small"
+                onClick={handleMarkAllRead}
+                disabled={!!busyAction}
+              >
+                {busyAction === "read-all" ? "جارٍ التنفيذ..." : "تعليم الكل كمقروء"}
               </SoftButton>
             )}
             <SoftButton variant="gradient" color="info" size="small"
@@ -189,6 +230,9 @@ export default function NotificationsInbox() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert>}
+        {actionError && <Alert severity="error" sx={{ mb: 2 }}>{actionError}</Alert>}
 
         <Grid container spacing={2} mb={3}>
           <Grid item xs={6} md={3}><StatTile label="الإجمالي"       value={Number(stats.total     || 0)} color="dark"    /></Grid>
@@ -225,6 +269,7 @@ export default function NotificationsInbox() {
                   item={item}
                   onOpen={navigate}
                   onMarkRead={handleMarkRead}
+                  markReadBusy={busyAction === `read:${item.id}` || busyAction === "read-all"}
                 />
               ))}
             </SoftBox>

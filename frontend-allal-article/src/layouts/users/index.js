@@ -52,7 +52,8 @@ import {
   roleDefaultPermissions,
 } from "data/config/permissionsConfig";
 import { usersApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 
@@ -196,6 +197,7 @@ function PermissionsDialog({ user, onClose, onSave }) {
 
 // ─── User Form Dialog ─────────────────────────────────────────────────────────
 function UserFormDialog({ open, user, onClose, onSave }) {
+  const { t } = useI18n();
   const isEdit = Boolean(user);
   const [showPass, setShowPass] = useState(false);
   const buildForm = () => user ? { ...user, password: "" } : {
@@ -224,12 +226,12 @@ function UserFormDialog({ open, user, onClose, onSave }) {
 
   const validate = () => {
     const nextErrors = {};
-    if (isBlank(form.name)) nextErrors.name = "اسم المستخدم مطلوب";
-    if (isBlank(form.email)) nextErrors.email = "البريد الإلكتروني مطلوب";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = "البريد الإلكتروني غير صالح";
-    if (!form.role) nextErrors.role = "الدور مطلوب";
-    if (!isEdit && isBlank(form.password)) nextErrors.password = "كلمة المرور مطلوبة";
-    if (form.password && form.password.length < 8) nextErrors.password = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+    if (isBlank(form.name)) nextErrors.name = t("اسم المستخدم مطلوب");
+    if (isBlank(form.email)) nextErrors.email = t("البريد الإلكتروني مطلوب");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = t("البريد الإلكتروني غير صالح");
+    if (!form.role) nextErrors.role = t("الدور مطلوب");
+    if (!isEdit && isBlank(form.password)) nextErrors.password = t("كلمة المرور مطلوبة");
+    if (form.password && form.password.length < 8) nextErrors.password = t("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
     return nextErrors;
   };
 
@@ -447,6 +449,8 @@ function Users() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [formDialog, setFormDialog] = useState(null);
   const [permDialog, setPermDialog] = useState(null);
+  const [pageError, setPageError] = useState("");
+  const [togglingUserId, setTogglingUserId] = useState(null);
 
   const normalizeUser = (u) => ({
     ...u,
@@ -463,18 +467,21 @@ function Users() {
   });
 
   const loadUsers = useCallback(() => {
+    setPageError("");
     usersApi.list()
       .then((r) => {
-        const raw = r.data?.data;
+        const raw = r.data?.data ?? r.data;
         const list = Array.isArray(raw) ? raw : (raw?.content ?? []);
         setUsers(list.map(normalizeUser));
       })
-      .catch(console.error);
+      .catch((error) => setPageError(getApiErrorMessage(error, "تعذر تحميل المستخدمين")));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadUsers();
-    usersApi.listRoles().then((r) => setRoles(r.data?.data ?? [])).catch(console.error);
+    usersApi.listRoles()
+      .then((r) => setRoles(r.data?.data ?? r.data ?? []))
+      .catch((error) => setPageError(getApiErrorMessage(error, "تعذر تحميل الأدوار")));
   }, [loadUsers]);
 
   const filtered = users.filter((u) => {
@@ -512,10 +519,22 @@ function Users() {
   };
 
   const toggleStatus = async (userId) => {
+    if (togglingUserId) return;
+    setPageError("");
+    setTogglingUserId(userId);
     try {
-      const updated = await usersApi.toggleStatus(userId);
-      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: updated.status } : u));
-    } catch (e) { console.error(e); }
+      const response = await usersApi.toggleStatus(userId);
+      const updated = response.data ? normalizeUser(response.data) : null;
+      setUsers((prev) => prev.map((u) => {
+        if (u.id !== userId) return u;
+        if (updated) return { ...u, ...updated };
+        return { ...u, status: u.status === "active" ? "inactive" : "active" };
+      }));
+    } catch (error) {
+      setPageError(getApiErrorMessage(error, "تعذر تحديث حالة المستخدم"));
+    } finally {
+      setTogglingUserId(null);
+    }
   };
 
   const savePermissions = (user, perms) => {
@@ -540,6 +559,8 @@ function Users() {
         </SoftBox>
 
         {/* Stats */}
+        {pageError && <Alert severity="error" sx={{ mb: 2 }}>{pageError}</Alert>}
+
         <Grid container spacing={2} mb={3}>
           {Object.entries(roleConfig).map(([role, cfg]) => (
             <Grid item xs={6} sm={4} md={2} key={role}>
@@ -663,6 +684,7 @@ function Users() {
                             <Tooltip title={user.status === "active" ? "تعطيل الحساب" : "تفعيل الحساب"}>
                               <IconButton size="small"
                                 color={user.status === "active" ? "error" : "success"}
+                                disabled={togglingUserId === user.id}
                                 onClick={() => toggleStatus(user.id)}>
                                 {user.status === "active" ? <BlockIcon fontSize="small" /> : <CheckCircleIcon fontSize="small" />}
                               </IconButton>

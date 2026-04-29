@@ -20,9 +20,10 @@ public class PermissionChecker {
         if (!(token.getDetails() instanceof Claims claims)) return false;
 
         String schema = claims.get("schema", String.class);
-        if (schema == null || schema.isBlank()) return false;
+        if (!TenantContext.isValidSchema(schema)) return false;
 
         Long userId = claims.get("userId", Long.class);
+        if (userId == null) return false;
 
         String sql = String.format("""
             SELECT COUNT(*) FROM "%s".permissions p

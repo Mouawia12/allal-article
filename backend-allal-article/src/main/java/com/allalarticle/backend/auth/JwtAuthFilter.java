@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 
 @Component
 @RequiredArgsConstructor
@@ -47,12 +48,22 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String type     = claims.get("type", String.class);
         String schema   = claims.get("schema", String.class);
 
-        String authority = "tenant".equals(type)
-                ? "ROLE_" + roleCode.toUpperCase()
-                : "ROLE_PLATFORM_" + roleCode.toUpperCase();
+        if (!isValidClaims(email, roleCode, type, schema)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+
+        String normalizedRole = roleCode.trim().toUpperCase(Locale.ROOT);
+        List<SimpleGrantedAuthority> authorities = "tenant".equals(type)
+                ? List.of(
+                        new SimpleGrantedAuthority("ROLE_TENANT"),
+                        new SimpleGrantedAuthority("ROLE_" + normalizedRole))
+                : List.of(
+                        new SimpleGrantedAuthority("ROLE_PLATFORM"),
+                        new SimpleGrantedAuthority("ROLE_PLATFORM_" + normalizedRole));
 
         var auth = new UsernamePasswordAuthenticationToken(
-                email, null, List.of(new SimpleGrantedAuthority(authority)));
+                email, null, authorities);
         auth.setDetails(claims);
         SecurityContextHolder.getContext().setAuthentication(auth);
 
@@ -65,5 +76,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         } finally {
             TenantContext.clear();
         }
+    }
+
+    private boolean isValidClaims(String email, String roleCode, String type, String schema) {
+        if (email == null || email.isBlank() || roleCode == null || roleCode.isBlank()) {
+            return false;
+        }
+        if ("tenant".equals(type)) {
+            return TenantContext.isValidSchema(schema);
+        }
+        return "platform".equals(type) && (schema == null || schema.isBlank());
     }
 }

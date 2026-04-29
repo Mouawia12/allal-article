@@ -41,7 +41,8 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { purchasesApi, suppliersApi, referenceApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const formatDZD = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "0");
 const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
@@ -176,12 +177,17 @@ function SupplierCard({ supplier, onView }) {
 function SupplierDetailDialog({ supplier, onClose, onEdit }) {
   const [tab, setTab] = useState(0);
   const [purchases, setPurchases] = useState([]);
+  const [purchasesError, setPurchasesError] = useState("");
 
   useEffect(() => {
     if (!supplier) return;
+    setPurchasesError("");
     purchasesApi.list({ supplier: supplier.name })
       .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({ totalAmount: 0, ...p }))))
-      .catch(console.error);
+      .catch((error) => {
+        setPurchasesError(getApiErrorMessage(error, "تعذر تحميل أوامر شراء المورد"));
+        setPurchases([]);
+      });
   }, [supplier]);
 
   if (!supplier) return null;
@@ -253,6 +259,11 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
 
         {tab === 1 && (
           <SoftBox>
+            {purchasesError && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPurchasesError("")}>
+                {purchasesError}
+              </Alert>
+            )}
             {purchases.length === 0 ? (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>لا توجد أوامر شراء لهذا المورد</SoftTypography>
             ) : purchases.map((purchase) => (
@@ -339,6 +350,7 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
 }
 
 function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = [] }) {
+  const { t } = useI18n();
   const [form, setForm] = useState(() => buildSupplierForm(supplier));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -359,11 +371,11 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
 
   const save = async () => {
     const errs = {};
-    if (isBlank(form.name)) errs.name = "اسم المورد مطلوب";
-    if (isBlank(form.phone)) errs.phone = "رقم الهاتف مطلوب";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "بريد إلكتروني غير صالح";
+    if (isBlank(form.name)) errs.name = t("اسم المورد مطلوب");
+    if (isBlank(form.phone)) errs.phone = t("رقم الهاتف مطلوب");
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = t("بريد إلكتروني غير صالح");
     if (form.openingBalance && !Number.isFinite(Number(form.openingBalance))) {
-      errs.openingBalance = "الرصيد الافتتاحي يجب أن يكون رقماً";
+      errs.openingBalance = t("الرصيد الافتتاحي يجب أن يكون رقماً");
     }
     if (hasErrors(errs)) { setErrors(errs); return; }
     setSaving(true);
@@ -479,16 +491,26 @@ function Suppliers() {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [editSupplier, setEditSupplier] = useState(null);
+  const [pageError, setPageError] = useState("");
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const showToast = (message, severity = "success") => setToast({ open: true, message, severity });
 
   useEffect(() => {
+    setPageError("");
     suppliersApi.list()
       .then((r) => setSuppliers((r.data?.content ?? r.data ?? []).map(normalizeSupplier)))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الموردين"));
+        setSuppliers([]);
+      });
     referenceApi.wilayas()
       .then((r) => setWilayas(r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الولايات");
+          return current ? `${current}؛ ${message}` : message;
+        });
+      });
   }, []);
 
   const uniqueWilayas = [...new Set(suppliers.map((s) => s.wilaya).filter(Boolean))].sort();
@@ -548,7 +570,7 @@ function Suppliers() {
     return apiCall
       .then((s) => { upsertSupplier(s); showToast("تم حفظ المورد بنجاح"); })
       .catch((e) => {
-        showToast(e.response?.data?.message || "حدث خطأ أثناء الحفظ", "error");
+        showToast(getApiErrorMessage(e, "حدث خطأ أثناء الحفظ"), "error");
         throw e;
       });
   };
@@ -566,6 +588,12 @@ function Suppliers() {
             إضافة مورد
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2} mb={3}>
           {[

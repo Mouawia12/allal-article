@@ -34,7 +34,8 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { accountingApi } from "services";
-import { hasErrors, isBlank } from "utils/formErrors";
+import { getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
@@ -69,6 +70,7 @@ const initialTaxes = [
 const typeLabels = { vat: "TVA", tap: "TAP", ibs: "IBS", other: "أخرى" };
 
 function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
+  const { t } = useI18n();
   const [form, setForm] = useState(tax ?? {
     code: "", label: "", rate: "", type: "vat",
     payableAccountId: "", recoverableAccountId: "",
@@ -81,14 +83,14 @@ function TaxDialog({ tax, onClose, onSave, postableAccounts = [] }) {
   };
   const save = () => {
     const nextErrors = {};
-    if (isBlank(form.code)) nextErrors.code = "كود الضريبة مطلوب";
-    if (isBlank(form.label)) nextErrors.label = "وصف الضريبة مطلوب";
+    if (isBlank(form.code)) nextErrors.code = t("كود الضريبة مطلوب");
+    if (isBlank(form.label)) nextErrors.label = t("وصف الضريبة مطلوب");
     if (!Number.isFinite(Number(form.rate)) || Number(form.rate) < 0) {
-      nextErrors.rate = "النسبة يجب أن تكون رقماً موجباً";
+      nextErrors.rate = t("النسبة يجب أن تكون رقماً موجباً");
     }
-    if (isBlank(form.validFrom)) nextErrors.validFrom = "تاريخ البداية مطلوب";
+    if (isBlank(form.validFrom)) nextErrors.validFrom = t("تاريخ البداية مطلوب");
     if (form.validTo && form.validFrom && form.validTo < form.validFrom) {
-      nextErrors.validTo = "تاريخ النهاية يجب أن يكون بعد تاريخ البداية";
+      nextErrors.validTo = t("تاريخ النهاية يجب أن يكون بعد تاريخ البداية");
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     onSave({ ...form, rate: Number(form.rate) });
@@ -170,14 +172,19 @@ export default function Taxes() {
   const [taxes, setTaxes] = useState(initialTaxes);
   const [dialog, setDialog] = useState(null);
   const [postableAccounts, setPostableAccounts] = useState([]);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
         setPostableAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
+        setPostableAccounts([]);
+      });
   }, []);
 
   const handleSave = (form) => {
@@ -196,6 +203,12 @@ export default function Taxes() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+
         <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
           <SoftBox>
             <SoftTypography variant="h5" fontWeight="bold">الضرائب والرسوم</SoftTypography>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -17,6 +18,7 @@ import TableRow from "@mui/material/TableRow";
 
 import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import ownerApi from "services/ownerApi";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const severityConfig = {
@@ -54,9 +56,11 @@ export default function OwnerNotifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("all");
+  const [loadError, setLoadError] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
+    setLoadError("");
     ownerApi.listEvents(50)
       .then((r) => {
         const events = (r.data ?? []).map((ev) => ({
@@ -75,7 +79,10 @@ export default function OwnerNotifications() {
         }));
         setNotifications(events);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل إشعارات المالك"));
+        setNotifications([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -109,6 +116,12 @@ export default function OwnerNotifications() {
             ))}
           </Select>
         </Box>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", mb: 3 }}>
           <OwnerStat label="غير مقروء"    value={stats.unread}    color="#17c1e8" />

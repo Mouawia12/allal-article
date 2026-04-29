@@ -1,9 +1,10 @@
 import AdminNewOrder from "./AdminNewOrder";
 import NewOrder from "./NewOrder";
-
-const SELLER_ROLES = ["salesperson", "seller"];
+import { useAuth } from "context/AuthContext";
+import { getOrderFormVariant } from "utils/roles";
 
 export default function NewOrderRouter() {
-  const role = (localStorage.getItem("currentUserRole") || "admin").toLowerCase().trim();
-  return SELLER_ROLES.includes(role) ? <NewOrder /> : <AdminNewOrder />;
+  const { user } = useAuth();
+
+  return getOrderFormVariant(user) === "seller" ? <NewOrder /> : <AdminNewOrder />;
 }

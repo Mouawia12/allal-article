@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -34,6 +35,7 @@ import { classificationLabels } from "./mockData";
 
 const accountSettingsDefs = [];
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Auto-generation rules ────────────────────────────────────────────────────
 const RULES = [
@@ -128,14 +130,19 @@ export default function AccountLinks() {
   const [tab, setTab] = useState(0);
   const [postableAccounts, setPostableAccounts] = useState([]);
   const [settings, setSettings] = useState({});
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
         setPostableAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
+        setPostableAccounts([]);
+      });
   }, []);
 
   const getAccountName = (id) => {
@@ -168,6 +175,12 @@ export default function AccountLinks() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <SoftBox sx={{ borderBottom: "1px solid #e9ecef", mb: 3 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)}>

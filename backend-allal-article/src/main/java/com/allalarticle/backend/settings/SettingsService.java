@@ -1,9 +1,13 @@
 package com.allalarticle.backend.settings;
 
+import com.allalarticle.backend.common.exception.AppException;
+import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.tenant.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -34,11 +38,14 @@ public class SettingsService {
             @SuppressWarnings("unchecked")
             Map<String, Object> result = objectMapper.readValue(json, Map.class);
             return result;
-        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+        } catch (EmptyResultDataAccessException e) {
             return new HashMap<>();
         } catch (Exception e) {
             log.warn("Failed to read company profile: {}", e.getMessage());
-            return new HashMap<>();
+            throw new AppException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "تعذر تحميل ملف الشركة",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -55,7 +62,11 @@ public class SettingsService {
                         updated_at = now()
                 """, s), COMPANY_KEY, json);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to save company profile", e);
+            log.warn("Failed to save company profile: {}", e.getMessage());
+            throw new AppException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "تعذر حفظ ملف الشركة",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

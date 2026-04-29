@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -21,6 +22,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { useI18n } from "i18n";
 import { planColors, statusConfig } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
@@ -85,11 +87,34 @@ export default function OwnerDashboard() {
   const [stats,   setStats]   = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [events,  setEvents]  = useState([]);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
-    ownerApi.getStats().then((r) => setStats(r.data ?? null)).catch(console.error);
-    ownerApi.getRevenue().then((r) => setRevenue(r.data ?? null)).catch(console.error);
-    ownerApi.listEvents(10).then((r) => setEvents(r.data ?? [])).catch(console.error);
+    const appendError = (error, fallback) => {
+      setPageError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+    setPageError("");
+    ownerApi.getStats()
+      .then((r) => setStats(r.data ?? null))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل إحصائيات المالك");
+        setStats(null);
+      });
+    ownerApi.getRevenue()
+      .then((r) => setRevenue(r.data ?? null))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل إيرادات المالك");
+        setRevenue(null);
+      });
+    ownerApi.listEvents(10)
+      .then((r) => setEvents(r.data ?? []))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل أحداث التهيئة");
+        setEvents([]);
+      });
   }, []);
 
   const s = stats;
@@ -98,6 +123,12 @@ export default function OwnerDashboard() {
   return (
     <OwnerLayout>
       <Box sx={{ p: 3 }}>
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+
 
         {/* Page title */}
         <Box sx={{ mb: 3 }}>

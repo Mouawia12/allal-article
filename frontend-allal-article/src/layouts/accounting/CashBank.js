@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -34,6 +35,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import apiClient from "services/apiClient";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
@@ -98,16 +100,23 @@ export default function CashBank() {
   const [cashAccounts, setCash]     = useState([]);
   const [bankAccounts, setBank]     = useState([]);
   const [transactions, setTxs]      = useState([]);
+  const [loadError, setLoadError]   = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     apiClient.get("/api/accounting/cash-bank")
       .then((r) => {
         setCash(r.data?.cashAccounts ?? []);
         setBank(r.data?.bankAccounts ?? []);
         setTxs(r.data?.transactions  ?? []);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل بيانات الصندوق والبنك"));
+        setCash([]);
+        setBank([]);
+        setTxs([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -129,6 +138,12 @@ export default function CashBank() {
             <AddIcon sx={{ mr: 0.5, fontSize: 16 }} /> حركة جديدة
           </SoftButton>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {loading ? (
           <SoftBox display="flex" justifyContent="center" py={6}><CircularProgress /></SoftBox>

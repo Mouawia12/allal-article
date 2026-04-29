@@ -36,7 +36,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
 import { statusConfig } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
 
 const fmt = (n) => n?.toLocaleString("fr-DZ") ?? "—";
 
@@ -54,11 +54,11 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
 
   const handleCreate = async () => {
     const nextErrors = {};
-    if (isBlank(form.companyName)) nextErrors.companyName = "اسم الشركة مطلوب";
-    if (isBlank(form.contactEmail)) nextErrors.contactEmail = "البريد الإلكتروني مطلوب";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) nextErrors.contactEmail = "البريد الإلكتروني غير صالح";
-    if (form.ownerPassword && form.ownerPassword.length < 8) nextErrors.ownerPassword = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
-    if (form.wilayaCode && !/^\d{1,2}$/.test(form.wilayaCode)) nextErrors.wilayaCode = "رمز الولاية يجب أن يكون رقماً";
+    if (isBlank(form.companyName)) nextErrors.companyName = t("اسم الشركة مطلوب");
+    if (isBlank(form.contactEmail)) nextErrors.contactEmail = t("البريد الإلكتروني مطلوب");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contactEmail)) nextErrors.contactEmail = t("البريد الإلكتروني غير صالح");
+    if (form.ownerPassword && form.ownerPassword.length < 8) nextErrors.ownerPassword = t("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+    if (form.wilayaCode && !/^\d{1,2}$/.test(form.wilayaCode)) nextErrors.wilayaCode = t("رمز الولاية يجب أن يكون رقماً");
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setLoading(true); setErrors({});
     try {
@@ -145,8 +145,8 @@ function ResetPasswordDialog({ tenant, onClose }) {
 
   const handleReset = async () => {
     const nextErrors = {};
-    if (password.length < 8) nextErrors.password = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
-    if (password !== confirm) nextErrors.confirm = "كلمتا المرور غير متطابقتان";
+    if (password.length < 8) nextErrors.password = t("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+    if (password !== confirm) nextErrors.confirm = t("كلمتا المرور غير متطابقتان");
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setLoading(true); setErrors({});
     try {
@@ -329,8 +329,25 @@ export default function OwnerTenants() {
   const [pageError, setPageError]     = useState("");
 
   const load = () => {
-    ownerApi.listTenants().then((r) => setTenants(r.data ?? [])).catch(console.error);
-    ownerApi.listPlans().then((r) => setPlans(r.data ?? [])).catch(console.error);
+    const appendError = (error, fallback) => {
+      setPageError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+    setPageError("");
+    ownerApi.listTenants()
+      .then((r) => setTenants(r.data ?? []))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل المشتركين");
+        setTenants([]);
+      });
+    ownerApi.listPlans()
+      .then((r) => setPlans(r.data ?? []))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل الباقات");
+        setPlans([]);
+      });
   };
   useEffect(load, []);
 
@@ -341,7 +358,7 @@ export default function OwnerTenants() {
       load();
       setDetail(null);
     } catch (e) {
-      setPageError(e.response?.data?.message || "تعذر تحديث حالة المشترك");
+      setPageError(getApiErrorMessage(e, "تعذر تحديث حالة المشترك"));
     }
   };
 

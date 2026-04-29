@@ -8,6 +8,7 @@ import SoftButton from "components/SoftButton";
 import CoverLayout from "layouts/authentication/components/CoverLayout";
 import curved9 from "assets/images/curved-images/curved-6.jpg";
 import { useAuth } from "context/AuthContext";
+import { getApiErrorMessage } from "utils/formErrors";
 
 function SignIn() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ function SignIn() {
       if (rememberMe && tenantId) localStorage.setItem("lastTenantId", tenantId);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "خطأ في بيانات الدخول");
+      setError(getApiErrorMessage(err, "خطأ في بيانات الدخول"));
     } finally {
       setLoading(false);
     }

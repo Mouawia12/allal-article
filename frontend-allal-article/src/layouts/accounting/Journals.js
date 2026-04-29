@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
@@ -37,6 +38,7 @@ import Footer from "examples/Footer";
 
 import { fmt, journalSourceLabels, journalStatusLabels, journalTypeLabels } from "./mockData";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const STATUS_TABS = ["الكل", "draft", "posted", "reversed"];
 const STATUS_LABELS = { الكل: "الكل", draft: "مسودة", posted: "مرحّلة", reversed: "معكوسة" };
@@ -140,8 +142,10 @@ export default function Journals() {
   const [tab, setTab] = useState(0);
   const [fyFilter, setFyFilter] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
@@ -149,13 +153,20 @@ export default function Journals() {
         const active = fys.find((f) => !f.closed) ?? fys[0];
         if (active) setFyFilter(active.id);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية"));
+        setFiscalYears([]);
+      });
   }, []);
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listJournals()
       .then((r) => setAllJournals(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل القيود اليومية"));
+        setAllJournals([]);
+      });
   }, []);
 
   const activeFY = fiscalYears.find((y) => y.id === fyFilter);
@@ -197,6 +208,12 @@ export default function Journals() {
             )}
           </SoftBox>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* Stats */}
         <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap">

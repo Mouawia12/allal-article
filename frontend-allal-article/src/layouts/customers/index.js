@@ -48,6 +48,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { customersApi, referenceApi, usersApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getInitials(name) {
@@ -222,6 +224,7 @@ function CustomerCard({ customer, onView }) {
 
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
 function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
+  const { t } = useI18n();
   const [direction, setDirection] = useState("in");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("cash");
@@ -242,7 +245,7 @@ function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
   }, [open, customer]);
 
   const validate = () => {
-    if (!amount || Number(amount) <= 0) return "المبلغ يجب أن يكون أكبر من صفر";
+    if (!amount || Number(amount) <= 0) return t("المبلغ يجب أن يكون أكبر من صفر");
     return "";
   };
 
@@ -264,7 +267,7 @@ function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
       onSaved(r.data);
       onClose();
     } catch (e) {
-      setError(e.response?.data?.message || "حدث خطأ أثناء التسجيل");
+      setError(getApiErrorMessage(e, "حدث خطأ أثناء التسجيل"));
     } finally {
       setSaving(false);
     }
@@ -359,22 +362,27 @@ function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
 }
 
 // ─── Customer Detail Dialog ───────────────────────────────────────────────────
-export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpdate, onEdit, users }) {
+export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpdate, onEdit, users, usersError = "" }) {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(initialCustomer);
   const [tab, setTab] = useState(0);
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentsError, setPaymentsError] = useState("");
 
   useEffect(() => { setCustomer(initialCustomer); }, [initialCustomer]);
 
   useEffect(() => {
     if (!customer || tab !== 2) return;
     setLoadingPayments(true);
+    setPaymentsError("");
     customersApi.listPayments(customer.id)
       .then((r) => setPayments(Array.isArray(r.data) ? r.data : []))
-      .catch(console.error)
+      .catch((error) => {
+        setPaymentsError(getApiErrorMessage(error, "تعذر تحميل دفعات الزبون"));
+        setPayments([]);
+      })
       .finally(() => setLoadingPayments(false));
   }, [customer, tab]);
 
@@ -448,6 +456,11 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
       </SoftBox>
 
       <DialogContent sx={{ p: 2, minHeight: 300 }}>
+        {usersError && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {usersError}
+          </Alert>
+        )}
         {tab === 0 && (
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
@@ -552,6 +565,11 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
             </SoftBox>
             {loadingPayments && (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={2}>جارٍ التحميل...</SoftTypography>
+            )}
+            {paymentsError && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPaymentsError("")}>
+                {paymentsError}
+              </Alert>
             )}
             {!loadingPayments && payments.length === 0 && (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>لا توجد دفعات مسجلة</SoftTypography>
@@ -683,6 +701,7 @@ const emptyForm = {
 };
 
 function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
+  const { t } = useI18n();
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -718,10 +737,10 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
 
   const validate = () => {
     const errs = {};
-    if (!form.name.trim()) errs.name = "الاسم مطلوب";
-    if (!form.phone.trim()) errs.phone = "رقم الهاتف مطلوب";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "بريد إلكتروني غير صالح";
-    if (form.openingBalance && isNaN(Number(form.openingBalance))) errs.openingBalance = "يجب أن يكون رقماً";
+    if (!form.name.trim()) errs.name = t("الاسم مطلوب");
+    if (!form.phone.trim()) errs.phone = t("رقم الهاتف مطلوب");
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = t("بريد إلكتروني غير صالح");
+    if (form.openingBalance && isNaN(Number(form.openingBalance))) errs.openingBalance = t("يجب أن يكون رقماً");
     return errs;
   };
 
@@ -748,7 +767,7 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
       onSaved(r.data);
       onClose();
     } catch (e) {
-      const msg = e.response?.data?.message || "حدث خطأ أثناء الحفظ";
+      const msg = getApiErrorMessage(e, "حدث خطأ أثناء الحفظ");
       setErrors({ _global: msg });
     } finally {
       setSaving(false);
@@ -978,9 +997,12 @@ function Customers() {
   const [addDialog, setAddDialog] = useState(false);
   const [editCustomer, setEditCustomer] = useState(null);
   const [printDialog, setPrintDialog] = useState(false);
+  const [pageError, setPageError] = useState("");
   const { toast, show: showToast, hide: hideToast } = useToast();
 
   useEffect(() => {
+    setLoading(true);
+    setPageError("");
     Promise.all([
       customersApi.list({ size: 200 }),
       referenceApi.wilayas(),
@@ -995,7 +1017,10 @@ function Customers() {
           : Array.isArray(ur.data) ? ur.data : [];
         setUsers(uList);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل بيانات الزبائن"));
+        setCustomers([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -1056,6 +1081,12 @@ function Customers() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2} mb={3}>
           {[

@@ -13,7 +13,7 @@ Coded by www.creative-tim.com
 * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 */
 
-import { useState, useEffect, useMemo } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo } from "react";
 
 // react-router components
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -22,6 +22,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import GlobalStyles from "@mui/material/GlobalStyles";
+import CircularProgress from "@mui/material/CircularProgress";
 import Tooltip from "@mui/material/Tooltip";
 import Icon from "components/AppIcon";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -47,18 +48,6 @@ import createCache from "@emotion/cache";
 import routes from "routes";
 import PrivateRoute from "components/PrivateRoute";
 
-// Landing page
-import LandingPage from "layouts/landing";
-
-// Owner dashboard shell
-import OwnerDashboard from "layouts/owner/dashboard";
-import OwnerTenants  from "layouts/owner/tenants";
-import OwnerPlans    from "layouts/owner/plans";
-import OwnerRevenue  from "layouts/owner/revenue";
-import OwnerNotifications from "layouts/owner/notifications";
-import OwnerSupport from "layouts/owner/support";
-import OwnerLogin from "layouts/owner/login";
-
 // Owner auth
 import { OwnerAuthProvider, useOwnerAuth } from "context/OwnerAuthContext";
 import { Navigate as Redir } from "react-router-dom";
@@ -70,6 +59,23 @@ function OwnerPrivateRoute({ children }) {
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
+
+const LandingPage = lazy(() => import("layouts/landing"));
+const OwnerDashboard = lazy(() => import("layouts/owner/dashboard"));
+const OwnerTenants = lazy(() => import("layouts/owner/tenants"));
+const OwnerPlans = lazy(() => import("layouts/owner/plans"));
+const OwnerRevenue = lazy(() => import("layouts/owner/revenue"));
+const OwnerNotifications = lazy(() => import("layouts/owner/notifications"));
+const OwnerSupport = lazy(() => import("layouts/owner/support"));
+const OwnerLogin = lazy(() => import("layouts/owner/login"));
+
+function RouteFallback() {
+  return (
+    <SoftBox display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <CircularProgress size={32} />
+    </SoftBox>
+  );
+}
 
 // ─── Dark mode global CSS overrides ──────────────────────────────────────────
 const darkModeStyles = {
@@ -259,16 +265,18 @@ export default function App() {
   if (pathname.startsWith("/owner")) {
     return (
       <OwnerAuthProvider>
-        <Routes>
-          <Route path="/owner/login" element={<OwnerLogin />} />
-          <Route path="/owner/dashboard"     element={<OwnerPrivateRoute><OwnerDashboard /></OwnerPrivateRoute>} />
-          <Route path="/owner/tenants"       element={<OwnerPrivateRoute><OwnerTenants /></OwnerPrivateRoute>} />
-          <Route path="/owner/plans"         element={<OwnerPrivateRoute><OwnerPlans /></OwnerPrivateRoute>} />
-          <Route path="/owner/revenue"       element={<OwnerPrivateRoute><OwnerRevenue /></OwnerPrivateRoute>} />
-          <Route path="/owner/notifications" element={<OwnerPrivateRoute><OwnerNotifications /></OwnerPrivateRoute>} />
-          <Route path="/owner/support"       element={<OwnerPrivateRoute><OwnerSupport /></OwnerPrivateRoute>} />
-          <Route path="/owner/*"             element={<Navigate to="/owner/login" />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/owner/login" element={<OwnerLogin />} />
+            <Route path="/owner/dashboard"     element={<OwnerPrivateRoute><OwnerDashboard /></OwnerPrivateRoute>} />
+            <Route path="/owner/tenants"       element={<OwnerPrivateRoute><OwnerTenants /></OwnerPrivateRoute>} />
+            <Route path="/owner/plans"         element={<OwnerPrivateRoute><OwnerPlans /></OwnerPrivateRoute>} />
+            <Route path="/owner/revenue"       element={<OwnerPrivateRoute><OwnerRevenue /></OwnerPrivateRoute>} />
+            <Route path="/owner/notifications" element={<OwnerPrivateRoute><OwnerNotifications /></OwnerPrivateRoute>} />
+            <Route path="/owner/support"       element={<OwnerPrivateRoute><OwnerSupport /></OwnerPrivateRoute>} />
+            <Route path="/owner/*"             element={<Navigate to="/owner/login" />} />
+          </Routes>
+        </Suspense>
       </OwnerAuthProvider>
     );
   }
@@ -360,11 +368,13 @@ export default function App() {
           </>
         )}
         {layout === "vr" && <Configurator />}
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          {getRoutes(routes)}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            {getRoutes(routes)}
+            <Route path="*" element={<Navigate to="/dashboard" />} />
+          </Routes>
+        </Suspense>
       </ThemeProvider>
     </CacheProvider>
   ) : (
@@ -384,11 +394,13 @@ export default function App() {
         </>
       )}
       {layout === "vr" && <Configurator />}
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        {getRoutes(routes)}
-        <Route path="*" element={<Navigate to="/dashboard" />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          {getRoutes(routes)}
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </Routes>
+      </Suspense>
     </ThemeProvider>
   );
 }

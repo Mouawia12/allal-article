@@ -1,8 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { ordersApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -230,9 +232,13 @@ function OrderDetail() {
   const [editMode, setEditMode] = useState(false);
   const [returnDialog, setReturnDialog] = useState(false);
   const [activity, setActivity] = useState([]);
+  const [actionSaving, setActionSaving] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const loadOrder = useCallback(() => {
     setLoading(true);
+    setLoadError("");
     Promise.all([ordersApi.getById(id), ordersApi.getEvents(id)])
       .then(([orderRes, eventsRes]) => {
         const norm = normalize(orderRes.data);
@@ -243,18 +249,35 @@ function OrderDetail() {
         setOrderLines(norm.lines);
         setActivity((eventsRes.data ?? []).map(normalizeEvent));
       })
-      .catch(console.error)
+      .catch((error) => setLoadError(getApiErrorMessage(error, "تعذر تحميل تفاصيل الطلبية")))
       .finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => { loadOrder(); }, [loadOrder]);
 
-  if (loading || !orderData) {
+  if (loading) {
     return (
       <DashboardLayout>
         <DashboardNavbar />
         <SoftBox display="flex" justifyContent="center" alignItems="center" py={10}>
           <CircularProgress />
+        </SoftBox>
+        <Footer />
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError || !orderData) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <SoftBox py={3}>
+          <SoftBox mb={2}>
+            <IconButton onClick={() => navigate("/orders")} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+          </SoftBox>
+          <Alert severity="error">{loadError || "تعذر تحميل تفاصيل الطلبية"}</Alert>
         </SoftBox>
         <Footer />
       </DashboardLayout>
@@ -360,6 +383,8 @@ function OrderDetail() {
   };
 
   const handleAction = async (action) => {
+    setActionSaving(true);
+    setActionError("");
     try {
       if (action === "reject") {
         await ordersApi.reject(id, adminNote.trim() || undefined);
@@ -378,9 +403,9 @@ function OrderDetail() {
       setAdminNote("");
       loadOrder();
     } catch (err) {
-      console.error(err);
-      setConfirmDialog(null);
-      setAdminNote("");
+      setActionError(getApiErrorMessage(err, "تعذر تنفيذ الإجراء"));
+    } finally {
+      setActionSaving(false);
     }
   };
 
@@ -432,7 +457,7 @@ function OrderDetail() {
                 color={primaryAction.color}
                 size="small"
                 startIcon={<primaryAction.icon />}
-                onClick={() => setConfirmDialog(orderStatus)}
+                onClick={() => { setActionError(""); setConfirmDialog(orderStatus); }}
               >
                 {primaryAction.button}
               </SoftButton>
@@ -443,7 +468,7 @@ function OrderDetail() {
                 color="error"
                 size="small"
                 startIcon={<CancelIcon />}
-                onClick={() => setConfirmDialog("reject")}
+                onClick={() => { setActionError(""); setConfirmDialog("reject"); }}
               >
                 رفض الطلبية
               </SoftButton>
@@ -454,7 +479,7 @@ function OrderDetail() {
                 color="error"
                 size="small"
                 startIcon={<CancelIcon />}
-                onClick={() => setConfirmDialog("cancel")}
+                onClick={() => { setActionError(""); setConfirmDialog("cancel"); }}
               >
                 إلغاء الطلبية
               </SoftButton>
@@ -940,18 +965,24 @@ function OrderDetail() {
               size="small"
             />
           )}
+          {actionError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {actionError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setConfirmDialog(null)}>
+          <SoftButton variant="outlined" color="secondary" size="small" disabled={actionSaving} onClick={() => setConfirmDialog(null)}>
             إلغاء
           </SoftButton>
           <SoftButton
             variant="gradient"
             color={["reject", "cancel"].includes(confirmDialog) ? "error" : orderActionFlow[confirmDialog]?.color || "info"}
             size="small"
+            disabled={actionSaving}
             onClick={() => handleAction(confirmDialog)}
           >
-            {confirmDialog === "reject"
+            {actionSaving ? "جارٍ التنفيذ..." : confirmDialog === "reject"
               ? "رفض"
               : confirmDialog === "cancel"
                 ? "إلغاء الطلبية"

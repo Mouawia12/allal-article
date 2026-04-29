@@ -3,6 +3,18 @@
  * Run with: npm test -- --watchAll=false
  */
 
+import {
+  applyApiErrors,
+  getApiErrorMessage,
+  getApiFieldErrors,
+  hasErrors,
+  isBlank,
+  isPositiveNumber,
+} from "utils/formErrors";
+import { decodeJwtPayload } from "utils/jwt";
+import { generateInviteCode } from "utils/inviteCodes";
+import { getOrderFormVariant } from "utils/roles";
+
 // Test that apiClient unwraps ApiResponse correctly
 test("apiClient interceptor unwraps ApiResponse envelope", () => {
   const mockResponseData = { success: true, data: [1, 2, 3], message: "OK", timestamp: "2026" };
@@ -111,4 +123,105 @@ test("periodDates returns correct date range for month", () => {
 
   const { from: yearFrom } = periodDates("year");
   expect(yearFrom).toBe("2026-01-01");
+});
+
+test("form error helpers map backend validation fields", () => {
+  const error = {
+    response: {
+      data: {
+        message: "Validation failed",
+        errors: [
+          { field: "name", message: "الاسم مطلوب" },
+          { field: "items.0.qty", message: "الكمية غير صحيحة" },
+          { field: "", message: "ignored" },
+        ],
+      },
+    },
+  };
+
+  expect(getApiFieldErrors(error)).toEqual({
+    name: "الاسم مطلوب",
+    "items.0.qty": "الكمية غير صحيحة",
+    qty: "الكمية غير صحيحة",
+  });
+  expect(getApiErrorMessage(error, "fallback")).toBe("يرجى تصحيح الأخطاء الموضحة في الحقول");
+});
+
+test("form error helpers prefer server messages and detect network errors", () => {
+  expect(getApiErrorMessage({}, "fallback")).toBe("تعذر الاتصال بالخادم");
+  expect(getApiErrorMessage({
+    response: { data: { message: "غير مصرح" } },
+  }, "fallback")).toBe("غير مصرح");
+  expect(getApiErrorMessage({
+    response: { data: {} },
+  }, "fallback")).toBe("fallback");
+});
+
+test("applyApiErrors merges field and global errors", () => {
+  let captured;
+  const setErrors = (updater) => {
+    captured = updater({ existing: "يبقى" });
+  };
+
+  applyApiErrors({
+    response: {
+      data: {
+        message: "Validation failed",
+        errors: [{ field: "email", message: "البريد غير صحيح" }],
+      },
+    },
+  }, setErrors, "تعذر الحفظ");
+
+  expect(captured).toEqual({
+    existing: "يبقى",
+    email: "البريد غير صحيح",
+    _global: "يرجى تصحيح الأخطاء الموضحة في الحقول",
+  });
+});
+
+test("basic validation helpers handle blank and positive values", () => {
+  expect(isBlank("   ")).toBe(true);
+  expect(isBlank(0)).toBe(false);
+  expect(isPositiveNumber("2.5")).toBe(true);
+  expect(isPositiveNumber("0")).toBe(false);
+  expect(hasErrors({ name: "", qty: "مطلوب" })).toBe(true);
+  expect(hasErrors({ name: "", qty: null })).toBe(false);
+});
+
+test("decodeJwtPayload handles base64url JWT payloads without padding", () => {
+  const token = "header.eyJ1c2VySWQiOjQyLCJyb2xlQ29kZSI6ImFkbWluIn0.signature";
+
+  expect(decodeJwtPayload(token)).toEqual({
+    userId: 42,
+    roleCode: "admin",
+  });
+});
+
+test("decodeJwtPayload returns null for malformed tokens", () => {
+  expect(decodeJwtPayload("not-a-token")).toBeNull();
+  expect(decodeJwtPayload("header.invalid.signature")).toBeNull();
+  expect(decodeJwtPayload(null)).toBeNull();
+});
+
+test("order form routing uses authenticated user role", () => {
+  expect(getOrderFormVariant({ roleCode: "salesperson" })).toBe("seller");
+  expect(getOrderFormVariant({ roleCode: " SELLER " })).toBe("seller");
+  expect(getOrderFormVariant({ roleCode: "admin" })).toBe("admin");
+  expect(getOrderFormVariant(null)).toBe("admin");
+});
+
+test("invite code generation uses secure random bytes", () => {
+  const cryptoSource = {
+    getRandomValues: jest.fn((values) => {
+      values.set([0, 1, 2, 3]);
+      return values;
+    }),
+  };
+
+  expect(generateInviteCode(cryptoSource)).toBe("LINK-ABCD-ABCD");
+  expect(cryptoSource.getRandomValues).toHaveBeenCalledTimes(2);
+});
+
+test("invite code generation rejects missing secure random source", () => {
+  expect(() => generateInviteCode({})).toThrow("Secure random generator unavailable");
 });

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Chip from "@mui/material/Chip";
@@ -30,6 +31,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(Math.abs(n ?? 0)) + " دج";
@@ -191,13 +193,18 @@ export default function SubledgerReconciliation() {
   const [tab, setTab]             = useState(0);
   const [parties, setParties]     = useState([]);
   const [loading, setLoading]     = useState(true);
+  const [loadError, setLoadError] = useState("");
   const type = tab === 0 ? "customer" : "supplier";
 
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     accountingApi.reconciliation(type)
       .then((r) => setParties(r.data?.parties ?? []))
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل مطابقة الحسابات الفرعية"));
+        setParties([]);
+      })
       .finally(() => setLoading(false));
   }, [type]);
 
@@ -221,6 +228,12 @@ export default function SubledgerReconciliation() {
             <PrintIcon sx={{ mr: 0.5, fontSize: 16 }} /> طباعة تقرير
           </SoftButton>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         <SoftBox sx={{ borderBottom: "1px solid #e9ecef", mb: 3 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)}>

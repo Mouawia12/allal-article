@@ -24,7 +24,7 @@ import Footer from "examples/Footer";
 
 import { classificationLabels, fmt } from "./mockData";
 import { accountingApi } from "services";
-import { applyApiErrors } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage } from "utils/formErrors";
 
 export default function OpeningBalances() {
   const [fiscalYears, setFiscalYears] = useState([]);
@@ -33,8 +33,10 @@ export default function OpeningBalances() {
   const [balances, setBalances] = useState({});
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
@@ -42,7 +44,10 @@ export default function OpeningBalances() {
         const active = fys.find((f) => !f.closed) ?? fys[0];
         if (active) setFyId(active.id);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية"));
+        setFiscalYears([]);
+      });
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
@@ -57,7 +62,13 @@ export default function OpeningBalances() {
         });
         setBalances(m);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الحسابات");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setPostable([]);
+      });
   }, []);
 
   const isLocked = fiscalYears.find((y) => y.id === fyId)?.closed;
@@ -93,6 +104,12 @@ export default function OpeningBalances() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
+
         <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={3} flexWrap="wrap" gap={2}>
           <SoftBox>
             <SoftTypography variant="h5" fontWeight="bold">الأرصدة الافتتاحية</SoftTypography>

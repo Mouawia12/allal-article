@@ -59,6 +59,7 @@ import Footer from "examples/Footer";
 
 import { classificationLabels } from "../mockData";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const LEVEL_COLORS = ["#17c1e8", "#82d616", "#fb8c00", "#7928ca", "#ea0606", "#344767"];
@@ -292,6 +293,7 @@ export default function TrialBalance() {
   const [showFilters,   setShowFilters]   = useState(true);
   const [fiscalYears,   setFiscalYears]   = useState([]);
   const [apiRows,       setApiRows]       = useState([]);
+  const [pageError,     setPageError]     = useState("");
 
   // Column visibility
   const [colOpening,  setColOpening]  = useState(true);
@@ -325,6 +327,7 @@ export default function TrialBalance() {
 
   // Load fiscal years once
   useEffect(() => {
+    setPageError("");
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
@@ -336,13 +339,17 @@ export default function TrialBalance() {
           setDateTo(active.endDate ?? "");
         }
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية"));
+        setFiscalYears([]);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load trial balance when fyId changes
   useEffect(() => {
     if (!fyId) return;
+    setPageError("");
     accountingApi.trialBalance(fyId)
       .then((r) => {
         const rows = (r.data?.rows ?? r.data ?? []).map((row, idx) => ({
@@ -363,7 +370,10 @@ export default function TrialBalance() {
         }));
         setApiRows(rows);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل ميزان المراجعة"));
+        setApiRows([]);
+      });
   }, [fyId]);
 
   const allRows = apiRows;
@@ -505,6 +515,12 @@ export default function TrialBalance() {
             </Tooltip>
           </SoftBox>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" className="no-print" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* ── Imbalance Alert ── */}
         {hasImbalance && (

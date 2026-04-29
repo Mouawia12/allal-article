@@ -57,7 +57,8 @@ import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 import useProductFavorites from "hooks/useProductFavorites";
 import { CustomerDetailDialog } from "layouts/customers";
-import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const getPriceListsFor = () => [];
 const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
@@ -95,21 +96,28 @@ export const emptyNewCustomerForm = {
 
 export function CustomerInfoDialog({ customer, onClose, onUpdate = () => {}, onEdit = () => {}, users: providedUsers }) {
   const [users, setUsers] = useState(providedUsers || []);
+  const [usersError, setUsersError] = useState("");
 
   useEffect(() => {
     if (providedUsers) {
+      setUsersError("");
       setUsers(providedUsers);
       return;
     }
 
     if (!customer) {
+      setUsersError("");
       setUsers([]);
       return;
     }
 
+    setUsersError("");
     usersApi.list({ size: 200 })
       .then((r) => setUsers(r.data?.content ?? r.data ?? []))
-      .catch(() => setUsers([]));
+      .catch((error) => {
+        setUsersError(getApiErrorMessage(error, "تعذر تحميل قائمة المستخدمين المرتبطة بالزبون"));
+        setUsers([]);
+      });
   }, [customer?.id, providedUsers]);
 
   return (
@@ -119,6 +127,7 @@ export function CustomerInfoDialog({ customer, onClose, onUpdate = () => {}, onE
       onUpdate={onUpdate}
       onEdit={onEdit}
       users={users}
+      usersError={usersError}
     />
   );
 }
@@ -506,6 +515,7 @@ function ProductListRow({
 function NewOrder() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useI18n();
   const productCardRefs = useRef({});
   const searchInputRef = useRef(null);
 
@@ -533,9 +543,11 @@ function NewOrder() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   useEffect(() => {
+    setLoadError("");
     productsApi.list().then((r) => {
       const all = r.data?.content ?? r.data ?? [];
       const mapped = all.map((p) => ({
@@ -552,7 +564,11 @@ function NewOrder() {
       }));
       setApiProducts(mapped);
       if (mapped.length) setSelectedProductId(mapped[0].id);
-    }).catch(console.error);
+    }).catch((error) => {
+      setLoadError((current) =>
+        current || getApiErrorMessage(error, "تعذر تحميل الأصناف")
+      );
+    });
     customersApi.list().then((r) => {
       const list = (r.data?.content ?? r.data ?? []).map((c) => ({
         totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—",
@@ -567,7 +583,12 @@ function NewOrder() {
         const match = list.find((c) => c.id === preselected.id) ?? preselected;
         setCustomer(match);
       }
-    }).catch(console.error);
+    }).catch((error) => {
+      setLoadError((current) => {
+        const message = getApiErrorMessage(error, "تعذر تحميل الزبائن");
+        return current ? `${current}؛ ${message}` : message;
+      });
+    });
   }, []);
 
   const normalizeQty = (value) => {
@@ -766,8 +787,8 @@ function NewOrder() {
     if (!customer?.id) validationErrors._global = "الرجاء اختيار الزبون أولاً";
     if (cartItems.length === 0) validationErrors.items = "الرجاء إضافة صنف واحد على الأقل";
     cartItems.forEach((item) => {
-      if (!item.product?.id) validationErrors[`cart-${item.product?.id || "unknown"}-productId`] = "الصنف مطلوب";
-      if (!isPositiveNumber(item.qty)) validationErrors[`cart-${item.product?.id || "unknown"}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+      if (!item.product?.id) validationErrors[`cart-${item.product?.id || "unknown"}-productId`] = t("الصنف مطلوب");
+      if (!isPositiveNumber(item.qty)) validationErrors[`cart-${item.product?.id || "unknown"}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
     });
 
     setOrderErrors(validationErrors);
@@ -809,14 +830,14 @@ function NewOrder() {
     const wilaya = newCustomerForm.wilaya.trim();
     const validationErrors = {};
 
-    if (isBlank(name)) validationErrors.name = "اسم الزبون مطلوب";
-    if (isBlank(phone)) validationErrors.phone = "رقم الهاتف مطلوب";
-    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
+    if (isBlank(name)) validationErrors.name = t("اسم الزبون مطلوب");
+    if (isBlank(phone)) validationErrors.phone = t("رقم الهاتف مطلوب");
+    if (isBlank(wilaya)) validationErrors.wilaya = t("الولاية مطلوبة");
     if (newCustomerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerForm.email)) {
-      validationErrors.email = "البريد الإلكتروني غير صالح";
+      validationErrors.email = t("البريد الإلكتروني غير صالح");
     }
     if (newCustomerForm.openingBalance && Number(newCustomerForm.openingBalance) < 0) {
-      validationErrors.openingBalance = "الرصيد الافتتاحي لا يمكن أن يكون سالباً";
+      validationErrors.openingBalance = t("الرصيد الافتتاحي لا يمكن أن يكون سالباً");
     }
 
     setNewCustomerErrors(validationErrors);
@@ -964,6 +985,12 @@ function NewOrder() {
             <ShoppingCartIcon />
           </Badge>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         <Grid container spacing={3}>
           {/* ─────────────────────────────── LEFT: Products Panel ── */}

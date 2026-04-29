@@ -31,7 +31,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const DIM_TYPE_META = {
   cost_center:   { color: "#17c1e8" },
@@ -45,6 +46,7 @@ const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
 
 function DimDialog({ item, onClose, onSave }) {
+  const { t } = useI18n();
   const [form, setForm] = useState(item ?? { code: "", name: "", active: true });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -54,8 +56,8 @@ function DimDialog({ item, onClose, onSave }) {
   };
   const save = async () => {
     const nextErrors = {};
-    if (isBlank(form.code)) nextErrors.code = "الكود مطلوب";
-    if (isBlank(form.name)) nextErrors.name = "الاسم مطلوب";
+    if (isBlank(form.code)) nextErrors.code = t("الكود مطلوب");
+    if (isBlank(form.name)) nextErrors.name = t("الاسم مطلوب");
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setSaving(true);
     setErrors({});
@@ -139,15 +141,22 @@ export default function Dimensions() {
   const [grouped, setGrouped]       = useState({});
   const [profitByWilaya, setProfit] = useState([]);
   const [dialog, setDialog]         = useState(null);
+  const [pageError, setPageError]   = useState("");
 
   const reload = () => {
+    setPageError("");
     accountingApi.listDimensions()
       .then((r) => {
         setDimTypes(r.data?.types ?? []);
         setGrouped(r.data?.grouped ?? {});
         setProfit(r.data?.profitByWilaya ?? []);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الأبعاد التحليلية"));
+        setDimTypes([]);
+        setGrouped({});
+        setProfit([]);
+      });
   };
 
   useEffect(() => { reload(); }, []);
@@ -166,6 +175,12 @@ export default function Dimensions() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+
         <SoftBox mb={3}>
           <SoftTypography variant="h5" fontWeight="bold">الأبعاد ومراكز التكلفة</SoftTypography>
           <SoftTypography variant="caption" color="secondary">

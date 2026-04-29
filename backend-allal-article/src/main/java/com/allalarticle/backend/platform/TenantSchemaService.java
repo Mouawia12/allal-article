@@ -1,5 +1,6 @@
 package com.allalarticle.backend.platform;
 
+import com.allalarticle.backend.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
@@ -60,18 +61,22 @@ public class TenantSchemaService {
      */
     @Transactional
     public void provision(String schemaName, String ownerName, String ownerEmail, String ownerPassword) {
+        TenantContext.requireValidSchema(schemaName);
         log.info("Provisioning tenant schema: {}", schemaName);
 
         jdbcTemplate.execute("create schema if not exists \"" + schemaName + "\"");
         jdbcTemplate.execute("set search_path to \"" + schemaName + "\"");
 
-        for (String script : TENANT_SCRIPTS) {
-            executeSqlScript("db/migration/tenant/" + script, schemaName);
+        try {
+            for (String script : TENANT_SCRIPTS) {
+                executeSqlScript("db/migration/tenant/" + script, schemaName);
+            }
+
+            seedOwnerUser(schemaName, ownerName, ownerEmail, ownerPassword);
+        } finally {
+            jdbcTemplate.execute("set search_path to platform, public");
         }
 
-        seedOwnerUser(schemaName, ownerName, ownerEmail, ownerPassword);
-
-        jdbcTemplate.execute("set search_path to platform, public");
         log.info("Tenant schema provisioned successfully: {}", schemaName);
     }
 

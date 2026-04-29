@@ -50,7 +50,8 @@ import {
   productSettings,
 } from "./mockProductData";
 import { productsApi, inventoryApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 let unitRowId = 100;
@@ -667,6 +668,7 @@ export default function ProductForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit  = !!id;
+  const { t } = useI18n();
 
   const [form, setForm] = useState({
     name: "", code: "", category: "", description: "", barcode: "",
@@ -682,14 +684,19 @@ export default function ProductForm() {
   const [warehouses, setWarehouses] = useState([]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     inventoryApi.listWarehouses().then((r) => {
       const whs = r.data?.content ?? r.data ?? [];
       setWarehouses(whs);
       const def = whs.find((w) => w.isDefault) ?? whs[0];
       if (def) setForm((p) => ({ ...p, initialWarehouseId: def.id }));
-    }).catch(console.error);
+    }).catch((error) => {
+      setLoadError(getApiErrorMessage(error, "تعذر تحميل المستودعات"));
+      setWarehouses([]);
+    });
     if (isEdit) {
       productsApi.getById(id).then((r) => {
         const p = r.data;
@@ -703,7 +710,12 @@ export default function ProductForm() {
         if (p.units?.length) setUnits(p.units.map((u) => ({ ...u, _id: unitRowId++ })));
         if (p.hasVariants) { setHasVariants(true); setVariantAttrs(p.variantAttributes ?? []); }
         if (p.variants?.length) setVariants(p.variants.map((v) => ({ ...v, _id: variantRowId++ })));
-      }).catch(console.error);
+      }).catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل بيانات الصنف");
+          return current ? `${current}؛ ${message}` : message;
+        });
+      });
     }
   }, [id, isEdit]);
 
@@ -765,18 +777,18 @@ export default function ProductForm() {
     const currentPriceAmount = baseUnitPrice === "" || baseUnitPrice === undefined ? null : Number(baseUnitPrice);
     const nextErrors = {};
 
-    if (isBlank(form.name)) nextErrors.name = "اسم الصنف مطلوب";
-    if (isBlank(form.code)) nextErrors.sku = "الكود مطلوب";
-    if (isBlank(form.baseUnit)) nextErrors.baseUnitId = "وحدة القياس مطلوبة";
-    else if (!selectedUnit?.id) nextErrors.baseUnitId = "اختر وحدة موجودة من القائمة";
+    if (isBlank(form.name)) nextErrors.name = t("اسم الصنف مطلوب");
+    if (isBlank(form.code)) nextErrors.sku = t("الكود مطلوب");
+    if (isBlank(form.baseUnit)) nextErrors.baseUnitId = t("وحدة القياس مطلوبة");
+    else if (!selectedUnit?.id) nextErrors.baseUnitId = t("اختر وحدة موجودة من القائمة");
     if (!Number.isFinite(unitsPerPackageValue) || unitsPerPackageValue <= 0) {
-      nextErrors.unitsPerPackage = "عدد الوحدات في التعليبة يجب أن يكون رقماً أكبر من صفر";
+      nextErrors.unitsPerPackage = t("عدد الوحدات في التعليبة يجب أن يكون رقماً أكبر من صفر");
     }
     if (!Number.isFinite(weightPerUnitValue) || weightPerUnitValue < 0) {
-      nextErrors.weightPerUnit = "الوزن يجب أن يكون رقماً غير سالب";
+      nextErrors.weightPerUnit = t("الوزن يجب أن يكون رقماً غير سالب");
     }
     if (currentPriceAmount !== null && (!Number.isFinite(currentPriceAmount) || currentPriceAmount < 0)) {
-      nextErrors._global = "سعر الوحدة الأساسية يجب أن يكون رقماً غير سالب";
+      nextErrors._global = t("سعر الوحدة الأساسية يجب أن يكون رقماً غير سالب");
     }
     if (hasErrors(nextErrors)) {
       setErrors(nextErrors);
@@ -856,6 +868,12 @@ export default function ProductForm() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {errors._global && (
           <Alert severity="error" sx={{ mb: 2 }}>

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -22,6 +23,7 @@ import Footer from "examples/Footer";
 
 import { fmt, journalStatusLabels } from "../mockData";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 export default function AccountMovement() {
   const [accounts, setAccounts] = useState([]);
@@ -31,14 +33,19 @@ export default function AccountMovement() {
   const [lines, setLines] = useState([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
         setAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
+        setAccounts([]);
+      });
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
@@ -50,14 +57,24 @@ export default function AccountMovement() {
           setDateTo(active.endDate || "");
         }
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل السنوات المالية");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setFiscalYears([]);
+      });
   }, []);
 
   useEffect(() => {
     if (!account || !fyId) return;
+    setPageError("");
     accountingApi.generalLedger(account.id, fyId)
       .then((r) => setLines(r.data?.lines ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل حركة الحساب"));
+        setLines([]);
+      });
   }, [account, fyId]);
 
   const filtered = useMemo(
@@ -83,6 +100,12 @@ export default function AccountMovement() {
             <PrintIcon sx={{ fontSize: 16, mr: 0.5 }} /> طباعة
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap" alignItems="flex-end">
           <SoftBox flex={1} minWidth={280}>

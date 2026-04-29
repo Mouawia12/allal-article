@@ -64,6 +64,7 @@ public class SecurityConfig {
                 ).permitAll()
                 .requestMatchers("/api/platform/**").hasAnyAuthority(
                     "ROLE_PLATFORM_OWNER","ROLE_PLATFORM_SUPPORT")
+                .requestMatchers("/api/**").hasAuthority("ROLE_TENANT")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

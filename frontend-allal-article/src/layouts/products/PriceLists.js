@@ -33,7 +33,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { priceListsApi, suppliersApi, customersApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const formatDZD = (v) =>
   Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " دج";
@@ -160,11 +161,14 @@ function AssignEntitiesDialog({ open, onClose, priceList, onSave, suppliers = []
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function PriceLists() {
+  const { t } = useI18n();
   const [lists, setLists] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [items, setItems] = useState([]);
   const [loadingLists, setLoadingLists] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [pageError, setPageError] = useState("");
+  const [itemsError, setItemsError] = useState("");
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialog, setAssignDialog] = useState(false);
@@ -179,13 +183,17 @@ function PriceLists() {
   // Load price lists
   const loadLists = useCallback(() => {
     setLoadingLists(true);
+    setPageError("");
     priceListsApi.list()
       .then((r) => {
         const data = Array.isArray(r.data) ? r.data : (r.data?.content ?? []);
         setLists(data);
         if (data.length > 0 && !selectedId) setSelectedId(data[0].id);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل قوائم الأسعار"));
+        setLists([]);
+      })
       .finally(() => setLoadingLists(false));
   }, [selectedId]);
 
@@ -195,16 +203,34 @@ function PriceLists() {
   useEffect(() => {
     if (!selectedId) return;
     setLoadingItems(true);
+    setItemsError("");
     priceListsApi.getItems(selectedId)
       .then((r) => setItems(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
-      .catch(console.error)
+      .catch((error) => {
+        setItemsError(getApiErrorMessage(error, "تعذر تحميل أصناف قائمة الأسعار"));
+        setItems([]);
+      })
       .finally(() => setLoadingItems(false));
   }, [selectedId]);
 
   // Load suppliers + customers for assign dialog
   useEffect(() => {
-    suppliersApi.list().then((r) => setSuppliers(Array.isArray(r.data) ? r.data : (r.data?.content ?? []))).catch(console.error);
-    customersApi.list().then((r) => setCustomers(Array.isArray(r.data) ? r.data : (r.data?.content ?? []))).catch(console.error);
+    suppliersApi.list()
+      .then((r) => setSuppliers(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الموردين");
+          return current ? `${current}؛ ${message}` : message;
+        });
+      });
+    customersApi.list()
+      .then((r) => setCustomers(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الزبائن");
+          return current ? `${current}؛ ${message}` : message;
+        });
+      });
   }, []);
 
   const selectedList = lists.find((l) => l.id === selectedId) || null;
@@ -249,9 +275,9 @@ function PriceLists() {
   const saveNewList = () => {
     const name = listForm.name.trim();
     const nextErrors = {};
-    if (isBlank(name)) nextErrors.name = "اسم قائمة الأسعار مطلوب";
+    if (isBlank(name)) nextErrors.name = t("اسم قائمة الأسعار مطلوب");
     if (listForm.code && lists.some((list) => list.code === listForm.code.trim())) {
-      nextErrors.code = "هذا الكود مستعمل من قبل";
+      nextErrors.code = t("الكود موجود مسبقاً");
     }
     if (hasErrors(nextErrors)) { setListErrors(nextErrors); return; }
     setSaving(true);
@@ -311,6 +337,12 @@ function PriceLists() {
             قائمة أسعار جديدة
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
@@ -423,6 +455,10 @@ function PriceLists() {
 
                 {loadingItems ? (
                   <SoftBox display="flex" justifyContent="center" py={6}><CircularProgress /></SoftBox>
+                ) : itemsError ? (
+                  <Alert severity="error" sx={{ m: 2 }} onClose={() => setItemsError("")}>
+                    {itemsError}
+                  </Alert>
                 ) : filteredItems.length === 0 ? (
                   <SoftBox textAlign="center" py={6}>
                     <SoftTypography variant="body2" color="secondary">

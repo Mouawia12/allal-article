@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
@@ -12,6 +13,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { dashboardApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const formatDZD = (v) =>
   Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -81,11 +83,16 @@ function MiniBarChart({ data = [] }) {
 function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     dashboardApi.getStats()
       .then((r) => setStats(r.data))
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل مؤشرات لوحة التحكم"));
+        setStats(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -110,6 +117,12 @@ function Dashboard() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
+
         {/* ── KPI Row ── */}
         <Grid container spacing={3} mb={3}>
           <Grid item xs={12} sm={6} xl={3}>

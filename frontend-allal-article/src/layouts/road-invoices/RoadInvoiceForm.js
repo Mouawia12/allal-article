@@ -36,7 +36,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
-import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Wilaya defaults (static config, no backend GET endpoint yet) ─────────────
 const wilayaDefaults = {
@@ -52,13 +53,18 @@ function SelectOrdersDialog({ open, onClose, onConfirm }) {
   const [selected, setSelected] = useState([]);
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setOrdersLoading(true);
+    setOrdersError("");
     ordersApi.list({ orderStatus: "confirmed", size: 100 })
       .then((r) => setOrders(r.data?.content ?? r.data ?? []))
-      .catch(console.error)
+      .catch((error) => {
+        setOrdersError(getApiErrorMessage(error, "تعذر تحميل الطلبيات المؤكدة"));
+        setOrders([]);
+      })
       .finally(() => setOrdersLoading(false));
   }, [open]);
 
@@ -105,6 +111,11 @@ function SelectOrdersDialog({ open, onClose, onConfirm }) {
             sx={{ width: 240 }}
           />
         </SoftBox>
+        {ordersError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError("")}>
+            {ordersError}
+          </Alert>
+        )}
         {ordersLoading ? (
           <SoftBox display="flex" justifyContent="center" py={3}>
             <CircularProgress size={28} />
@@ -172,6 +183,7 @@ function SelectOrdersDialog({ open, onClose, onConfirm }) {
 // ─── Main Form ────────────────────────────────────────────────────────────────
 function RoadInvoiceForm() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const location = useLocation();
   const isFromOrders = location.pathname.includes("from-orders");
 
@@ -234,13 +246,13 @@ function RoadInvoiceForm() {
 
   const handleSave = () => {
     const validationErrors = {};
-    if (isBlank(invoiceDate)) validationErrors.invoiceDate = "تاريخ الفاتورة مطلوب";
-    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
-    if (lines.length === 0) validationErrors.items = "أضف طلبية أو صنفاً واحداً على الأقل";
+    if (isBlank(invoiceDate)) validationErrors.invoiceDate = t("تاريخ الفاتورة مطلوب");
+    if (isBlank(wilaya)) validationErrors.wilaya = t("الولاية مطلوبة");
+    if (lines.length === 0) validationErrors.items = t("أضف طلبية أو صنفاً واحداً على الأقل");
     lines.forEach((line) => {
-      if (!line.productId) validationErrors[`line-${line.id}-productId`] = "الصنف غير مرتبط بمنتج صالح";
-      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
-      if (Number(line.price) < 0) validationErrors[`line-${line.id}-price`] = "السعر لا يمكن أن يكون سالباً";
+      if (!line.productId) validationErrors[`line-${line.id}-productId`] = t("الصنف غير مرتبط بمنتج صالح");
+      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
+      if (Number(line.price) < 0) validationErrors[`line-${line.id}-price`] = t("السعر لا يمكن أن يكون سالباً");
     });
 
     setErrors(validationErrors);

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import Chip from "@mui/material/Chip";
@@ -34,6 +35,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import useProductFavorites from "hooks/useProductFavorites";
 import { productsApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
 import demoToolsImage from "assets/images/products/demo-tools.jpg";
 import demoCablesImage from "assets/images/products/demo-cables.jpg";
@@ -320,15 +322,20 @@ function Products({
   const [view, setView] = useState("grid");
   const [category, setCategory] = useState(initialCategory);
   const [search, setSearch] = useState("");
+  const [loadError, setLoadError] = useState("");
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   useEffect(() => {
+    setLoadError("");
     productsApi.list()
       .then((r) => setProducts((r.data?.content ?? r.data ?? []).map((p) => ({
         onHand: 0, reserved: 0, pending: 0, unit: "قطعة", color: "#17c1e8", image: null,
         ...p,
       }))))
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل الأصناف"));
+        setProducts([]);
+      });
   }, []);
 
   const filtered = products.filter((p) => {
@@ -371,6 +378,12 @@ function Products({
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>

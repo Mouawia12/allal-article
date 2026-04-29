@@ -1,3 +1,17 @@
+import { translateText } from "i18n";
+
+function getCurrentLocale() {
+  try {
+    return window.localStorage.getItem("allal-article-locale") || "ar";
+  } catch {
+    return "ar";
+  }
+}
+
+function t(key) {
+  return translateText(key, getCurrentLocale());
+}
+
 export function getApiFieldErrors(error) {
   const fieldErrors = error?.response?.data?.errors;
   if (!Array.isArray(fieldErrors)) return {};
@@ -5,7 +19,7 @@ export function getApiFieldErrors(error) {
   return fieldErrors.reduce((acc, item) => {
     if (!item?.field) return acc;
     const field = String(item.field);
-    acc[field] = item.message || "قيمة غير صحيحة";
+    acc[field] = item.message ? t(item.message) : t("قيمة غير صحيحة");
 
     const simpleField = field.split(".").pop();
     if (simpleField && !acc[simpleField]) {
@@ -17,13 +31,13 @@ export function getApiFieldErrors(error) {
 }
 
 export function getApiErrorMessage(error, fallback = "حدث خطأ أثناء الحفظ") {
-  if (!error?.response) return "تعذر الاتصال بالخادم";
+  if (!error?.response) return t("تعذر الاتصال بالخادم");
 
   const data = error.response.data;
-  if (data?.message && data.message !== "Validation failed") return data.message;
-  if (Array.isArray(data?.errors) && data.errors.length > 0) return "يرجى تصحيح الأخطاء الموضحة في الحقول";
+  if (data?.message && data.message !== "Validation failed") return t(data.message);
+  if (Array.isArray(data?.errors) && data.errors.length > 0) return t("يرجى تصحيح الأخطاء الموضحة في الحقول");
 
-  return fallback;
+  return t(fallback);
 }
 
 export function applyApiErrors(error, setErrors, fallback = "حدث خطأ أثناء الحفظ") {

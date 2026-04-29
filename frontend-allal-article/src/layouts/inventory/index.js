@@ -41,7 +41,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { inventoryApi } from "services";
-import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 
 function formatNumber(value) {
@@ -122,6 +123,7 @@ const emptyTransfer = {
 };
 
 function Inventory() {
+  const { t } = useI18n();
   const [warehouses, setWarehouses] = useState([]);
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState(0);
@@ -145,11 +147,29 @@ function Inventory() {
   const [warehouseErrors, setWarehouseErrors] = useState({});
   const [warehouseSaving, setWarehouseSaving] = useState(false);
   const [transferLog, setTransferLog] = useState([]);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
     const extract = (r) => Array.isArray(r.data) ? r.data : (r.data?.content ?? []);
-    inventoryApi.listWarehouses().then((r) => setWarehouses(extract(r))).catch(console.error);
-    inventoryApi.listStock().then((r) => setStockLines(extract(r))).catch(console.error);
+    const appendError = (error, fallback) => {
+      setPageError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+    setPageError("");
+    inventoryApi.listWarehouses()
+      .then((r) => setWarehouses(extract(r)))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل المستودعات");
+        setWarehouses([]);
+      });
+    inventoryApi.listStock()
+      .then((r) => setStockLines(extract(r)))
+      .catch((error) => {
+        appendError(error, "تعذر تحميل المخزون");
+        setStockLines([]);
+      });
   }, []);
 
   const inventory = useMemo(() => hydrateStockLines(stockLines, warehouses), [stockLines, warehouses]);
@@ -353,9 +373,9 @@ function Inventory() {
     const code = warehouseForm.code.trim();
     const name = warehouseForm.name.trim();
     const validationErrors = {};
-    if (isBlank(code)) validationErrors.code = "كود المستودع مطلوب";
-    if (isBlank(name)) validationErrors.name = "اسم المستودع مطلوب";
-    if (!isPositiveNumber(warehouseForm.capacity)) validationErrors.capacityQty = "الطاقة الاستيعابية يجب أن تكون أكبر من صفر";
+    if (isBlank(code)) validationErrors.code = t("كود المستودع مطلوب");
+    if (isBlank(name)) validationErrors.name = t("اسم المستودع مطلوب");
+    if (!isPositiveNumber(warehouseForm.capacity)) validationErrors.capacityQty = t("الطاقة الاستيعابية يجب أن تكون أكبر من صفر");
 
     setWarehouseErrors(validationErrors);
     if (hasErrors(validationErrors)) return;
@@ -433,6 +453,12 @@ function Inventory() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2} mb={3}>
           <Grid item xs={6} sm={3}>

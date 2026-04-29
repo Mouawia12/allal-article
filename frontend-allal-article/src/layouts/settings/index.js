@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
@@ -42,6 +43,7 @@ import { WILAYAS } from "data/wilayas";
 import { getUserPermissions, permissionsByModule, roleConfig } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
 import { customersApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -410,15 +412,20 @@ function RoadInvoiceSettings() {
   const [wilayaDefaults, setWilayaDefaults] = useState({});
   const [aiUpdating, setAiUpdating] = useState(false);
   const [editingWilaya, setEditingWilaya] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     customersApi.list({ size: 200 })
       .then((r) => {
         const list = Array.isArray(r.data?.content) ? r.data.content
                    : Array.isArray(r.data)           ? r.data : [];
         setCustomers(list);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل الزبائن لإعدادات فواتير الطريق"));
+        setCustomers([]);
+      });
   }, []);
 
   const handleAiUpdate = () => {
@@ -432,6 +439,12 @@ function RoadInvoiceSettings() {
         title="إعدادات فواتير الطريق"
         description="تحديد الزبون التلقائي لكل ولاية عند تحويل الطلبيات إلى فواتير طريق"
       />
+
+      {loadError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+          {loadError}
+        </Alert>
+      )}
 
       {/* AI Update Wilayas */}
       <SoftBox mb={3} p={2} sx={{ background: "#f0f7ff", borderRadius: 2, border: "1px solid #17c1e822" }}>

@@ -39,7 +39,8 @@ const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
 const resolveSupplierLink = () => ({ isLinked: false });
 const supplierMatchLabels = {};
 import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
-import { applyApiErrors, hasErrors, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 let lineId = 1;
 
@@ -167,6 +168,7 @@ export default function PurchaseForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
+  const { t } = useI18n();
 
   const purchasePriceLists = getPriceListsFor("purchase");
   const [supplierOptions, setSupplierOptions] = useState([]);
@@ -183,19 +185,29 @@ export default function PurchaseForm() {
   const [savedId, setSavedId] = useState(null);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    suppliersApi.list().then((r) => setSupplierOptions(r.data?.content ?? r.data ?? [])).catch(console.error);
+    const appendLoadError = (error, fallback) => {
+      setLoadError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+    setLoadError("");
+    suppliersApi.list()
+      .then((r) => setSupplierOptions(r.data?.content ?? r.data ?? []))
+      .catch((error) => appendLoadError(error, "تعذر تحميل الموردين"));
     productsApi.list().then((r) => {
       const all = r.data?.content ?? r.data ?? [];
       setProductOptions(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, unit: p.unit ?? "وحدة", taxRate: p.taxRate ?? 19 })));
-    }).catch(console.error);
+    }).catch((error) => appendLoadError(error, "تعذر تحميل الأصناف"));
     inventoryApi.listWarehouses().then((r) => {
       const whs = r.data?.content ?? r.data ?? [];
       setWarehouses(whs);
       const def = whs.find((w) => w.isDefault) ?? whs[0];
       if (def) setWarehouse(def.id);
-    }).catch(console.error);
+    }).catch((error) => appendLoadError(error, "تعذر تحميل المستودعات"));
     if (isEdit) {
       purchasesApi.getById(id).then((r) => {
         const p = r.data;
@@ -213,7 +225,7 @@ export default function PurchaseForm() {
             notes: l.notes || "",
           })));
         }
-      }).catch(console.error);
+      }).catch((error) => appendLoadError(error, "تعذر تحميل أمر الشراء"));
     }
   }, [id, isEdit]);
 
@@ -273,14 +285,14 @@ export default function PurchaseForm() {
   const save = (mode) => {
     const validationErrors = {};
     const supplierId = typeof supplier === "object" ? supplier.id : null;
-    if (!supplierId) validationErrors.supplierId = "المورد مطلوب";
-    if (totals.validLines.length === 0) validationErrors.items = "أضف صنفاً واحداً على الأقل";
+    if (!supplierId) validationErrors.supplierId = t("المورد مطلوب");
+    if (totals.validLines.length === 0) validationErrors.items = t("أضف صنفاً واحداً على الأقل");
     lines.forEach((line) => {
       if (!line.product && !line.qty && !line.unitPrice) return;
-      if (!line.product?.id) validationErrors[`line-${line.id}-productId`] = "الصنف مطلوب";
-      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+      if (!line.product?.id) validationErrors[`line-${line.id}-productId`] = t("الصنف مطلوب");
+      if (!isPositiveNumber(line.qty)) validationErrors[`line-${line.id}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
       if (line.unitPrice !== "" && Number(line.unitPrice) < 0) {
-        validationErrors[`line-${line.id}-unitPrice`] = "السعر لا يمكن أن يكون سالباً";
+        validationErrors[`line-${line.id}-unitPrice`] = t("السعر لا يمكن أن يكون سالباً");
       }
     });
 
@@ -337,6 +349,12 @@ export default function PurchaseForm() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {(errors._global || errors.items) && (
           <Alert severity="error" sx={{ mb: 2 }}>

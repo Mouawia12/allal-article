@@ -51,7 +51,8 @@ import {
   emptyNewCustomerForm,
 } from "./NewOrder";
 import { ordersApi, customersApi, productsApi } from "services";
-import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -274,6 +275,7 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminNewOrder() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const location = useLocation();
   const [customer, setCustomer] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -290,6 +292,7 @@ export default function AdminNewOrder() {
   const [orderSaving, setOrderSaving] = useState(false);
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const selectedPriceList = salesPriceLists.find((l) => l.id === selectedPriceListId) || salesPriceLists[0];
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
@@ -297,6 +300,7 @@ export default function AdminNewOrder() {
   const customerDebt = getCustomerDebt(customer);
 
   useEffect(() => {
+    setLoadError("");
     customersApi.list().then((r) => {
       const list = (r.data?.content ?? r.data ?? []).map(normalizeCustomer);
       setCustomers(list);
@@ -305,11 +309,20 @@ export default function AdminNewOrder() {
         const match = list.find((c) => c.id === preselected.id) ?? preselected;
         setCustomer(match);
       }
-    }).catch(console.error);
+    }).catch((error) => {
+      setLoadError((current) =>
+        current || getApiErrorMessage(error, "تعذر تحميل الزبائن")
+      );
+    });
     productsApi.list().then((r) => {
       const all = r.data?.content ?? r.data ?? [];
       setApiProducts(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, code: p.code ?? String(p.id), unit: p.unit ?? "وحدة", weightPerUnit: p.weightPerUnit ?? 0, unitsPerPackage: p.unitsPerPackage ?? 1, packageUnit: p.packageUnit ?? "وحدة" })));
-    }).catch(console.error);
+    }).catch((error) => {
+      setLoadError((current) => {
+        const message = getApiErrorMessage(error, "تعذر تحميل الأصناف");
+        return current ? `${current}؛ ${message}` : message;
+      });
+    });
   }, []);
 
   // Auto-focus qty after product selected
@@ -383,8 +396,8 @@ export default function AdminNewOrder() {
     if (!customer?.id) validationErrors._global = "الرجاء اختيار الزبون أولاً";
     if (filledRows.length === 0) validationErrors.items = "الرجاء إضافة صنف واحد على الأقل";
     filledRows.forEach((row) => {
-      if (!row.product?.id) validationErrors[`line-${row.id}-productId`] = "الصنف مطلوب";
-      if (!isPositiveNumber(row.qty)) validationErrors[`line-${row.id}-qty`] = "الكمية يجب أن تكون أكبر من صفر";
+      if (!row.product?.id) validationErrors[`line-${row.id}-productId`] = t("الصنف مطلوب");
+      if (!isPositiveNumber(row.qty)) validationErrors[`line-${row.id}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
     });
 
     setOrderErrors(validationErrors);
@@ -419,14 +432,14 @@ export default function AdminNewOrder() {
     const phone = newCustomerForm.phone.trim();
     const wilaya = newCustomerForm.wilaya.trim();
     const validationErrors = {};
-    if (isBlank(name)) validationErrors.name = "اسم الزبون مطلوب";
-    if (isBlank(phone)) validationErrors.phone = "رقم الهاتف مطلوب";
-    if (isBlank(wilaya)) validationErrors.wilaya = "الولاية مطلوبة";
+    if (isBlank(name)) validationErrors.name = t("اسم الزبون مطلوب");
+    if (isBlank(phone)) validationErrors.phone = t("رقم الهاتف مطلوب");
+    if (isBlank(wilaya)) validationErrors.wilaya = t("الولاية مطلوبة");
     if (newCustomerForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomerForm.email)) {
-      validationErrors.email = "البريد الإلكتروني غير صالح";
+      validationErrors.email = t("البريد الإلكتروني غير صالح");
     }
     if (newCustomerForm.openingBalance && Number(newCustomerForm.openingBalance) < 0) {
-      validationErrors.openingBalance = "الرصيد الافتتاحي لا يمكن أن يكون سالباً";
+      validationErrors.openingBalance = t("الرصيد الافتتاحي لا يمكن أن يكون سالباً");
     }
 
     setNewCustomerErrors(validationErrors);
@@ -482,6 +495,12 @@ export default function AdminNewOrder() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {(orderErrors._global || orderErrors.items) && (
           <Alert severity="error" sx={{ mb: 2 }}>

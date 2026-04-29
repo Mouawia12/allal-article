@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
@@ -18,6 +19,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { reportsApi, dashboardApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const COLORS = ["#17c1e8", "#82d616", "#fb8c00", "#ea0606", "#7928ca", "#344767"];
 const fmt = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -59,6 +61,14 @@ function EmptyBox({ text = "لا توجد بيانات للفترة المحدد
     <SoftBox textAlign="center" py={6}>
       <SoftTypography variant="body2" color="secondary">{text}</SoftTypography>
     </SoftBox>
+  );
+}
+
+function ReportErrorBox({ message }) {
+  return (
+    <Alert severity="error">
+      {message}
+    </Alert>
   );
 }
 
@@ -144,15 +154,21 @@ function OrdersReport({ stats }) {
 // ─── Products Tab ─────────────────────────────────────────────────────────────
 function ProductsReport({ from, to }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setData(null);
+    setError("");
     reportsApi.salesByProduct(from, to)
       .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
-      .catch(() => setData([]));
+      .catch((apiError) => {
+        setError(getApiErrorMessage(apiError, "تعذر تحميل تقرير الأصناف"));
+        setData([]);
+      });
   }, [from, to]);
 
   if (!data) return <LoadingBox />;
+  if (error) return <ReportErrorBox message={error} />;
   if (data.length === 0) return <EmptyBox />;
 
   const maxQty = Math.max(...data.map((d) => Number(d.totalQty || d.qty || 0)), 1);
@@ -191,15 +207,21 @@ function ProductsReport({ from, to }) {
 // ─── Sales Reps Tab ───────────────────────────────────────────────────────────
 function SalesRepsReport({ from, to }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setData(null);
+    setError("");
     reportsApi.salesBySalesperson(from, to)
       .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
-      .catch(() => setData([]));
+      .catch((apiError) => {
+        setError(getApiErrorMessage(apiError, "تعذر تحميل تقرير البائعين"));
+        setData([]);
+      });
   }, [from, to]);
 
   if (!data) return <LoadingBox />;
+  if (error) return <ReportErrorBox message={error} />;
   if (data.length === 0) return <EmptyBox text="لا توجد مبيعات مكتملة في هذه الفترة" />;
 
   const maxAmount = Math.max(...data.map((d) => Number(d.totalAmount || 0)), 1);
@@ -259,15 +281,21 @@ function SalesRepsReport({ from, to }) {
 // ─── Customers Tab ────────────────────────────────────────────────────────────
 function CustomersReport({ from, to }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setData(null);
+    setError("");
     reportsApi.salesByCustomer(from, to)
       .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
-      .catch(() => setData([]));
+      .catch((apiError) => {
+        setError(getApiErrorMessage(apiError, "تعذر تحميل تقرير الزبائن"));
+        setData([]);
+      });
   }, [from, to]);
 
   if (!data) return <LoadingBox />;
+  if (error) return <ReportErrorBox message={error} />;
   if (data.length === 0) return <EmptyBox text="لا توجد مبيعات مكتملة في هذه الفترة" />;
 
   const maxAmount = Math.max(...data.map((d) => Number(d.totalAmount || 0)), 1);
@@ -306,13 +334,18 @@ function Reports() {
   const [tab, setTab] = useState(0);
   const [period, setPeriod] = useState("month");
   const [stats, setStats] = useState(null);
+  const [loadError, setLoadError] = useState("");
 
   const { from, to } = periodDates(period);
 
   useEffect(() => {
+    setLoadError("");
     dashboardApi.getStats()
       .then((r) => setStats(r.data))
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل بيانات التقارير"));
+        setStats(null);
+      });
   }, []);
 
   return (
@@ -337,6 +370,12 @@ function Reports() {
             </SoftTypography>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         <Card sx={{ mb: 3 }}>
           <SoftBox px={2} pt={2} borderBottom="1px solid #eee">

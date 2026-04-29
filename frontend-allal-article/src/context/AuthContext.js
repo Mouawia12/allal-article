@@ -1,25 +1,27 @@
 import { createContext, useContext, useState, useCallback } from "react";
 import apiClient from "services/apiClient";
+import { decodeJwtPayload } from "utils/jwt";
 
 const AuthContext = createContext(null);
 
-function parseJwt(token) {
+function getInitialUser() {
   try {
-    return JSON.parse(atob(token.split(".")[1]));
+    const token = localStorage.getItem("token");
+    const stored = localStorage.getItem("user");
+    if (!token || !stored) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      localStorage.removeItem("tenantId");
+      return null;
+    }
+    return JSON.parse(stored);
   } catch {
     return null;
   }
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState(getInitialUser);
 
   const login = useCallback(async (email, password, tenantId) => {
     const headers = tenantId ? { "X-Tenant-ID": tenantId } : {};
@@ -28,9 +30,9 @@ export function AuthProvider({ children }) {
     const { data: payload } = await apiClient.post(endpoint, { email, password }, { headers });
 
     const { token } = payload;
-    const claims = parseJwt(token);
+    const claims = decodeJwtPayload(token);
     const userData = {
-      id: claims?.userId,
+      id: claims?.userId ?? payload.userId,
       email: payload.email,
       name: payload.name,
       roleCode: payload.roleCode,

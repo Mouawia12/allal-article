@@ -37,9 +37,11 @@ import Footer from "examples/Footer";
 
 import { productSettings, updateProductSettings } from "./mockProductData";
 import { hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Units Tab ────────────────────────────────────────────────────────────────
 function UnitsTab() {
+  const { t } = useI18n();
   const [units, setUnits] = useState(productSettings.units);
   const [dialog, setDialog] = useState(null); // null | { mode, item }
   const [form, setForm] = useState({ name: "", symbol: "" });
@@ -55,7 +57,7 @@ function UnitsTab() {
   const save = () => {
     const nextErrors = {};
     const name = form.name.trim();
-    if (isBlank(name)) nextErrors.name = "اسم الوحدة مطلوب";
+    if (isBlank(name)) nextErrors.name = t("اسم الوحدة مطلوب");
     if (units.some((u) => u.id !== dialog.item?.id && u.name.trim() === name)) {
       nextErrors.name = "هذه الوحدة موجودة من قبل";
     }
@@ -153,6 +155,7 @@ function UnitsTab() {
 
 // ─── Categories Tab ───────────────────────────────────────────────────────────
 function CategoriesTab() {
+  const { t } = useI18n();
   const [cats, setCats] = useState(productSettings.categories);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({ name: "", color: "#17c1e8" });
@@ -168,7 +171,7 @@ function CategoriesTab() {
   const save = () => {
     const nextErrors = {};
     const name = form.name.trim();
-    if (isBlank(name)) nextErrors.name = "اسم التصنيف مطلوب";
+    if (isBlank(name)) nextErrors.name = t("اسم التصنيف مطلوب");
     if (cats.some((c) => c.id !== dialog.item?.id && c.name.trim() === name)) {
       nextErrors.name = "هذا التصنيف موجود من قبل";
     }
@@ -242,6 +245,7 @@ function CategoriesTab() {
 
 // ─── Variant Attributes Tab ───────────────────────────────────────────────────
 function VariantAttrsTab() {
+  const { t } = useI18n();
   const [attrs, setAttrs] = useState(productSettings.variantAttributes);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState({ name: "", valuesStr: "" });
@@ -258,7 +262,7 @@ function VariantAttrsTab() {
     const nextErrors = {};
     const name = form.name.trim();
     const values = form.valuesStr.split(",").map((v) => v.trim()).filter(Boolean);
-    if (isBlank(name)) nextErrors.name = "اسم الخاصية مطلوب";
+    if (isBlank(name)) nextErrors.name = t("اسم الخاصية مطلوب");
     if (attrs.some((a) => a.id !== dialog.item?.id && a.name.trim() === name)) {
       nextErrors.name = "هذه الخاصية موجودة من قبل";
     }

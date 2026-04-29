@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useCallback } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
@@ -38,6 +39,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { auditLogsApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const actionConfig = {
   create_order:   { label: "إنشاء طلبية",     color: "#17c1e8", Icon: AddShoppingCartIcon },
@@ -168,12 +170,14 @@ function AuditLogs() {
   const [search, setSearch]       = useState("");
   const [actionFilter, setActionFilter] = useState("");
   const [draftSearch, setDraftSearch]   = useState("");
+  const [loadError, setLoadError]       = useState("");
 
   const PAGE_SIZE = 50;
 
   const fetchLogs = useCallback((newPage, reset) => {
     const setter = newPage === 0 ? setLoading : setLoadingMore;
     setter(true);
+    setLoadError("");
     const params = { page: newPage, size: PAGE_SIZE };
     if (search)       params.search = search;
     if (actionFilter) params.action = actionFilter;
@@ -185,7 +189,10 @@ function AuditLogs() {
         setLogs((prev) => reset ? content : [...prev, ...content]);
         setPage(newPage);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل سجل التدقيق"));
+        if (reset) setLogs([]);
+      })
       .finally(() => setter(false));
   }, [search, actionFilter]);
 
@@ -227,6 +234,12 @@ function AuditLogs() {
             </SoftTypography>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>

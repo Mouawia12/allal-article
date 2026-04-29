@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -40,6 +41,7 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { generateInviteCode } from "utils/inviteCodes";
 
 const supplierMatchLabels = {
   partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
@@ -60,6 +62,13 @@ const mockMyPendingRequests = [];
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const riskColor = { low: "#82d616", medium: "#fb8c00", high: "#ea0606" };
 const riskLabel = { low: "منخفض", medium: "متوسط", high: "عالٍ" };
+
+function copyToClipboard(text) {
+  if (!navigator.clipboard?.writeText) {
+    return Promise.reject(new Error("Clipboard API unavailable"));
+  }
+  return navigator.clipboard.writeText(text);
+}
 
 function PermBadge({ perm }) {
   return (
@@ -93,26 +102,41 @@ function GenerateCodeDialog({ open, onClose }) {
     create_sales_link: false,
   });
   const [generated, setGenerated] = useState(null);
+  const [generationError, setGenerationError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState("");
 
   const togglePerm = (key) => setPerms((p) => ({ ...p, [key]: !p[key] }));
 
   const handleGenerate = () => {
-    const code = `LINK-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    setGenerated(code);
+    setGenerationError("");
+    try {
+      setGenerated(generateInviteCode());
+    } catch {
+      setGenerationError("تعذر إنشاء كود آمن في هذا المتصفح. حدّث المتصفح أو أعد المحاولة من جهاز آخر.");
+    }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard?.writeText(generated).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    setCopyError("");
+    try {
+      await copyToClipboard(generated);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+      setCopyError("تعذر نسخ الكود تلقائياً. انسخه يدوياً من الحقل المعروض.");
+    }
   };
 
   const handleClose = () => {
     setGenerated(null);
+    setGenerationError("");
     setLabel("");
     setMaxUses("");
     setExpiresAt("");
+    setCopied(false);
+    setCopyError("");
     setPerms({ view_inventory: true, view_pricing: false, view_sales_data: false, clone_products: false, create_purchase_link: false, create_sales_link: false });
     onClose();
   };
@@ -170,6 +194,12 @@ function GenerateCodeDialog({ open, onClose }) {
                 أرسل الكود فقط للجهات التي تثق بها. لا تنشره علناً. يمكنك إلغاء تفعيله في أي وقت.
               </Box>
             </Box>
+
+            {generationError && (
+              <Alert severity="error">
+                {generationError}
+              </Alert>
+            )}
           </Box>
         ) : (
           <Box sx={{ textAlign: "center", py: 3 }}>
@@ -189,6 +219,11 @@ function GenerateCodeDialog({ open, onClose }) {
             <Box sx={{ fontSize: 12, color: "#ea0606", fontWeight: 500 }}>
               احفظ هذا الكود الآن — لن يُعرض مرة أخرى كاملاً
             </Box>
+            {copyError && (
+              <Alert severity="error" sx={{ mt: 2, textAlign: "right" }}>
+                {copyError}
+              </Alert>
+            )}
           </Box>
         )}
       </DialogContent>
@@ -434,8 +469,22 @@ export default function Partnerships() {
   const [genOpen, setGenOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approvalTarget, setApprovalTarget] = useState(null);
+  const [copyError, setCopyError] = useState("");
+  const [copiedCodeId, setCopiedCodeId] = useState(null);
 
   const pendingCount = mockPendingApprovals.length;
+
+  const handleInviteCodeCopy = async (code, id) => {
+    setCopyError("");
+    try {
+      await copyToClipboard(code);
+      setCopiedCodeId(id);
+      setTimeout(() => setCopiedCodeId(null), 2000);
+    } catch {
+      setCopiedCodeId(null);
+      setCopyError("تعذر نسخ الكود تلقائياً. انسخه يدوياً من الجدول.");
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -461,6 +510,12 @@ export default function Partnerships() {
             </Box>
           </SoftBox>
         </SoftBox>
+
+        {copyError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setCopyError("")}>
+            {copyError}
+          </Alert>
+        )}
 
         {/* Info banner */}
         <Card sx={{ p: 2, mb: 2.5, background: "linear-gradient(135deg, #f0f7ff, #e8f4fd)", border: "1px solid #b2d8f0" }}>
@@ -622,9 +677,9 @@ export default function Partnerships() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Tooltip title="نسخ الكود">
-                            <IconButton size="small" onClick={() => navigator.clipboard?.writeText(c.code).catch(() => {})}>
-                              <ContentCopyIcon sx={{ fontSize: 14 }} />
+                          <Tooltip title={copiedCodeId === c.id ? "تم النسخ!" : "نسخ الكود"}>
+                            <IconButton size="small" onClick={() => handleInviteCodeCopy(c.code, c.id)}>
+                              <ContentCopyIcon sx={{ fontSize: 14, color: copiedCodeId === c.id ? "#82d616" : "inherit" }} />
                             </IconButton>
                           </Tooltip>
                         </TableCell>

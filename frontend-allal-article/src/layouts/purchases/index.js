@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
@@ -43,6 +44,7 @@ const supplierMatchLabels = { taxNumber: "الرقم الضريبي", email: "ا
 const findSupplierByName = () => null;
 const resolveSupplierLink = () => ({ isLinked: false });
 import { purchasesApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({ label, value, sub, color, icon: Icon }) {
@@ -77,8 +79,10 @@ function Purchases() {
   const [showFilters, setShowFilters] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [supplierFilter, setSupplierFilter] = useState("all");
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     purchasesApi.list()
       .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({
         items: [], returnItems: [], totalAmount: 0, paymentStatus: "unpaid",
@@ -87,7 +91,10 @@ function Purchases() {
         _id: p.id,
         supplier: p.supplierName || "—",
       }))))
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل أوامر الشراء"));
+        setPurchases([]);
+      });
   }, []);
 
   const supplierOptions = [...new Set(purchases.map((p) => p.supplier).filter(Boolean))];
@@ -127,6 +134,12 @@ function Purchases() {
             أمر شراء جديد
           </SoftButton>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>

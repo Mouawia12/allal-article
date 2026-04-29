@@ -26,7 +26,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { localizeNode, useI18n } from "i18n";
 import { planColors } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
-import { applyApiErrors, hasErrors } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors } from "utils/formErrors";
 
 const fmt = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "∞");
 
@@ -59,7 +59,7 @@ function EditPlanDialog({ plan, onClose, onSaved }) {
     ["price_monthly", "max_users", "max_orders_monthly", "max_products"].forEach((field) => {
       const value = form[field];
       if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
-        nextErrors[field] = "القيمة يجب أن تكون رقماً موجباً أو فارغة";
+        nextErrors[field] = t("القيمة يجب أن تكون رقماً موجباً أو فارغة");
       }
     });
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
@@ -149,7 +149,7 @@ function PlanCard({ plan, onEdit, onToggle, onToggleError }) {
       await ownerApi.updatePlan(plan.id, { is_active: newVal });
       onToggle?.();
     } catch (error) {
-      onToggleError?.(error.response?.data?.message || "تعذر تحديث حالة الخطة");
+      onToggleError?.(getApiErrorMessage(error, "تعذر تحديث حالة الخطة"));
     } finally {
       setToggling(false);
     }
@@ -241,13 +241,18 @@ export default function OwnerPlans() {
   const [plans,    setPlans]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [editPlan, setEditPlan] = useState(null);
+  const [pageError, setPageError] = useState("");
   const [toast,    setToast]    = useState({ open: false, msg: "", severity: "success" });
 
   const load = () => {
     setLoading(true);
+    setPageError("");
     ownerApi.listPlans()
       .then((r) => setPlans(r.data ?? []))
-      .catch(console.error)
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الباقات"));
+        setPlans([]);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -272,6 +277,12 @@ export default function OwnerPlans() {
             تعديل الأسعار والحدود يُحدَّث تلقائياً على الصفحة الرئيسية
           </Box>
         </Box>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {loading ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box>

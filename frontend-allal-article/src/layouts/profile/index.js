@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
@@ -48,13 +48,15 @@ import {
 } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
 import apiClient from "services/apiClient";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
 
 function getInitials(name) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]).join("");
+  const initials = String(name || "").trim().split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("");
+  return initials || "؟";
 }
 
 // ─── Info Row ─────────────────────────────────────────────────────────────────
@@ -154,6 +156,7 @@ function MyPermissions({ user }) {
 
 // ─── Edit Profile tab ─────────────────────────────────────────────────────────
 function EditProfile({ user, onSaved }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     name: user.name || "",
     email: user.email || "",
@@ -186,10 +189,10 @@ function EditProfile({ user, onSaved }) {
 
   const handleSave = async () => {
     const nextErrors = {};
-    if (isBlank(form.name)) nextErrors.name = "الاسم مطلوب";
+    if (isBlank(form.name)) nextErrors.name = t("الاسم مطلوب");
     if (newPass || confirmPass || currentPass) {
-      if (newPass.length < 8) nextErrors.newPass = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
-      if (newPass !== confirmPass) nextErrors.confirmPass = "كلمتا المرور غير متطابقتان";
+      if (newPass.length < 8) nextErrors.newPass = t("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+      if (newPass !== confirmPass) nextErrors.confirmPass = t("كلمتا المرور غير متطابقتان");
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setErrors({});
@@ -304,6 +307,7 @@ function EditProfile({ user, onSaved }) {
 function Profile() {
   const { user: authUser } = useAuth();
   const [fullUser, setFullUser] = useState(null);
+  const [profileError, setProfileError] = useState("");
   const user = {
     ...authUser,
     ...fullUser,
@@ -313,19 +317,32 @@ function Profile() {
   };
   const [tab, setTab] = useState(0);
 
-  useEffect(() => {
-    apiClient.get("/api/users/me")
+  const loadProfile = useCallback((fallbackMessage = "تعذر تحميل بيانات الملف الشخصي") => {
+    setProfileError("");
+    return apiClient.get("/api/users/me")
       .then(({ data }) => setFullUser(data))
-      .catch(() => {});
+      .catch((error) => {
+        setProfileError(getApiErrorMessage(error, fallbackMessage));
+      });
   }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
   const rc = roleConfig[user.role] || roleConfig.viewer;
-  const colorIdx = user.id % avatarColors.length;
+  const colorSeed = Number(user.id);
+  const colorIdx = Number.isFinite(colorSeed) ? colorSeed % avatarColors.length : 0;
   const perms = getUserPermissions(user);
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {profileError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setProfileError("")}>
+            {profileError}
+          </Alert>
+        )}
 
         {/* ── Profile hero card ── */}
         <Card sx={{ mb: 3, overflow: "visible" }}>
@@ -437,7 +454,7 @@ function Profile() {
               <SoftBox p={2.5}>
                 {tab === 0 && <MyPermissions user={user} />}
                 {tab === 1 && <EditProfile user={user} onSaved={() => {
-                  apiClient.get("/api/users/me").then(({ data }) => setFullUser(data)).catch(() => {});
+                  loadProfile("تم حفظ التعديلات، لكن تعذر تحديث بيانات الملف الشخصي");
                 }} />}
               </SoftBox>
             </Card>

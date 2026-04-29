@@ -1,5 +1,6 @@
 package com.allalarticle.backend.config;
 
+import com.allalarticle.backend.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.engine.jdbc.connections.spi.MultiTenantConnectionProvider;
 import org.springframework.stereotype.Component;
@@ -11,6 +12,8 @@ import java.sql.SQLException;
 @Component
 @RequiredArgsConstructor
 public class TenantConnectionProvider implements MultiTenantConnectionProvider<String> {
+
+    private static final String DEFAULT_SCHEMA = "public";
 
     private final DataSource dataSource;
 
@@ -26,19 +29,31 @@ public class TenantConnectionProvider implements MultiTenantConnectionProvider<S
 
     @Override
     public Connection getConnection(String tenantIdentifier) throws SQLException {
-        Connection connection = getAnyConnection();
-        try (var stmt = connection.createStatement()) {
-            stmt.execute("SET search_path TO \"" + tenantIdentifier + "\", public");
+        if (!DEFAULT_SCHEMA.equals(tenantIdentifier) && !TenantContext.isValidSchema(tenantIdentifier)) {
+            throw new SQLException("Invalid tenant identifier");
         }
-        return connection;
+
+        Connection connection = getAnyConnection();
+        try {
+            try (var stmt = connection.createStatement()) {
+                stmt.execute("SET search_path TO \"" + tenantIdentifier + "\", public");
+            }
+            return connection;
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
     }
 
     @Override
     public void releaseConnection(String tenantIdentifier, Connection connection) throws SQLException {
-        try (var stmt = connection.createStatement()) {
-            stmt.execute("SET search_path TO public");
+        try {
+            try (var stmt = connection.createStatement()) {
+                stmt.execute("SET search_path TO public");
+            }
+        } finally {
+            releaseAnyConnection(connection);
         }
-        releaseAnyConnection(connection);
     }
 
     @Override public boolean supportsAggressiveRelease() { return true; }

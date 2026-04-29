@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
@@ -25,6 +26,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { ordersApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const statusConfig = {
   draft:        { label: "مسودة",        color: "secondary" },
@@ -83,17 +85,23 @@ function Orders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState(0);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError("");
     ordersApi.list({ size: 100 })
       .then((r) => {
         const raw = Array.isArray(r.data?.content) ? r.data.content
           : Array.isArray(r.data) ? r.data : [];
         setOrders(raw.map(normalizeOrder));
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل الطلبيات"));
+        setOrders([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -121,6 +129,12 @@ function Orders() {
             طلبية جديدة
           </SoftButton>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         <Grid container spacing={2} mb={3}>
           {[

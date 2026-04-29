@@ -34,12 +34,14 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { accountingApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 // ─── Close Year Dialog ────────────────────────────────────────────────────────
 const CLOSE_STEPS = ["التحقق من القيود", "قفل الفترات", "توليد قيود الإقفال", "إنشاء أرصدة سنة جديدة", "تأكيد القفل"];
 
 function CloseYearDialog({ year, onClose }) {
+  const { t } = useI18n();
   const [step, setStep] = useState(0);
   const [reason, setReason] = useState("");
   const [checking, setChecking] = useState(false);
@@ -157,7 +159,7 @@ function CloseYearDialog({ year, onClose }) {
         ) : (
           <SoftButton variant="gradient" color="error" disabled={saving}
             onClick={async () => {
-              if (isBlank(reason)) { setErrors({ reason: "سبب القفل مطلوب" }); return; }
+              if (isBlank(reason)) { setErrors({ reason: t("سبب القفل مطلوب") }); return; }
               setSaving(true);
               setErrors({});
               try {
@@ -179,6 +181,7 @@ function CloseYearDialog({ year, onClose }) {
 
 // ─── Add Fiscal Year Dialog ───────────────────────────────────────────────────
 function AddFYDialog({ onClose, onSaved }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({ name: "", startDate: "", endDate: "" });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
@@ -189,11 +192,11 @@ function AddFYDialog({ onClose, onSaved }) {
 
   const save = () => {
     const nextErrors = {};
-    if (isBlank(form.name)) nextErrors.name = "اسم السنة المالية مطلوب";
-    if (isBlank(form.startDate)) nextErrors.startDate = "تاريخ البداية مطلوب";
-    if (isBlank(form.endDate)) nextErrors.endDate = "تاريخ النهاية مطلوب";
+    if (isBlank(form.name)) nextErrors.name = t("اسم السنة المالية مطلوب");
+    if (isBlank(form.startDate)) nextErrors.startDate = t("تاريخ البداية مطلوب");
+    if (isBlank(form.endDate)) nextErrors.endDate = t("تاريخ النهاية مطلوب");
     if (form.startDate && form.endDate && form.startDate > form.endDate) {
-      nextErrors.endDate = "تاريخ النهاية يجب أن يكون بعد تاريخ البداية";
+      nextErrors.endDate = t("تاريخ النهاية يجب أن يكون بعد تاريخ البداية");
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setSaving(true);
@@ -236,11 +239,17 @@ export default function FiscalYears() {
   const [fiscalYears, setFiscalYears] = useState([]);
   const [lockDialog, setLockDialog] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
+  const [pageError, setPageError] = useState("");
 
-  const reload = () =>
-    accountingApi.listFiscalYears()
+  const reload = () => {
+    setPageError("");
+    return accountingApi.listFiscalYears()
       .then((r) => setFiscalYears(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية"));
+        setFiscalYears([]);
+      });
+  };
 
   useEffect(() => { reload(); }, []);
 
@@ -248,6 +257,12 @@ export default function FiscalYears() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
+
         <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={3}>
           <SoftBox>
             <SoftTypography variant="h5" fontWeight="bold">السنوات المالية</SoftTypography>

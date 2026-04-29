@@ -56,6 +56,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.FORBIDDEN.name(), "Access denied"));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
+        return ResponseEntity
+                .badRequest()
+                .body(ErrorResponse.of(ErrorCode.BAD_REQUEST.name(), exception.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<ErrorResponse> handleUnexpected(Exception exception) {
         log.error("Unexpected error: {}", exception.getMessage(), exception);

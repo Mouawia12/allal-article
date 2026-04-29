@@ -54,7 +54,8 @@ import {
   manufacturingTypeConfig,
 } from "data/config/manufacturingConfig";
 import { manufacturingApi, productsApi } from "services";
-import { applyApiErrors, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const priorityConfig = {
   low:    { label: "منخفضة", color: "#8392ab", bg: "#f8f9fa" },
@@ -651,8 +652,10 @@ function NewManufacturingDialog({ open, form, onChange, onClose, onSubmit, error
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Manufacturing() {
+  const { t } = useI18n();
   const [requests, setRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
     manufacturingApi.list()
@@ -661,7 +664,7 @@ export default function Manufacturing() {
         setRequests(list);
         if (list.length > 0) setSelectedId(list[0].id);
       })
-      .catch(console.error);
+      .catch((error) => setPageError(getApiErrorMessage(error, "تعذر تحميل طلبات التصنيع")));
   }, []);
   const [statusTab, setStatusTab] = useState("all");
   const [search, setSearch] = useState("");
@@ -671,6 +674,8 @@ export default function Manufacturing() {
   const [productOptions, setProductOptions] = useState([]);
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [statusActionSaving, setStatusActionSaving] = useState("");
+  const [statusActionError, setStatusActionError] = useState("");
 
   useEffect(() => {
     productsApi.list()
@@ -683,7 +688,7 @@ export default function Manufacturing() {
           unit: p.unit ?? "وحدة",
         })));
       })
-      .catch(console.error);
+      .catch((error) => setPageError(getApiErrorMessage(error, "تعذر تحميل قائمة الأصناف")));
   }, []);
 
   const selectedRequest = requests.find((r) => r.id === selectedId) || requests[0] || {};
@@ -700,7 +705,10 @@ export default function Manufacturing() {
         const events = r.data?.data ?? r.data ?? [];
         setTimelineByRequest((prev) => ({ ...prev, [selectedRequest.id]: events }));
       })
-      .catch(() => {});
+      .catch((error) => {
+        setTimelineByRequest((prev) => ({ ...prev, [selectedRequest.id]: [] }));
+        setPageError(getApiErrorMessage(error, "تعذر تحميل سجل أحداث طلب التصنيع"));
+      });
   }, [selectedRequest.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabs = [
@@ -734,7 +742,7 @@ export default function Manufacturing() {
     }));
   };
 
-  const changeStatus = (nextStatus) => {
+  const changeStatus = async (nextStatus) => {
     const id = selectedRequest.id;
     const apiMap = {
       approved:       () => manufacturingApi.approve(id, {}),
@@ -747,22 +755,27 @@ export default function Manufacturing() {
     };
     const apiCall = apiMap[nextStatus];
     if (!apiCall) return;
-    apiCall()
-      .then((r) => {
-        const updated = normalizeManufacturingRequest(r.data);
-        setRequests((prev) => prev.map((req) => req.id === id ? { ...req, ...updated } : req));
-        const cfg = manufacturingStatusConfig[nextStatus] || {};
-        appendTimeline(id, cfg.eventTitle ?? nextStatus, `تم تحديث الحالة إلى "${cfg.label ?? nextStatus}".`);
-      })
-      .catch(console.error);
+    setStatusActionSaving(nextStatus);
+    setStatusActionError("");
+    try {
+      const r = await apiCall();
+      const updated = normalizeManufacturingRequest(r.data);
+      setRequests((prev) => prev.map((req) => req.id === id ? { ...req, ...updated } : req));
+      const cfg = manufacturingStatusConfig[nextStatus] || {};
+      appendTimeline(id, cfg.eventTitle ?? nextStatus, `تم تحديث الحالة إلى "${cfg.label ?? nextStatus}".`);
+    } catch (error) {
+      setStatusActionError(getApiErrorMessage(error, "تعذر تحديث حالة طلب التصنيع"));
+    } finally {
+      setStatusActionSaving("");
+    }
   };
 
   const createRequest = () => {
     const validationErrors = {};
-    if (!form.productId) validationErrors.productId = "الصنف مطلوب";
-    if (isBlank(form.sourceType)) validationErrors.sourceType = "سبب التصنيع مطلوب";
-    if (!isPositiveNumber(form.qty)) validationErrors.requestedQty = "الكمية يجب أن تكون أكبر من صفر";
-    if (form.depositRequired && Number(form.depositAmount || 0) < 0) validationErrors.depositAmount = "العربون لا يمكن أن يكون سالباً";
+    if (!form.productId) validationErrors.productId = t("الصنف مطلوب");
+    if (isBlank(form.sourceType)) validationErrors.sourceType = t("سبب التصنيع مطلوب");
+    if (!isPositiveNumber(form.qty)) validationErrors.requestedQty = t("الكمية يجب أن تكون أكبر من صفر");
+    if (form.depositRequired && Number(form.depositAmount || 0) < 0) validationErrors.depositAmount = t("العربون لا يمكن أن يكون سالباً");
 
     setFormErrors(validationErrors);
     if (hasErrors(validationErrors)) return;
@@ -813,6 +826,8 @@ export default function Manufacturing() {
             طلب تصنيع جديد
           </SoftButton>
         </Box>
+
+        {pageError && <Alert severity="error" sx={{ mb: 2 }}>{pageError}</Alert>}
 
         {/* ── KPI Cards ── */}
         <Box
@@ -1080,6 +1095,11 @@ export default function Manufacturing() {
                 {/* Action buttons */}
                 <Box sx={{ p: 2 }}>
                   <SectionHeader icon={AssignmentTurnedInIcon} label="الإجراءات المتاحة" iconColor="#2dce89" />
+                  {statusActionError && (
+                    <Alert severity="error" sx={{ mb: 1.5 }}>
+                      {statusActionError}
+                    </Alert>
+                  )}
                   {(manufacturingNextActions[selectedRequest.status] || []).length === 0 ? (
                     <Box sx={{ py: 2.5, textAlign: "center", fontSize: 13, color: "#8392ab", background: "#f8f9fb", borderRadius: 2 }}>
                       لا توجد إجراءات متاحة لهذه الحالة
@@ -1091,10 +1111,11 @@ export default function Manufacturing() {
                           key={action.status}
                           variant={action.color === "secondary" ? "outlined" : "gradient"}
                           color={action.color}
+                          disabled={Boolean(statusActionSaving)}
                           onClick={() => changeStatus(action.status)}
                           sx={{ flex: "1 1 auto", minWidth: 130 }}
                         >
-                          {action.label}
+                          {statusActionSaving === action.status ? "جارٍ التنفيذ..." : action.label}
                         </SoftButton>
                       ))}
                     </Box>

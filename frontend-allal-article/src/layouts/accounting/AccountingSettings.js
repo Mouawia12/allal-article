@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -18,6 +19,7 @@ import Footer from "examples/Footer";
 
 import { classificationLabels } from "./mockData";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const accountSettingsDefs = [];
 
@@ -34,14 +36,19 @@ function groupBy(arr, key) {
 export default function AccountingSettings() {
   const [postableAccounts, setPostableAccounts] = useState([]);
   const [settings, setSettings] = useState({});
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
         setPostableAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
+        setPostableAccounts([]);
+      });
   }, []);
 
   const grouped = groupBy(accountSettingsDefs, "group");
@@ -62,6 +69,12 @@ export default function AccountingSettings() {
             <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ الإعدادات
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* Warning if any setting is missing */}
         {missing.length > 0 && (

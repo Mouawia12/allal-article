@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
@@ -33,6 +34,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n) =>
@@ -123,17 +125,34 @@ export default function AccountingDashboard() {
   const [accounts, setAccounts] = useState([]);
   const [journals, setJournals] = useState([]);
   const [fiscalYears, setFiscalYears] = useState([]);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    const appendError = (error, fallback) => {
+      setPageError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+    setPageError("");
     accountingApi.listAccounts()
       .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        appendError(error, "تعذر تحميل الحسابات");
+        setAccounts([]);
+      });
     accountingApi.listJournals()
       .then((r) => setJournals(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        appendError(error, "تعذر تحميل القيود");
+        setJournals([]);
+      });
     accountingApi.listFiscalYears()
       .then((r) => setFiscalYears(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
+      .catch((error) => {
+        appendError(error, "تعذر تحميل السنوات المالية");
+        setFiscalYears([]);
+      });
   }, []);
 
   const getBalance = (code) => Number(accounts.find((a) => a.code === code)?.balance ?? 0);
@@ -180,6 +199,12 @@ export default function AccountingDashboard() {
             قيد جديد
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2.5}>
 

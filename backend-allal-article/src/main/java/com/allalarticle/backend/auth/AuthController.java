@@ -9,6 +9,7 @@ import com.allalarticle.backend.auth.tenant.TenantUserDetailsService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.ApiResponse;
+import com.allalarticle.backend.tenant.TenantContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -54,14 +55,14 @@ public class AuthController {
 
     @PostMapping("/api/auth/login")
     public ResponseEntity<ApiResponse<LoginResponse>> tenantLogin(
-            @RequestHeader("X-Tenant-ID") String tenantSchema,
+            @RequestHeader(value = "X-Tenant-ID", required = false) String tenantSchema,
             @Valid @RequestBody LoginRequest req) {
 
         if (tenantSchema == null || tenantSchema.isBlank()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "X-Tenant-ID header is required", HttpStatus.BAD_REQUEST);
         }
 
-        if (!tenantSchema.matches("^tenant_[0-9a-f]{12}$")) {
+        if (!TenantContext.isValidSchema(tenantSchema)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Invalid tenant identifier", HttpStatus.BAD_REQUEST);
         }
 

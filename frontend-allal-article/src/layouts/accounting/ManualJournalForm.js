@@ -34,7 +34,8 @@ import Footer from "examples/Footer";
 
 import { fmt } from "./mockData";
 import { accountingApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const JOURNAL_BOOKS = [
   { id: "manual",  label: "يومية عامة (يدوي)",   prefix: "MAN" },
@@ -133,6 +134,7 @@ function JournalLine({ line, isLast, onChange, onDelete, canDelete }) {
 // ─── Main Form ────────────────────────────────────────────────────────────────
 export default function ManualJournalForm() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const today = new Date().toISOString().split("T")[0];
 
   const [date, setDate]     = useState(today);
@@ -148,15 +150,17 @@ export default function ManualJournalForm() {
   const [touched, setTouched] = useState(false);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
         const active = fys.find((f) => !f.closed) ?? fys[0];
         if (active) { setFyId(active.id); setActiveFY(active); }
       })
-      .catch(console.error);
+      .catch((error) => setLoadError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية")));
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
@@ -164,7 +168,14 @@ export default function ManualJournalForm() {
         setAccounts(postable);
         postableAccounts = postable;
       })
-      .catch(console.error);
+      .catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الحسابات");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setAccounts([]);
+        postableAccounts = [];
+      });
   }, []);
 
   const totalDebit  = useMemo(() => lines.reduce((s, l) => s + (Number(l.debit)  || 0), 0), [lines]);
@@ -183,14 +194,14 @@ export default function ManualJournalForm() {
   const validate = () => {
     setTouched(true);
     const nextErrors = {};
-    if (isBlank(date)) nextErrors.date = "تاريخ القيد مطلوب";
-    if (!fyId) nextErrors.fiscalYearId = "السنة المالية مطلوبة";
-    if (!isBalanced) nextErrors.items = "القيد غير متوازن، مجموع المدين يجب أن يساوي مجموع الدائن";
-    if (!hasLines) nextErrors.items = "أضف أسطراً للقيد أولاً";
+    if (isBlank(date)) nextErrors.date = t("تاريخ القيد مطلوب");
+    if (!fyId) nextErrors.fiscalYearId = t("السنة المالية مطلوبة");
+    if (!isBalanced) nextErrors.items = t("القيد غير متوازن، مجموع المدين يجب أن يساوي مجموع الدائن");
+    if (!hasLines) nextErrors.items = t("أضف أسطراً للقيد أولاً");
     const bad = lines.find((l) => (l.debit || l.credit) && !l.account);
-    if (bad) nextErrors.items = "كل سطر يحتوي مبلغ يجب أن يحدد حساباً";
+    if (bad) nextErrors.items = t("كل سطر يحتوي مبلغ يجب أن يحدد حساباً");
     const badAmount = lines.find((l) => Number(l.debit || 0) < 0 || Number(l.credit || 0) < 0);
-    if (badAmount) nextErrors.items = "المبالغ لا يمكن أن تكون سالبة";
+    if (badAmount) nextErrors.items = t("المبالغ لا يمكن أن تكون سالبة");
     if (hasErrors(nextErrors)) {
       setErrors(nextErrors);
       return false;
@@ -250,6 +261,12 @@ export default function ManualJournalForm() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {(errors._global || errors.items || errors.date || errors.fiscalYearId) && (
           <Alert severity="error" sx={{ mb: 2 }}>

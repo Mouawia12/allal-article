@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -28,6 +29,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { style: "decimal", maximumFractionDigits: 2 }).format(Math.abs(n ?? 0)) + " دج";
@@ -46,8 +48,10 @@ export default function GeneralLedger() {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
@@ -55,18 +59,31 @@ export default function GeneralLedger() {
         const active = fys.find((f) => !f.closed) ?? fys[0];
         if (active) setFyId(active.id);
       })
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل السنوات المالية"));
+        setFiscalYears([]);
+      });
     accountingApi.listAccounts()
       .then((r) => setAccounts((r.data?.content ?? r.data ?? []).filter((a) => a.isPostable !== false)))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل الحسابات");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setAccounts([]);
+      });
   }, []);
 
   useEffect(() => {
     if (!selectedAccount || !fyId) return;
     setLoading(true);
+    setPageError("");
     accountingApi.generalLedger(selectedAccount.id, fyId)
       .then((r) => setData(r.data))
-      .catch(console.error)
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل الأستاذ العام"));
+        setData(null);
+      })
       .finally(() => setLoading(false));
   }, [selectedAccount, fyId]);
 
@@ -93,6 +110,12 @@ export default function GeneralLedger() {
             طباعة
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         {/* Filters */}
         <Card sx={{ mb: 2 }}>

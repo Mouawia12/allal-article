@@ -33,7 +33,8 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { accountingApi } from "services";
-import { applyApiErrors, hasErrors, isBlank } from "utils/formErrors";
+import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { useI18n } from "i18n";
 
 const BOOK_TYPES = [
   { type: "sales",     label: "مبيعات",   color: "#17c1e8", isSystem: true },
@@ -52,6 +53,7 @@ function getTypeInfo(type) {
 }
 
 function BookDialog({ book, onClose, onSave }) {
+  const { t: tl } = useI18n();
   const [form, setForm] = useState(book ?? { type: "manual", name: "", prefix: "", nextSeq: 1, requireApproval: false, allowManual: true, active: true });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -62,10 +64,10 @@ function BookDialog({ book, onClose, onSave }) {
   };
   const save = async () => {
     const nextErrors = {};
-    if (isBlank(form.name)) nextErrors.name = "اسم الدفتر مطلوب";
-    if (isBlank(form.prefix)) nextErrors.prefix = "بادئة الترقيم مطلوبة";
+    if (isBlank(form.name)) nextErrors.name = tl("اسم الدفتر مطلوب");
+    if (isBlank(form.prefix)) nextErrors.prefix = tl("بادئة الترقيم مطلوبة");
     if (!Number.isFinite(Number(form.nextSeq)) || Number(form.nextSeq) < 1) {
-      nextErrors.nextSeq = "الترقيم التالي يجب أن يكون رقماً أكبر من صفر";
+      nextErrors.nextSeq = tl("الترقيم التالي يجب أن يكون رقماً أكبر من صفر");
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
     setSaving(true);
@@ -147,11 +149,16 @@ function BookDialog({ book, onClose, onSave }) {
 export default function JournalBooks() {
   const [books, setBooks] = useState([]);
   const [dialog, setDialog] = useState(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    setPageError("");
     accountingApi.listJournalBooks()
       .then((r) => setBooks(Array.isArray(r.data) ? r.data : []))
-      .catch(console.error);
+      .catch((error) => {
+        setPageError(getApiErrorMessage(error, "تعذر تحميل دفاتر اليومية"));
+        setBooks([]);
+      });
   }, []);
 
   const handleSave = (form) => {
@@ -180,6 +187,12 @@ export default function JournalBooks() {
             <AddIcon sx={{ mr: 0.5, fontSize: 16 }} /> دفتر جديد
           </SoftButton>
         </SoftBox>
+
+        {pageError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
+            {pageError}
+          </Alert>
+        )}
 
         <Grid container spacing={2} mb={3}>
           {BOOK_TYPES.map((t) => {

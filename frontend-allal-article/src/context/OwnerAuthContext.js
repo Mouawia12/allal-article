@@ -1,22 +1,29 @@
 import { createContext, useContext, useState, useCallback } from "react";
 import { ownerClient } from "services/ownerApi";
+import { decodeJwtPayload } from "utils/jwt";
 
 const OwnerAuthContext = createContext(null);
-
-function parseJwt(token) {
-  try { return JSON.parse(atob(token.split(".")[1])); } catch { return null; }
-}
 
 const STORAGE_KEY = "owner_token";
 const USER_KEY    = "owner_user";
 
+function getInitialOwner() {
+  try {
+    const token = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(USER_KEY);
+    if (!token || !stored) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(USER_KEY);
+      return null;
+    }
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
 export function OwnerAuthProvider({ children }) {
-  const [owner, setOwner] = useState(() => {
-    try {
-      const u = localStorage.getItem(USER_KEY);
-      return u ? JSON.parse(u) : null;
-    } catch { return null; }
-  });
+  const [owner, setOwner] = useState(getInitialOwner);
 
   const login = useCallback(async (email, password) => {
     // Use ownerClient directly — 401 interceptor skips redirect for login URL
@@ -24,9 +31,9 @@ export function OwnerAuthProvider({ children }) {
     const payload = res.data; // auto-unwrapped by ownerClient interceptor
     if (!payload?.token) throw new Error("Invalid response from server");
     const { token } = payload;
-    const claims = parseJwt(token);
+    const claims = decodeJwtPayload(token);
     const user = {
-      id: claims?.userId,
+      id: claims?.userId ?? payload.userId,
       email: payload.email,
       name: payload.name || payload.email,
       roleCode: payload.roleCode,

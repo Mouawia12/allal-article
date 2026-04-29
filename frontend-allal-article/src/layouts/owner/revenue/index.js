@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -15,6 +16,7 @@ import OwnerLayout from "examples/LayoutContainers/OwnerLayout";
 import { useI18n } from "i18n";
 import { planColors, statusConfig } from "data/mock/ownerMock";
 import ownerApi from "services/ownerApi";
+import { getApiErrorMessage } from "utils/formErrors";
 
 const fmt = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "—");
 
@@ -25,8 +27,10 @@ export default function OwnerRevenue() {
   const [revenue, setRevenue] = useState(null);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoadError("");
     Promise.all([
       ownerApi.getRevenue(),
       ownerApi.listTenants(),
@@ -35,7 +39,11 @@ export default function OwnerRevenue() {
         setRevenue(rv.data ?? null);
         setTenants(tn.data ?? []);
       })
-      .catch(console.error)
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "تعذر تحميل بيانات الإيرادات"));
+        setRevenue(null);
+        setTenants([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -63,6 +71,12 @@ export default function OwnerRevenue() {
           <Box sx={{ fontSize: 20, fontWeight: 700, color: "#344767" }}>تقرير الإيرادات</Box>
           <Box sx={{ fontSize: 13, color: "#8392ab" }}>ملخص مالي شامل لاشتراكات المنصة</Box>
         </Box>
+
+        {loadError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
+            {loadError}
+          </Alert>
+        )}
 
         {/* Summary KPIs */}
         <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>

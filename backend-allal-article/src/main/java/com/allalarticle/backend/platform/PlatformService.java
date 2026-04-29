@@ -1,13 +1,19 @@
 package com.allalarticle.backend.platform;
 
+import com.allalarticle.backend.common.exception.AppException;
+import com.allalarticle.backend.common.exception.ErrorCode;
+import com.allalarticle.backend.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,6 +28,14 @@ public class PlatformService {
     private final JdbcTemplate jdbc;
     private final TenantSchemaService tenantSchemaService;
     private final PasswordEncoder passwordEncoder;
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final String PASSWORD_UPPER   = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    private static final String PASSWORD_LOWER   = "abcdefghijkmnopqrstuvwxyz";
+    private static final String PASSWORD_DIGITS  = "23456789";
+    private static final String PASSWORD_SYMBOLS = "@#$%!";
+    private static final String PASSWORD_CHARS =
+            PASSWORD_UPPER + PASSWORD_LOWER + PASSWORD_DIGITS + PASSWORD_SYMBOLS;
 
     // ─── Stats ────────────────────────────────────────────────────────────────
     public Map<String, Object> getStats() {
@@ -83,34 +97,40 @@ public class PlatformService {
             ) snap on true
             where 1=1
             """);
+        List<Object> params = new ArrayList<>();
 
         if (status != null && !status.isBlank()) {
-            sql.append(" and t.status = '").append(status.replace("'", "")).append("'");
+            sql.append(" and t.status = ?");
+            params.add(status);
         }
         if (search != null && !search.isBlank()) {
-            String q = search.replace("'", "''");
-            sql.append(" and (t.company_name ilike '%").append(q)
-               .append("%' or t.contact_email ilike '%").append(q).append("%')");
+            String q = "%" + search + "%";
+            sql.append(" and (t.company_name ilike ? or t.contact_email ilike ?)");
+            params.add(q);
+            params.add(q);
         }
         sql.append(" order by t.created_at desc");
 
-        return jdbc.queryForList(sql.toString());
+        return jdbc.queryForList(sql.toString(), params.toArray());
     }
 
     public Map<String, Object> getTenant(Long id) {
-        return jdbc.queryForMap(
-            """
-            select t.id, t.public_id, t.schema_name, t.company_name, t.contact_email,
-                   t.contact_phone, t.wilaya_code, t.status, t.trial_ends_at,
-                   t.created_at, t.activated_at, t.suspended_at, t.suspended_reason,
-                   p.name_ar as plan_name, p.code as plan_code
-            from platform.tenants t
-            left join platform.plans p on p.id = t.plan_id
-            where t.id = ?
-            """, id);
+        try {
+            return jdbc.queryForMap(
+                """
+                select t.id, t.public_id, t.schema_name, t.company_name, t.contact_email,
+                       t.contact_phone, t.wilaya_code, t.status, t.trial_ends_at,
+                       t.created_at, t.activated_at, t.suspended_at, t.suspended_reason,
+                       p.name_ar as plan_name, p.code as plan_code
+                from platform.tenants t
+                left join platform.plans p on p.id = t.plan_id
+                where t.id = ?
+                """, id);
+        } catch (EmptyResultDataAccessException e) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Tenant not found", HttpStatus.NOT_FOUND);
+        }
     }
 
-    @Transactional
     public Map<String, Object> createTenant(Map<String, String> body) {
         String companyName  = required(body, "companyName");
         String contactEmail = required(body, "contactEmail");
@@ -119,14 +139,22 @@ public class PlatformService {
         String planCode     = body.getOrDefault("planCode", "trial");
         String ownerName    = body.getOrDefault("ownerName", companyName + " Admin");
         String ownerEmail   = body.getOrDefault("ownerEmail", contactEmail);
-        String ownerPassword = body.getOrDefault("ownerPassword", "Change@" + System.currentTimeMillis());
+        String ownerPassword = body.get("ownerPassword");
+        if (ownerPassword == null || ownerPassword.isBlank()) {
+            ownerPassword = generateOwnerPassword();
+        }
 
         // Generate schema name
         String schemaName = TenantSchemaService.generateSchemaName();
 
         // Get plan id
-        Long planId = jdbc.queryForObject(
-            "select id from platform.plans where code = ?", Long.class, planCode);
+        Long planId;
+        try {
+            planId = jdbc.queryForObject(
+                "select id from platform.plans where code = ?", Long.class, planCode);
+        } catch (EmptyResultDataAccessException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Invalid planCode", HttpStatus.BAD_REQUEST);
+        }
 
         LocalDate trialEnd = "trial".equals(planCode)
             ? LocalDate.now().plusDays(14) : null;
@@ -156,15 +184,35 @@ public class PlatformService {
         try {
             tenantSchemaService.provision(schemaName, ownerName, ownerEmail, ownerPassword);
             jdbc.update(
+                """
+                insert into platform.subscriptions
+                  (tenant_id, plan_id, status, started_at, renews_at, price_monthly)
+                select ?, p.id, ?, current_date, current_date + p.duration_days, p.price_monthly
+                from platform.plans p
+                where p.id = ?
+                """,
+                tenantId,
+                "trial".equals(planCode) ? "trial" : "active",
+                planId);
+            jdbc.update(
                 "update platform.tenant_provisioning_events set status='completed' where tenant_id=? and status='started'",
                 tenantId);
         } catch (Exception e) {
+            String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            log.error("Tenant provisioning failed for schema {}: {}", schemaName, errorMessage);
             jdbc.update("update platform.tenants set status='provisioning_failed' where id=?", tenantId);
             jdbc.update(
-                "update platform.tenant_provisioning_events set status='failed', details_json=? where tenant_id=? and status='started'",
-                "{\"error\":\"" + e.getMessage().replace("\"","") + "\"}",
+                """
+                update platform.tenant_provisioning_events
+                set status='failed', details_json=jsonb_build_object('error', ?)
+                where tenant_id=? and status='started'
+                """,
+                errorMessage,
                 tenantId);
-            throw new RuntimeException("Tenant provisioning failed: " + e.getMessage(), e);
+            throw new AppException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "فشل تجهيز المستأجر",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
         return Map.of(
@@ -181,9 +229,20 @@ public class PlatformService {
         if (newPassword == null || newPassword.length() < 8)
             throw new IllegalArgumentException("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
 
-        String schemaName = jdbc.queryForObject(
-            "select schema_name from platform.tenants where id = ?", String.class, id);
-        if (schemaName == null) throw new IllegalArgumentException("Tenant not found");
+        String schemaName;
+        try {
+            schemaName = jdbc.queryForObject(
+                "select schema_name from platform.tenants where id = ?", String.class, id);
+        } catch (EmptyResultDataAccessException e) {
+            throw new AppException(ErrorCode.NOT_FOUND, "Tenant not found", HttpStatus.NOT_FOUND);
+        }
+        if (schemaName == null) throw new AppException(ErrorCode.NOT_FOUND, "Tenant not found", HttpStatus.NOT_FOUND);
+        if (!TenantContext.isValidSchema(schemaName)) {
+            throw new AppException(
+                    ErrorCode.INTERNAL_ERROR,
+                    "Invalid tenant schema",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
 
         String hash = passwordEncoder.encode(newPassword);
 
@@ -365,5 +424,30 @@ public class PlatformService {
         String v = body.get(key);
         if (v == null || v.isBlank()) throw new IllegalArgumentException("Missing required field: " + key);
         return v;
+    }
+
+    private String generateOwnerPassword() {
+        char[] password = new char[20];
+        password[0] = randomChar(PASSWORD_UPPER);
+        password[1] = randomChar(PASSWORD_LOWER);
+        password[2] = randomChar(PASSWORD_DIGITS);
+        password[3] = randomChar(PASSWORD_SYMBOLS);
+
+        for (int i = 4; i < password.length; i++) {
+            password[i] = randomChar(PASSWORD_CHARS);
+        }
+
+        for (int i = password.length - 1; i > 0; i--) {
+            int j = SECURE_RANDOM.nextInt(i + 1);
+            char tmp = password[i];
+            password[i] = password[j];
+            password[j] = tmp;
+        }
+
+        return new String(password);
+    }
+
+    private char randomChar(String chars) {
+        return chars.charAt(SECURE_RANDOM.nextInt(chars.length()));
     }
 }
