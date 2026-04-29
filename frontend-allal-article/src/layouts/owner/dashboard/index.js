@@ -87,9 +87,9 @@ export default function OwnerDashboard() {
   const [events,  setEvents]  = useState([]);
 
   useEffect(() => {
-    ownerApi.getStats().then((r) => setStats(r.data?.data ?? null)).catch(console.error);
-    ownerApi.getRevenue().then((r) => setRevenue(r.data?.data ?? null)).catch(console.error);
-    ownerApi.listEvents(10).then((r) => setEvents(r.data?.data ?? [])).catch(console.error);
+    ownerApi.getStats().then((r) => setStats(r.data ?? null)).catch(console.error);
+    ownerApi.getRevenue().then((r) => setRevenue(r.data ?? null)).catch(console.error);
+    ownerApi.listEvents(10).then((r) => setEvents(r.data ?? [])).catch(console.error);
   }, []);
 
   const s = stats;

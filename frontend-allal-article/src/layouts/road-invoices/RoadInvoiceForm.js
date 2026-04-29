@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { ordersApi } from "services";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -25,6 +26,7 @@ import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import InputAdornment from "@mui/material/InputAdornment";
+import CircularProgress from "@mui/material/CircularProgress";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -34,16 +36,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 
-// ─── Mock Orders for selection ────────────────────────────────────────────────
-const availableOrders = [
-  { id: "ORD-2024-010", customer: "شركة وهران للمقاولات", wilaya: "وهران", date: "2024-01-22", itemsCount: 4 },
-  { id: "ORD-2024-011", customer: "مؤسسة البناء الغربي",  wilaya: "وهران", date: "2024-01-22", itemsCount: 3 },
-  { id: "ORD-2024-012", customer: "شركة الإنشاء الحديث", wilaya: "وهران", date: "2024-01-21", itemsCount: 6 },
-  { id: "ORD-2024-013", customer: "مجموعة النور",         wilaya: "الجزائر", date: "2024-01-22", itemsCount: 2 },
-  { id: "ORD-2024-014", customer: "شركة الأمل",           wilaya: "سطيف", date: "2024-01-21", itemsCount: 5 },
-];
-
-// ─── Mock wilaya-default customers ───────────────────────────────────────────
+// ─── Wilaya defaults (static config, no backend GET endpoint yet) ─────────────
 const wilayaDefaults = {
   "وهران":    "موزع وهران الرئيسي",
   "الجزائر": "موزع العاصمة",
@@ -51,30 +44,48 @@ const wilayaDefaults = {
   "قسنطينة": "موزع الشرق",
 };
 
-// ─── Mock Lines ───────────────────────────────────────────────────────────────
-const mockLines = [
-  { id: 1, product: "برغي M10 × 50mm",     category: "مسامير وبراغي", code: "BRG-010-50", qty: 500,  price: 12,   weight: 0.05 },
-  { id: 2, product: "برغي M8 × 30mm",      category: "مسامير وبراغي", code: "BRG-008-30", qty: 300,  price: 9,    weight: 0.03 },
-  { id: 3, product: "صامولة M10",           category: "مسامير وبراغي", code: "SAM-010",    qty: 400,  price: 6,    weight: 0.02 },
-  { id: 4, product: "كابل كهربائي 2.5mm",  category: "كهرباء",         code: "KBL-25",     qty: 100,  price: 85,   weight: 0.3  },
-  { id: 5, product: "شريط عازل كهربائي",   category: "كهرباء",         code: "SHR-EL",     qty: 50,   price: 45,   weight: 0.1  },
-  { id: 6, product: "دهان أبيض 4L",        category: "دهانات",         code: "DHN-WHT-4",  qty: 20,   price: 650,  weight: 4    },
-];
-
 // ─── Orders Selection Dialog ──────────────────────────────────────────────────
 function SelectOrdersDialog({ open, onClose, onConfirm }) {
   const [search, setSearch] = useState("");
-  const [wilayaF, setWilayaF] = useState("all");
   const [selected, setSelected] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
 
-  const filtered = availableOrders.filter((o) => {
-    const matchW = wilayaF === "all" || o.wilaya === wilayaF;
-    const matchS = o.id.includes(search) || o.customer.includes(search);
-    return matchW && matchS;
-  });
+  useEffect(() => {
+    if (!open) return;
+    setOrdersLoading(true);
+    ordersApi.list({ orderStatus: "confirmed", size: 100 })
+      .then((r) => setOrders(r.data?.content ?? r.data ?? []))
+      .catch(console.error)
+      .finally(() => setOrdersLoading(false));
+  }, [open]);
+
+  const filtered = orders.filter((o) =>
+    !search || (o.orderNumber ?? "").includes(search) || (o.customerName ?? "").includes(search)
+  );
 
   const toggle = (id) =>
     setSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+
+  const handleConfirm = () => {
+    const selectedOrders = orders.filter((o) => selected.includes(o.id));
+    const lines = selectedOrders.flatMap((o) =>
+      (o.items ?? [])
+        .filter((item) => item.lineStatus !== "cancelled" && (item.approvedQty ?? 0) > 0)
+        .map((item) => ({
+          id: `${o.id}-${item.id}`,
+          product: item.productName ?? "—",
+          category: "—",
+          code: item.productSku ?? "—",
+          qty: item.approvedQty ?? item.requestedQty ?? 0,
+          price: Number(item.unitPrice ?? 0),
+          weight: 0,
+        }))
+    );
+    onConfirm(lines);
+    setSelected([]);
+    onClose();
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -89,80 +100,63 @@ function SelectOrdersDialog({ open, onClose, onConfirm }) {
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
             sx={{ width: 240 }}
           />
-          <FormControl size="small" sx={{ minWidth: 160 }}>
-            <Select value={wilayaF} onChange={(e) => setWilayaF(e.target.value)} displayEmpty>
-              <MenuItem value="all">كل الولايات</MenuItem>
-              {WILAYAS.map((w) => <MenuItem key={w.code} value={w.name}>{w.name}</MenuItem>)}
-            </Select>
-          </FormControl>
         </SoftBox>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: "#f8f9fa" }}>
-              <th style={{ padding: "8px 12px", width: 40 }}></th>
-              {["رقم الطلبية", "الزبون", "الولاية", "التاريخ", "أصناف"].map((h) => (
-                <th key={h} style={{ padding: "8px 12px", textAlign: "right" }}>
-                  <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((o) => (
-              <tr key={o.id} style={{ borderBottom: "1px solid #f0f2f5", background: selected.includes(o.id) ? "#f0f7ff" : "#fff" }}>
-                <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                  <Checkbox size="small" checked={selected.includes(o.id)} onChange={() => toggle(o.id)} />
-                </td>
-                <td style={{ padding: "8px 12px" }}>
-                  <SoftTypography variant="caption" fontWeight="bold" color="info">{o.id}</SoftTypography>
-                </td>
-                <td style={{ padding: "8px 12px" }}>
-                  <SoftTypography variant="caption">{o.customer}</SoftTypography>
-                </td>
-                <td style={{ padding: "8px 12px" }}>
-                  <SoftTypography variant="caption" fontWeight="bold">{o.wilaya}</SoftTypography>
-                </td>
-                <td style={{ padding: "8px 12px" }}>
-                  <SoftTypography variant="caption" color="text">{o.date}</SoftTypography>
-                </td>
-                <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                  <SoftTypography variant="caption">{o.itemsCount}</SoftTypography>
-                </td>
+        {ordersLoading ? (
+          <SoftBox display="flex" justifyContent="center" py={3}>
+            <CircularProgress size={28} />
+          </SoftBox>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#f8f9fa" }}>
+                <th style={{ padding: "8px 12px", width: 40 }}></th>
+                {["رقم الطلبية", "الزبون", "التاريخ", "أصناف"].map((h) => (
+                  <th key={h} style={{ padding: "8px 12px", textAlign: "right" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((o) => (
+                <tr key={o.id} style={{ borderBottom: "1px solid #f0f2f5", background: selected.includes(o.id) ? "#f0f7ff" : "#fff" }}>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                    <Checkbox size="small" checked={selected.includes(o.id)} onChange={() => toggle(o.id)} />
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" color="info">{o.orderNumber}</SoftTypography>
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <SoftTypography variant="caption">{o.customerName}</SoftTypography>
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <SoftTypography variant="caption" color="text">{o.createdAt ? o.createdAt.slice(0, 10) : "—"}</SoftTypography>
+                  </td>
+                  <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                    <SoftTypography variant="caption">{(o.items ?? []).length}</SoftTypography>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && !ordersLoading && (
+                <tr><td colSpan={5} style={{ padding: "20px", textAlign: "center" }}>
+                  <SoftTypography variant="caption" color="secondary">لا توجد طلبيات مؤكدة</SoftTypography>
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
         {selected.length > 0 && (
           <SoftBox mt={2} p={1.5} sx={{ background: "#f0f7ff", borderRadius: 2 }}>
             <SoftTypography variant="caption" fontWeight="bold" color="info">
               تم اختيار {selected.length} طلبية
             </SoftTypography>
-            {(() => {
-              const selectedOrders = availableOrders.filter(o => selected.includes(o.id));
-              const wilayas = [...new Set(selectedOrders.map(o => o.wilaya))];
-              if (wilayas.length === 1 && wilayaDefaults[wilayas[0]]) {
-                return (
-                  <SoftTypography variant="caption" color="text" display="block">
-                    الزبون التلقائي لولاية {wilayas[0]}: <strong>{wilayaDefaults[wilayas[0]]}</strong>
-                  </SoftTypography>
-                );
-              }
-              if (wilayas.length > 1) {
-                return (
-                  <SoftTypography variant="caption" color="error" display="block">
-                    تحذير: الطلبيات المختارة من ولايات مختلفة ({wilayas.join("، ")})
-                  </SoftTypography>
-                );
-              }
-              return null;
-            })()}
           </SoftBox>
         )}
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
         <SoftButton variant="gradient" color="info" size="small"
-          onClick={() => { onConfirm(selected); onClose(); }}
+          onClick={handleConfirm}
           disabled={selected.length === 0}>
           تحويل {selected.length > 0 ? `(${selected.length})` : ""}
         </SoftButton>
@@ -180,7 +174,7 @@ function RoadInvoiceForm() {
   const [wilaya, setWilaya] = useState("وهران");
   const [customer, setCustomer] = useState(wilayaDefaults["وهران"] || "");
   const [driver, setDriver] = useState("");
-  const [lines, setLines] = useState(mockLines);
+  const [lines, setLines] = useState([]);
   const [selectOrdersOpen, setSelectOrdersOpen] = useState(isFromOrders);
 
   const handleWilayaChange = (w) => {
@@ -392,7 +386,11 @@ function RoadInvoiceForm() {
       <SelectOrdersDialog
         open={selectOrdersOpen}
         onClose={() => setSelectOrdersOpen(false)}
-        onConfirm={(ids) => console.log("Selected orders:", ids)}
+        onConfirm={(newLines) => setLines((prev) => {
+          const existingCodes = new Set(prev.map((l) => l.code));
+          const toAdd = newLines.filter((l) => !existingCodes.has(l.code));
+          return [...prev, ...toAdd];
+        })}
       />
 
       <Footer />

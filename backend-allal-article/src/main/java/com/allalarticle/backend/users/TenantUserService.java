@@ -79,6 +79,31 @@ public class TenantUserService {
     }
 
     @Transactional
+    public UserResponse toggleStatus(Long id) {
+        var user = userRepo.findById(id)
+                .filter(u -> u.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found", HttpStatus.NOT_FOUND));
+        user.setStatus("active".equals(user.getStatus()) ? "inactive" : "active");
+        return UserResponse.from(userRepo.save(user));
+    }
+
+    @Transactional
+    public UserResponse updateProfile(Long id, java.util.Map<String, String> body) {
+        var user = userRepo.findById(id)
+                .filter(u -> u.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "User not found", HttpStatus.NOT_FOUND));
+
+        if (body.containsKey("name") && body.get("name") != null && !body.get("name").isBlank())
+            user.setName(body.get("name"));
+        if (body.containsKey("phone"))
+            user.setPhone(body.get("phone"));
+        if (body.containsKey("password") && body.get("password") != null && body.get("password").length() >= 8)
+            user.setPasswordHash(passwordEncoder.encode(body.get("password")));
+
+        return UserResponse.from(userRepo.save(user));
+    }
+
+    @Transactional
     public void delete(Long id) {
         var user = userRepo.findById(id)
                 .filter(u -> u.getDeletedAt() == null)

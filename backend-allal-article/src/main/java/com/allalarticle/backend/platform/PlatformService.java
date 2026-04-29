@@ -7,7 +7,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,9 +65,22 @@ public class PlatformService {
             select t.id, t.public_id, t.schema_name, t.company_name, t.contact_email,
                    t.contact_phone, t.wilaya_code, t.status, t.trial_ends_at,
                    t.created_at, t.activated_at, t.suspended_at, t.suspended_reason,
-                   p.name_ar as plan_name, p.code as plan_code, p.price_monthly
+                   t.last_activity_at,
+                   p.name_ar as plan_name, p.code as plan_code, p.price_monthly,
+                   p.max_users,
+                   coalesce(snap.users_count, 0)        as users_count,
+                   coalesce(snap.orders_this_month, 0)  as orders_this_month,
+                   coalesce(snap.products_count, 0)     as products_count,
+                   coalesce(snap.storage_used_mb, 0)    as storage_used_mb
             from platform.tenants t
             left join platform.plans p on p.id = t.plan_id
+            left join lateral (
+                select users_count, orders_this_month, products_count, storage_used_mb
+                from platform.tenant_usage_snapshots
+                where tenant_id = t.id
+                order by snapshot_date desc
+                limit 1
+            ) snap on true
             where 1=1
             """);
 
@@ -162,6 +177,46 @@ public class PlatformService {
     }
 
     @Transactional
+    public void resetOwnerPassword(Long id, String newPassword) {
+        if (newPassword == null || newPassword.length() < 8)
+            throw new IllegalArgumentException("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+
+        String schemaName = jdbc.queryForObject(
+            "select schema_name from platform.tenants where id = ?", String.class, id);
+        if (schemaName == null) throw new IllegalArgumentException("Tenant not found");
+
+        String hash = passwordEncoder.encode(newPassword);
+
+        // Reset the first admin_user (owner) in the tenant schema
+        int updated = jdbc.update(
+            String.format(
+                """
+                update "%s".users set password_hash = ?
+                where id = (
+                    select id from "%s".users
+                    where user_type = 'admin_user' and deleted_at is null
+                    order by id limit 1
+                )
+                """, schemaName, schemaName),
+            hash);
+
+        if (updated == 0) {
+            // fallback: update the first active user
+            jdbc.update(
+                String.format(
+                    """
+                    update "%s".users set password_hash = ?
+                    where id = (
+                        select id from "%s".users
+                        where deleted_at is null
+                        order by id limit 1
+                    )
+                    """, schemaName, schemaName),
+                hash);
+        }
+    }
+
+    @Transactional
     public void updateTenantStatus(Long id, String status, String reason) {
         if (status == null) return;
         switch (status) {
@@ -187,6 +242,62 @@ public class PlatformService {
             from platform.plans p
             left join platform.tenants t on t.plan_id = p.id and t.status not in ('cancelled')
             group by p.id
+            order by p.sort_order
+            """);
+    }
+
+    @Transactional
+    public void updatePlan(Long id, Map<String, Object> body) {
+        List<String> parts  = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+
+        if (body.containsKey("price_monthly")) {
+            parts.add("price_monthly = ?");
+            Object v = body.get("price_monthly");
+            params.add((v == null || v.toString().isBlank()) ? null
+                    : new BigDecimal(v.toString()));
+        }
+        if (body.containsKey("max_users")) {
+            parts.add("max_users = ?");
+            Object v = body.get("max_users");
+            params.add((v == null || v.toString().isBlank()) ? null
+                    : Integer.parseInt(v.toString()));
+        }
+        if (body.containsKey("max_orders_monthly")) {
+            parts.add("max_orders_monthly = ?");
+            Object v = body.get("max_orders_monthly");
+            params.add((v == null || v.toString().isBlank()) ? null
+                    : Integer.parseInt(v.toString()));
+        }
+        if (body.containsKey("max_products")) {
+            parts.add("max_products = ?");
+            Object v = body.get("max_products");
+            params.add((v == null || v.toString().isBlank()) ? null
+                    : Integer.parseInt(v.toString()));
+        }
+        if (body.containsKey("is_active")) {
+            parts.add("is_active = ?");
+            params.add(Boolean.parseBoolean(body.get("is_active").toString()));
+        }
+
+        if (parts.isEmpty()) return;
+
+        parts.add("updated_at = now()");
+        params.add(id);
+
+        jdbc.update(
+            "update platform.plans set " + String.join(", ", parts) + " where id = ?",
+            params.toArray());
+    }
+
+    public List<Map<String, Object>> getPublicPlans() {
+        return jdbc.queryForList(
+            """
+            select p.id, p.code, p.name_ar, p.name_en,
+                   p.price_monthly, p.max_users, p.max_orders_monthly,
+                   p.max_products, p.is_active, p.sort_order
+            from platform.plans p
+            where p.is_active = true
             order by p.sort_order
             """);
     }

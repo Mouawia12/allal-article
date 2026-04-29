@@ -466,7 +466,7 @@ export default function TrialBalance() {
         <SoftBox className="print-header" mb={2} p={2} sx={{ border: "1px solid #ccc", borderRadius: 1 }}>
           <SoftTypography variant="h5" fontWeight="bold" textAlign="center">ميزان المراجعة</SoftTypography>
           <SoftTypography variant="caption" display="block" textAlign="center">
-            {activeFY.name} · من {dateFrom} إلى {dateTo}
+            {activeFY?.name} · من {dateFrom} إلى {dateTo}
           </SoftTypography>
           <SoftTypography variant="caption" display="block" textAlign="center" color="secondary">
             تاريخ الطباعة: {new Date().toLocaleDateString("ar-DZ")}
@@ -481,8 +481,8 @@ export default function TrialBalance() {
               <SoftTypography variant="h5" fontWeight="bold">ميزان المراجعة</SoftTypography>
             </SoftBox>
             <SoftTypography variant="caption" color="secondary">
-              {activeFY.name} · {dateFrom} → {dateTo}
-              {activeFY.isClosed && " 🔒"}
+              {activeFY?.name} · {dateFrom} → {dateTo}
+              {activeFY?.isClosed && " 🔒"}
             </SoftTypography>
           </SoftBox>
 

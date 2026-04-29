@@ -59,6 +59,7 @@ public class SupplierService {
         s.setName(req.name()); s.setLegalName(req.legalName());
         s.setPhone(req.phone()); s.setEmail(req.email());
         s.setTaxNumber(req.taxNumber()); s.setCommercialRegister(req.commercialRegister());
+        s.setNisNumber(req.nisNumber());
         s.setAddress(req.address()); s.setCategory(req.category());
         s.setPaymentTerms(req.paymentTerms()); s.setNotes(req.notes());
         if (req.openingBalance() != null) s.setOpeningBalance(req.openingBalance());

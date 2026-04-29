@@ -11,6 +11,6 @@ export const ordersApi = {
   confirm: (id, data) => apiClient.post(`${BASE}/${id}/confirm`, data || {}),
   ship: (id) => apiClient.post(`${BASE}/${id}/ship`),
   complete: (id) => apiClient.post(`${BASE}/${id}/complete`),
-  cancel: (id, reason) => apiClient.post(`${BASE}/${id}/cancel`, null, { params: { reason } }),
-  reject: (id, reason) => apiClient.post(`${BASE}/${id}/reject`, null, { params: { reason } }),
+  cancel: (id, reason) => apiClient.post(`${BASE}/${id}/cancel`, { reason: reason || null }),
+  reject: (id, reason) => apiClient.post(`${BASE}/${id}/reject`, { reason: reason || null }),
 };

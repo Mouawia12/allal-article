@@ -1,16 +1,13 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
 import Tab from "@mui/material/Tab";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -32,51 +29,15 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { accountingApi } from "services";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const DIM_TYPES = [
-  { type: "cost_center",   label: "مركز التكلفة",    color: "#17c1e8" },
-  { type: "wilaya",        label: "الولاية",          color: "#82d616" },
-  { type: "salesperson",   label: "البائع",           color: "#fb8c00" },
-  { type: "warehouse",     label: "المخزن",           color: "#7928ca" },
-  { type: "delivery_route", label: "مسار التوزيع",   color: "#344767" },
-];
-
-const initialDimensions = {
-  cost_center: [
-    { id: 1, code: "CC-ADM", name: "الإدارة",         active: true },
-    { id: 2, code: "CC-SAL", name: "المبيعات",        active: true },
-    { id: 3, code: "CC-LOG", name: "اللوجستيك",       active: true },
-    { id: 4, code: "CC-MFG", name: "التصنيع",         active: false },
-  ],
-  wilaya: [
-    { id: 1, code: "16", name: "الجزائر",   active: true },
-    { id: 2, code: "31", name: "وهران",     active: true },
-    { id: 3, code: "25", name: "قسنطينة",   active: true },
-    { id: 4, code: "06", name: "بجاية",     active: true },
-  ],
-  salesperson: [
-    { id: 1, code: "SP-01", name: "كريم منصور",    active: true },
-    { id: 2, code: "SP-02", name: "نادية بوعزيز",  active: true },
-    { id: 3, code: "SP-03", name: "يوسف عمراني",   active: false },
-  ],
-  warehouse: [
-    { id: 1, code: "WH-01", name: "المستودع الرئيسي",   active: true },
-    { id: 2, code: "WH-02", name: "مستودع الجنوب",      active: true },
-  ],
-  delivery_route: [
-    { id: 1, code: "RT-01", name: "مسار الشمال",    active: true },
-    { id: 2, code: "RT-02", name: "مسار الوسط",     active: true },
-    { id: 3, code: "RT-03", name: "مسار الجنوب",    active: true },
-  ],
+const DIM_TYPE_META = {
+  cost_center:   { color: "#17c1e8" },
+  wilaya:        { color: "#82d616" },
+  salesperson:   { color: "#fb8c00" },
+  warehouse:     { color: "#7928ca" },
+  route:         { color: "#344767" },
 };
-
-const mockProfitByDim = [
-  { dim: "الجزائر",   revenue: 18500000, cogs: 12000000, gross: 6500000 },
-  { dim: "وهران",     revenue: 12000000, cogs: 7800000,  gross: 4200000 },
-  { dim: "قسنطينة",   revenue: 9800000,  cogs: 6400000,  gross: 3400000 },
-  { dim: "بجاية",     revenue: 5300000,  cogs: 3200000,  gross: 2100000 },
-];
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(n ?? 0) + " دج";
@@ -146,19 +107,34 @@ function DimTable({ items, onEdit, onAdd }) {
 }
 
 export default function Dimensions() {
-  const [tab, setTab] = useState(0);
-  const [dims, setDims] = useState(initialDimensions);
-  const [dialog, setDialog] = useState(null); // null | "new" | item
+  const [tab, setTab]               = useState(0);
+  const [dimTypes, setDimTypes]     = useState([]);
+  const [grouped, setGrouped]       = useState({});
+  const [profitByWilaya, setProfit] = useState([]);
+  const [dialog, setDialog]         = useState(null);
 
-  const currentType = DIM_TYPES[tab];
-  const currentItems = dims[currentType.type] ?? [];
+  const reload = () => {
+    accountingApi.listDimensions()
+      .then((r) => {
+        setDimTypes(r.data?.types ?? []);
+        setGrouped(r.data?.grouped ?? {});
+        setProfit(r.data?.profitByWilaya ?? []);
+      })
+      .catch(console.error);
+  };
+
+  useEffect(() => { reload(); }, []);
+
+  const currentType = dimTypes[tab] ?? {};
+  const currentItems = grouped[currentType.code] ?? [];
 
   const handleSave = (form) => {
-    const type = currentType.type;
     if (dialog === "new") {
-      setDims((p) => ({ ...p, [type]: [...(p[type] ?? []), { ...form, id: Date.now() }] }));
+      accountingApi.addDimensionItem(currentType.code, form)
+        .then(reload).catch(console.error);
     } else {
-      setDims((p) => ({ ...p, [type]: p[type].map((d) => d.id === dialog.id ? { ...d, ...form } : d) }));
+      accountingApi.updateDimensionItem(dialog.id, form)
+        .then(reload).catch(console.error);
     }
     setDialog(null);
   };
@@ -176,13 +152,14 @@ export default function Dimensions() {
 
         {/* Stats */}
         <Grid container spacing={2} mb={3}>
-          {DIM_TYPES.map((dt) => {
-            const count = (dims[dt.type] ?? []).filter((d) => d.active).length;
+          {dimTypes.map((dt) => {
+            const meta = DIM_TYPE_META[dt.code] ?? {};
+            const count = (grouped[dt.code] ?? []).filter((d) => d.active).length;
             return (
-              <Grid item xs={6} sm={4} md={2.4} key={dt.type}>
+              <Grid item xs={6} sm={4} md={2.4} key={dt.code}>
                 <Card sx={{ p: 1.5, textAlign: "center" }}>
                   <SoftTypography variant="caption" color="secondary">{dt.label}</SoftTypography>
-                  <SoftTypography variant="h6" fontWeight="bold" sx={{ color: dt.color }}>{count}</SoftTypography>
+                  <SoftTypography variant="h6" fontWeight="bold" sx={{ color: meta.color ?? "#344767" }}>{count}</SoftTypography>
                 </Card>
               </Grid>
             );
@@ -195,8 +172,8 @@ export default function Dimensions() {
             <Card>
               <SoftBox px={2} pt={2}>
                 <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: "1px solid #e9ecef", mb: 2 }}>
-                  {DIM_TYPES.map((dt, i) => (
-                    <Tab key={dt.type} label={dt.label} sx={{ fontSize: "0.75rem", minWidth: "unset", px: 1.5 }} />
+                  {dimTypes.map((dt) => (
+                    <Tab key={dt.code} label={dt.label} sx={{ fontSize: "0.75rem", minWidth: "unset", px: 1.5 }} />
                   ))}
                 </Tabs>
               </SoftBox>
@@ -225,7 +202,7 @@ export default function Dimensions() {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {mockProfitByDim.map((r) => {
+                    {profitByWilaya.map((r) => {
                       const pct = r.revenue > 0 ? Math.round((r.gross / r.revenue) * 100) : 0;
                       return (
                         <TableRow key={r.dim} hover>

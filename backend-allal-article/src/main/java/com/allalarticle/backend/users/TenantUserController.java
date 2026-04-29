@@ -4,6 +4,7 @@ import com.allalarticle.backend.common.response.ApiResponse;
 import com.allalarticle.backend.common.response.PageResponse;
 import com.allalarticle.backend.users.dto.UserRequest;
 import com.allalarticle.backend.users.dto.UserResponse;
+import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -11,6 +12,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,6 +21,22 @@ import org.springframework.web.bind.annotation.*;
 public class TenantUserController {
 
     private final TenantUserService userService;
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> getMe(Authentication auth) {
+        Claims claims = (Claims) auth.getDetails();
+        Long userId = claims.get("userId", Long.class);
+        return ResponseEntity.ok(ApiResponse.ok(userService.getById(userId)));
+    }
+
+    @PatchMapping("/me")
+    public ResponseEntity<ApiResponse<UserResponse>> updateMe(
+            Authentication auth,
+            @RequestBody java.util.Map<String, String> body) {
+        Claims claims = (Claims) auth.getDetails();
+        Long userId = claims.get("userId", Long.class);
+        return ResponseEntity.ok(ApiResponse.ok(userService.updateProfile(userId, body)));
+    }
 
     @GetMapping
     @PreAuthorize("@permChecker.hasPermission(authentication, 'users.view')")
@@ -44,10 +62,16 @@ public class TenantUserController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'users.update')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'users.manage')")
     public ResponseEntity<ApiResponse<UserResponse>> update(
             @PathVariable Long id, @Valid @RequestBody UserRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(userService.update(id, req)));
+    }
+
+    @PatchMapping("/{id}/toggle-status")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'users.manage')")
+    public ResponseEntity<ApiResponse<UserResponse>> toggleStatus(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.toggleStatus(id)));
     }
 
     @DeleteMapping("/{id}")

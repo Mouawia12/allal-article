@@ -635,12 +635,13 @@ export default function Manufacturing() {
   ];
 
   const filteredRequests = requests.filter((r) => {
+    const q = search.toLowerCase();
     const matchSearch =
-      r.id.toLowerCase().includes(search.toLowerCase()) ||
-      r.productName.includes(search) ||
-      r.productCode.toLowerCase().includes(search.toLowerCase()) ||
-      r.factory.includes(search) ||
-      r.destinationBranch.includes(search);
+      (r.id || "").toLowerCase().includes(q) ||
+      (r.productName || "").toLowerCase().includes(q) ||
+      (r.productCode || "").toLowerCase().includes(q) ||
+      (r.factory || "").toLowerCase().includes(q) ||
+      (r.destinationBranch || "").toLowerCase().includes(q);
     const matchTab =
       statusTab === "all" ||
       (statusTab === "active" && !["received", "cancelled"].includes(r.status)) ||
@@ -814,6 +815,15 @@ export default function Manufacturing() {
 
           {/* Right: Detail panel */}
           <Grid item xs={12} xl={7}>
+            {!selectedRequest.id ? (
+              <Card sx={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 400 }}>
+                <Box sx={{ textAlign: "center", color: "#8392ab", py: 6 }}>
+                  <PrecisionManufacturingIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
+                  <Box sx={{ fontSize: 14 }}>لا توجد طلبات تصنيع بعد</Box>
+                  <Box sx={{ fontSize: 12, mt: 0.5 }}>أنشئ طلب تصنيع جديد للبدء</Box>
+                </Box>
+              </Card>
+            ) : (
             <Card sx={{ overflow: "hidden" }}>
               {/* ── Detail Header (status-colored gradient) ── */}
               <Box
@@ -929,7 +939,7 @@ export default function Manufacturing() {
                 {/* Materials */}
                 <Box sx={{ p: 2, borderBottom: "1px solid #f0f2f5" }}>
                   <SectionHeader icon={Inventory2Icon} label="المواد والحجز" iconColor="#17c1e8" />
-                  <MaterialsSection materials={selectedRequest.materials} />
+                  <MaterialsSection materials={selectedRequest.materials || []} />
                 </Box>
 
                 {/* Quality + Deposit */}
@@ -939,12 +949,12 @@ export default function Manufacturing() {
                     label="فحص الجودة"
                     iconColor="#82d616"
                     right={
-                      selectedRequest.quality.lastCheck
+                      selectedRequest.quality?.lastCheck
                         ? <Box sx={{ fontSize: 10.5, color: "#8392ab" }}>آخر فحص: {selectedRequest.quality.lastCheck}</Box>
                         : null
                     }
                   />
-                  <QualitySection quality={selectedRequest.quality} />
+                  <QualitySection quality={selectedRequest.quality || { passed: 0, rework: 0, rejected: 0 }} />
 
                   {selectedRequest.depositRequired && (
                     <Box sx={{ mt: 1.6, p: 1.4, borderRadius: 2, background: "#fff4e5", border: "1px solid #fb8c0022" }}>
@@ -1001,6 +1011,7 @@ export default function Manufacturing() {
                 </Box>
               </Box>
             </Card>
+            )}
           </Grid>
         </Grid>
       </SoftBox>

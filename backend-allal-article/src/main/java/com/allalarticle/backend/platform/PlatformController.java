@@ -46,6 +46,15 @@ public class PlatformController {
         return ResponseEntity.ok(ApiResponse.ok(platformService.createTenant(body)));
     }
 
+    @PatchMapping("/tenants/{id}/reset-password")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<Void>> resetOwnerPassword(
+            @PathVariable Long id,
+            @RequestBody Map<String,String> body) {
+        platformService.resetOwnerPassword(id, body.get("newPassword"));
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     @PatchMapping("/tenants/{id}/status")
     @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> updateTenantStatus(
@@ -59,6 +68,15 @@ public class PlatformController {
     @GetMapping("/plans")
     public ResponseEntity<ApiResponse<List<Map<String,Object>>>> listPlans() {
         return ResponseEntity.ok(ApiResponse.ok(platformService.listPlans()));
+    }
+
+    @PatchMapping("/plans/{id}")
+    @PreAuthorize("hasAuthority('ROLE_PLATFORM_OWNER')")
+    public ResponseEntity<ApiResponse<Void>> updatePlan(
+            @PathVariable Long id,
+            @RequestBody Map<String,Object> body) {
+        platformService.updatePlan(id, body);
+        return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
     // ─── Revenue ─────────────────────────────────────────────────────────────

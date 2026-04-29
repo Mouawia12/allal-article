@@ -60,6 +60,7 @@ import {
   setOpenConfigurator,
 } from "context";
 import { useDarkMode } from "context/DarkModeContext";
+import { useAuth } from "context/AuthContext";
 import { useI18n } from "i18n";
 
 function DashboardNavbar({ absolute, light, isMini }) {
@@ -70,6 +71,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
   const { locale, languages, setLocale, t } = useI18n();
   const { darkMode, toggleDarkMode } = useDarkMode();
+  const { isAuthenticated, logout } = useAuth();
   const { pathname } = useLocation();
   const route = pathname.split("/").slice(1);
   const favoritesActive = pathname === "/products/favorites";
@@ -106,6 +108,8 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const handleCloseMenu = () => setOpenMenu(false);
   const handleOpenLanguageMenu = (event) => setLanguageMenuAnchor(event.currentTarget);
   const handleCloseLanguageMenu = () => setLanguageMenuAnchor(null);
+  const accountActionLabel = isAuthenticated ? "تسجيل الخروج" : "تسجيل الدخول";
+  const accountActionIcon = isAuthenticated ? "logout" : "account_circle";
   const unreadCount = 0;
 
   // Render the notifications menu
@@ -184,24 +188,29 @@ function DashboardNavbar({ absolute, light, isMini }) {
               />
             </SoftBox>
             <SoftBox color={light ? "white" : "inherit"}>
-              <Link to="/authentication/sign-in">
-                <IconButton sx={navbarIconButton} size="small">
-                  <Icon
-                    sx={({ palette: { dark, white } }) => ({
-                      color: light ? white.main : dark.main,
-                    })}
-                  >
-                    account_circle
-                  </Icon>
-                  <SoftTypography
-                    variant="button"
-                    fontWeight="medium"
-                    color={light ? "white" : "dark"}
-                  >
-                    Sign in
-                  </SoftTypography>
-                </IconButton>
-              </Link>
+              <IconButton
+                component={isAuthenticated ? "button" : Link}
+                to={isAuthenticated ? undefined : "/authentication/sign-in"}
+                onClick={isAuthenticated ? logout : undefined}
+                sx={navbarIconButton}
+                size="small"
+                aria-label={accountActionLabel}
+              >
+                <Icon
+                  sx={({ palette: { dark, white } }) => ({
+                    color: light ? white.main : dark.main,
+                  })}
+                >
+                  {accountActionIcon}
+                </Icon>
+                <SoftTypography
+                  variant="button"
+                  fontWeight="medium"
+                  color={light ? "white" : "dark"}
+                >
+                  {accountActionLabel}
+                </SoftTypography>
+              </IconButton>
               <IconButton
                 size="small"
                 color="inherit"

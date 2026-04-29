@@ -36,6 +36,22 @@ const globals = {
   "a.link:hover, .link:hover, a.link:focus, .link:focus": {
     color: `${info.main} !important`,
   },
+  '[data-amount-format="compact-million"]': {
+    direction: "ltr !important",
+    unicodeBidi: "isolate !important",
+    display: "inline-flex !important",
+    flexDirection: "row !important",
+    alignItems: "baseline !important",
+    gap: "0.25em !important",
+    whiteSpace: "nowrap !important",
+    textAlign: "left !important",
+  },
+  '[data-amount-format="compact-million"] [data-amount-part]': {
+    direction: "ltr !important",
+    unicodeBidi: "isolate !important",
+    display: "inline-block !important",
+    flex: "0 0 auto !important",
+  },
 };
 
 export default globals;

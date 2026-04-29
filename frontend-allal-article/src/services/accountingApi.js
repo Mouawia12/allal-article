@@ -21,6 +21,19 @@ export const accountingApi = {
   postJournal: (id) => apiClient.post(`/api/accounting/journals/${id}/post`),
   deleteJournal: (id) => apiClient.delete(`/api/accounting/journals/${id}`),
 
+  // Dimensions
+  listDimensions: () => apiClient.get("/api/accounting/dimensions"),
+  addDimensionItem: (typeCode, data) => apiClient.post(`/api/accounting/dimensions/types/${typeCode}/items`, data),
+  updateDimensionItem: (id, data) => apiClient.put(`/api/accounting/dimensions/items/${id}`, data),
+
+  // Subledgers
+  listSubledgers: () => apiClient.get("/api/accounting/subledgers"),
+  reconciliation: (type) => apiClient.get("/api/accounting/subledgers/reconciliation", { params: { type } }),
+
+  // Journal books
+  listJournalBooks: () => apiClient.get("/api/accounting/journal-books"),
+  updateJournalBook: (id, data) => apiClient.put(`/api/accounting/journal-books/${id}`, data),
+
   // Reports
   trialBalance: (fiscalYearId, periodId) =>
     apiClient.get("/api/accounting/reports/trial-balance", { params: { fiscalYearId, periodId } }),

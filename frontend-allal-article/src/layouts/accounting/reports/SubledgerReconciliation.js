@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Card from "@mui/material/Card";
+import CircularProgress from "@mui/material/CircularProgress";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
@@ -28,65 +29,11 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { accountingApi } from "services";
 
 const fmt = (n) =>
   new Intl.NumberFormat("ar-DZ", { maximumFractionDigits: 0 }).format(Math.abs(n ?? 0)) + " دج";
 
-// ─── Mock reconciliation data ─────────────────────────────────────────────────
-const mockCustomerRec = [
-  {
-    id: 1, name: "شركة الرياض للتجارة",
-    invoices: [
-      { ref: "ORD-001", date: "2025-01-10", amount: 2500000, paid: 2500000, balance: 0 },
-      { ref: "ORD-008", date: "2025-02-01", amount: 3200000, paid: 1200000, balance: 2000000 },
-    ],
-    payments: [
-      { ref: "PMT-001", date: "2025-01-15", amount: 2500000 },
-      { ref: "PMT-010", date: "2025-02-05", amount: 1200000 },
-    ],
-    controlBalance: 4500000, subledgerBalance: 4500000, matched: true,
-  },
-  {
-    id: 2, name: "مؤسسة النور",
-    invoices: [
-      { ref: "ORD-003", date: "2025-01-20", amount: 1800000, paid: 800000, balance: 1000000 },
-      { ref: "ORD-011", date: "2025-02-10", amount: 1100000, paid: 0, balance: 1100000 },
-    ],
-    payments: [
-      { ref: "PMT-005", date: "2025-01-25", amount: 800000 },
-    ],
-    controlBalance: 2100000, subledgerBalance: 2100000, matched: true,
-  },
-  {
-    id: 3, name: "متجر الأمل",
-    invoices: [
-      { ref: "ORD-007", date: "2025-01-28", amount: 1800000, paid: 0, balance: 1800000 },
-    ],
-    payments: [],
-    controlBalance: 1800000, subledgerBalance: 1750000, matched: false,
-  },
-];
-
-const mockSupplierRec = [
-  {
-    id: 1, name: "مورد الأقمشة",
-    invoices: [
-      { ref: "PUR-001", date: "2025-01-05", amount: 4800000, paid: 1600000, balance: 3200000 },
-    ],
-    payments: [
-      { ref: "PPMT-001", date: "2025-01-20", amount: 1600000 },
-    ],
-    controlBalance: 3200000, subledgerBalance: 3200000, matched: true,
-  },
-  {
-    id: 2, name: "مورد التغليف",
-    invoices: [
-      { ref: "PUR-005", date: "2025-01-15", amount: 1800000, paid: 0, balance: 1800000 },
-    ],
-    payments: [],
-    controlBalance: 1800000, subledgerBalance: 1600000, matched: false,
-  },
-];
 
 function PartyRow({ party, type }) {
   const [open, setOpen] = useState(false);
@@ -241,7 +188,18 @@ function ReconciliationTable({ parties, type }) {
 
 export default function SubledgerReconciliation() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState(0);
+  const [tab, setTab]             = useState(0);
+  const [parties, setParties]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const type = tab === 0 ? "customer" : "supplier";
+
+  useEffect(() => {
+    setLoading(true);
+    accountingApi.reconciliation(type)
+      .then((r) => setParties(r.data?.parties ?? []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [type]);
 
   return (
     <DashboardLayout>
@@ -266,14 +224,23 @@ export default function SubledgerReconciliation() {
 
         <SoftBox sx={{ borderBottom: "1px solid #e9ecef", mb: 3 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-            <Tab label="ذمم العملاء" sx={{ fontSize: "0.8rem" }} />
+            <Tab label="ذمم العملاء"  sx={{ fontSize: "0.8rem" }} />
             <Tab label="ذمم الموردين" sx={{ fontSize: "0.8rem" }} />
           </Tabs>
         </SoftBox>
 
         <Card sx={{ p: 2 }}>
-          {tab === 0 && <ReconciliationTable parties={mockCustomerRec} type="customer" />}
-          {tab === 1 && <ReconciliationTable parties={mockSupplierRec} type="supplier" />}
+          {loading ? (
+            <SoftBox display="flex" justifyContent="center" py={5}>
+              <CircularProgress />
+            </SoftBox>
+          ) : parties.length === 0 ? (
+            <SoftTypography variant="body2" color="text" sx={{ textAlign: "center", py: 4 }}>
+              لا توجد ذمم {tab === 0 ? "عملاء" : "موردين"} بعد
+            </SoftTypography>
+          ) : (
+            <ReconciliationTable parties={parties} type={type} />
+          )}
         </Card>
       </SoftBox>
       <Footer />

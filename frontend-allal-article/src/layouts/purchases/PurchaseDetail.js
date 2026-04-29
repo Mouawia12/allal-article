@@ -138,19 +138,32 @@ export default function PurchaseDetail() {
   useEffect(() => {
     purchasesApi.getById(id)
       .then((r) => {
-        const p = { lines: [], returnItems: [], ...r.data };
+        const raw = r.data;
+        const p = {
+          returnItems: [],
+          ...raw,
+          id: raw.poNumber || String(raw.id),
+          _id: raw.id,
+          supplier: raw.supplierName || "—",
+          date: raw.createdAt ? raw.createdAt.slice(0, 10) : "—",
+          lines: (raw.items || []).map((item) => ({
+            ...item,
+            qty: item.orderedQty ?? 0,
+            unitPrice: item.unitPrice ?? 0,
+            taxRate: 0,
+          })),
+        };
         setPurchase(p);
         setStatus(p.status);
         setPaymentStatus(p.paymentStatus);
         setReceivedBy(p.receivedBy || "");
         setInvoiceNo(p.invoiceNo || "");
-        const lines = (p.lines || []).map((l) => ({ receivedQty: 0, returnedQty: 0, ...l }));
+        const lines = p.lines.map((l) => ({ receivedQty: 0, returnedQty: 0, ...l }));
         setReceivedLines(lines);
         setReturnQuantities(Object.fromEntries(lines.map((l) => [l.id, 0])));
         setActivity([
-          { time: `${p.date} 09:00`, user: p.requestedBy || "—", action: "أنشأ أمر الشراء" },
-          ...(p.invoiceNo ? [{ time: `${p.date} 11:20`, user: "المحاسبة", action: `ربط فاتورة المورد ${p.invoiceNo}` }] : []),
-          ...(p.receivedBy ? [{ time: p.expectedDate, user: p.receivedBy, action: "سجل استلام البضاعة" }] : []),
+          { time: p.date, user: "—", action: "أنشأ أمر الشراء" },
+          ...(p.receivedDate ? [{ time: p.receivedDate, user: "—", action: "سجل استلام البضاعة" }] : []),
         ]);
       })
       .catch(console.error);

@@ -24,17 +24,18 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password, tenantId) => {
     const headers = tenantId ? { "X-Tenant-ID": tenantId } : {};
     const endpoint = tenantId ? "/api/auth/login" : "/api/platform/auth/login";
-    const { data } = await apiClient.post(endpoint, { email, password }, { headers });
+    // apiClient unwraps ApiResponse envelope → data is payload directly
+    const { data: payload } = await apiClient.post(endpoint, { email, password }, { headers });
 
-    const { token } = data.data;
+    const { token } = payload;
     const claims = parseJwt(token);
     const userData = {
       id: claims?.userId,
-      email: data.data.email,
-      name: data.data.name,
-      roleCode: data.data.roleCode,
-      schema: data.data.schema,
-      type: data.data.type,
+      email: payload.email,
+      name: payload.name,
+      roleCode: payload.roleCode,
+      schema: payload.schema,
+      type: payload.type,
     };
 
     localStorage.setItem("token", token);
@@ -53,7 +54,8 @@ export function AuthProvider({ children }) {
     window.location.href = "/authentication/sign-in";
   }, []);
 
-  const isAuthenticated = !!user && !!localStorage.getItem("token");
+  // Trust React state — token presence is enforced by apiClient's 401 handler
+  const isAuthenticated = !!user;
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>

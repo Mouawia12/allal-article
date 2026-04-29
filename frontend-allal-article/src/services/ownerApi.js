@@ -2,7 +2,7 @@ import axios from "axios";
 
 const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8080";
 
-const ownerClient = axios.create({
+export const ownerClient = axios.create({
   baseURL: BASE_URL,
   timeout: Number(process.env.REACT_APP_API_TIMEOUT) || 15000,
   headers: { "Content-Type": "application/json" },
@@ -14,10 +14,18 @@ ownerClient.interceptors.request.use((config) => {
   return config;
 });
 
+// Unwrap ApiResponse envelope {success, data, message} → response.data = payload
 ownerClient.interceptors.response.use(
-  (r) => r,
+  (response) => {
+    const body = response.data;
+    if (body && typeof body === "object" && "success" in body && "data" in body) {
+      response.data = body.data;
+    }
+    return response;
+  },
   (err) => {
-    if (err.response?.status === 401) {
+    const url = err.config?.url ?? "";
+    if (err.response?.status === 401 && !url.includes("/auth/login")) {
       localStorage.removeItem("owner_token");
       localStorage.removeItem("owner_user");
       window.location.href = "/owner/login";
@@ -27,19 +35,18 @@ ownerClient.interceptors.response.use(
 );
 
 const ownerApi = {
-  // Stats
   getStats:    ()             => ownerClient.get("/api/platform/stats"),
-  // Tenants
   listTenants: (params = {})  => ownerClient.get("/api/platform/tenants", { params }),
   getTenant:   (id)           => ownerClient.get(`/api/platform/tenants/${id}`),
   createTenant:(body)         => ownerClient.post("/api/platform/tenants", body),
   updateStatus:(id, status, reason) =>
     ownerClient.patch(`/api/platform/tenants/${id}/status`, { status, reason }),
-  // Plans
-  listPlans:   ()             => ownerClient.get("/api/platform/plans"),
-  // Revenue
+  resetPassword:(id, newPassword) =>
+    ownerClient.patch(`/api/platform/tenants/${id}/reset-password`, { newPassword }),
+  listPlans:    ()              => ownerClient.get("/api/platform/plans"),
+  updatePlan:   (id, body)      => ownerClient.patch(`/api/platform/plans/${id}`, body),
+  getPublicPlans: ()            => axios.get(`${BASE_URL}/api/public/plans`),
   getRevenue:  ()             => ownerClient.get("/api/platform/revenue"),
-  // Events
   listEvents:  (limit = 20)   => ownerClient.get("/api/platform/events", { params: { limit } }),
 };
 

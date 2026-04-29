@@ -6,6 +6,7 @@ export const usersApi = {
   create: (data) => apiClient.post("/api/users", data),
   update: (id, data) => apiClient.put(`/api/users/${id}`, data),
   delete: (id) => apiClient.delete(`/api/users/${id}`),
+  toggleStatus: (id) => apiClient.patch(`/api/users/${id}/toggle-status`),
   listRoles: () => apiClient.get("/api/roles"),
   listWilayas: () => apiClient.get("/api/wilayas"),
 };

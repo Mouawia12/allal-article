@@ -1,5 +1,6 @@
 package com.allalarticle.backend.orders;
 
+import com.allalarticle.backend.audit.AuditLogService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.PageResponse;
@@ -45,6 +46,7 @@ public class OrderService {
     private final ProductStockRepository   stockRepo;
     private final StockMovementRepository  movementRepo;
     private final StockReservationRepository reservationRepo;
+    private final AuditLogService          auditLogService;
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -354,6 +356,17 @@ public class OrderService {
                 .forEach(i -> i.setLineStatus("completed"));
     }
 
+    private static final Map<String, String[]> EVENT_TO_AUDIT = Map.of(
+            "ORDER_CREATED",        new String[]{"create_order",   "إنشاء طلبية جديدة"},
+            "ORDER_SUBMITTED",      new String[]{"submit_order",   "إرسال الطلبية للمراجعة"},
+            "ORDER_CONFIRMED",      new String[]{"confirm_order",  "تأكيد الطلبية"},
+            "ORDER_REJECTED",       new String[]{"reject_order",   "رفض الطلبية"},
+            "ORDER_SHIPPED",        new String[]{"ship_order",     "شحن الطلبية"},
+            "ORDER_COMPLETED",      new String[]{"complete_order", "إنجاز الطلبية"},
+            "ORDER_AUTO_COMPLETED", new String[]{"complete_order", "إنجاز الطلبية تلقائياً"},
+            "ORDER_CANCELLED",      new String[]{"cancel_order",   "إلغاء الطلبية"}
+    );
+
     private void recordEvent(Order order, String type, Map<String, Object> payload, Long userId) {
         eventRepo.save(OrderEvent.builder()
                 .order(order)
@@ -361,6 +374,16 @@ public class OrderService {
                 .payloadJson(payload)
                 .performedById(userId)
                 .build());
+
+        var audit = EVENT_TO_AUDIT.get(type);
+        if (audit != null) {
+            String entityDisplay = order.getOrderNumber() != null ? order.getOrderNumber() : "ORD-?";
+            String customerName  = order.getCustomer() != null ? order.getCustomer().getName() : null;
+            String description   = audit[1] + (customerName != null ? " — " + customerName : "");
+            auditLogService.log(userId, "order", order.getId(), audit[0],
+                    description, entityDisplay, "إدارة",
+                    payload != null ? payload : Map.of());
+        }
     }
 
     private Long extractUserId(Authentication auth) {

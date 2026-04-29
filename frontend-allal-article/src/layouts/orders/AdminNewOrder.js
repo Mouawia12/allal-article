@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
@@ -53,6 +53,16 @@ import { ordersApi, customersApi, productsApi } from "services";
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+function normalizeCustomer(c) {
+  return {
+    totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—",
+    salesperson: c.salespersonName || "—",
+    wilaya: c.wilayaNameAr || "—",
+    payments: [], orders: [],
+    ...c,
+  };
+}
+
 function newRow(id) {
   return { id, product: null, qty: "", inputValue: "" };
 }
@@ -74,7 +84,7 @@ function getCustomerDebt(customer) {
 }
 
 // ─── Row Component ────────────────────────────────────────────────────────────
-function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef }) {
+function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef, apiProducts }) {
   const product = row.product;
   const stockColor = !product ? "inherit" : product.stock === 0 ? "#ea0606" : product.stock < 10 ? "#fb8c00" : "#66BB6A";
   const priceInfo = product ? resolveProductPrice(product, priceListId, "sales") : null;
@@ -258,6 +268,7 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminNewOrder() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [customer, setCustomer] = useState(null);
   const [customers, setCustomers] = useState([]);
   const [apiProducts, setApiProducts] = useState([]);
@@ -277,7 +288,13 @@ export default function AdminNewOrder() {
 
   useEffect(() => {
     customersApi.list().then((r) => {
-      setCustomers((r.data?.content ?? r.data ?? []).map((c) => ({ orders: [], payments: [], totalAmount: 0, paidAmount: 0, ordersCount: 0, lastOrder: "—", ...c })));
+      const list = (r.data?.content ?? r.data ?? []).map(normalizeCustomer);
+      setCustomers(list);
+      const preselected = location.state?.customer;
+      if (preselected) {
+        const match = list.find((c) => c.id === preselected.id) ?? preselected;
+        setCustomer(match);
+      }
     }).catch(console.error);
     productsApi.list().then((r) => {
       const all = r.data?.content ?? r.data ?? [];
@@ -740,6 +757,7 @@ export default function AdminNewOrder() {
                     onDelete={handleDelete}
                     onProductConfirmed={handleProductConfirmed}
                     onQtyEnter={handleQtyEnter}
+                    apiProducts={apiProducts}
                     qtyRef={(el) => {
                       if (el) qtyRefs.current[row.id] = el;
                     }}

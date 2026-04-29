@@ -1,141 +1,139 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import Card from "@mui/material/Card";
+import CircularProgress from "@mui/material/CircularProgress";
 import Grid from "@mui/material/Grid";
-import Tabs from "@mui/material/Tabs";
-import Tab from "@mui/material/Tab";
-import MenuItem from "@mui/material/MenuItem";
-import TextField from "@mui/material/TextField";
-import Divider from "@mui/material/Divider";
 import LinearProgress from "@mui/material/LinearProgress";
+import MenuItem from "@mui/material/MenuItem";
+import Tab from "@mui/material/Tab";
+import Tabs from "@mui/material/Tabs";
+import TextField from "@mui/material/TextField";
 
 import SoftBox from "components/SoftBox";
-import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
+import SoftTypography from "components/SoftTypography";
 import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import ReportsBarChart from "examples/Charts/BarCharts/ReportsBarChart";
-import GradientLineChart from "examples/Charts/LineCharts/GradientLineChart";
+import { reportsApi, dashboardApi } from "services";
 
-// ─── Mock Charts Data ─────────────────────────────────────────────────────────
-const ordersChartData = {
-  labels: ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"],
-  datasets: [
-    { label: "طلبيات مؤكدة", color: "success",   data: [32, 28, 45, 38, 52, 61] },
-    { label: "طلبيات ملغاة", color: "error",     data: [4,  6,  3,  5,  2,  3 ] },
-  ],
-};
+const COLORS = ["#17c1e8", "#82d616", "#fb8c00", "#ea0606", "#7928ca", "#344767"];
+const fmt = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-const salesLineData = {
-  labels: ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"],
-  datasets: [
-    { label: "المبيعات (ألف دج)", data: [145, 132, 198, 172, 234, 287], color: "info" },
-  ],
-};
+function periodDates(period) {
+  const now = new Date();
+  let from = new Date(now);
+  if (period === "week") from.setDate(now.getDate() - 7);
+  else if (period === "month") from = new Date(now.getFullYear(), now.getMonth(), 1);
+  else if (period === "quarter") from = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+  else from = new Date(now.getFullYear(), 0, 1);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: now.toISOString().slice(0, 10),
+  };
+}
 
-const reportsBarData = {
-  chart: {
-    labels: ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو"],
-    datasets: { label: "المبيعات", data: [450, 200, 100, 220, 500, 100] },
-  },
-  items: [
-    { icon: { color: "info", component: "library_books" }, label: "الطلبيات", progress: { content: "256", percentage: 60 } },
-    { icon: { color: "success", component: "check_circle" }, label: "المؤكدة", progress: { content: "198", percentage: 77 } },
-    { icon: { color: "primary", component: "payment" }, label: "المبيعات", progress: { content: "1.17M دج", percentage: 30 } },
-    { icon: { color: "warning", component: "inventory_2" }, label: "الأصناف", progress: { content: "16", percentage: 50 } },
-  ],
-};
-
-// ─── Top Products ─────────────────────────────────────────────────────────────
-const topProducts = [
-  { rank: 1, name: "كابل كهربائي 2.5mm", code: "KBL-25",     qty: 1240, color: "#17c1e8", pct: 95 },
-  { rank: 2, name: "برغي M10 × 50mm",   code: "BRG-010-50", qty: 980,  color: "#82d616", pct: 75 },
-  { rank: 3, name: "كابل كهربائي 1.5mm", code: "KBL-15",    qty: 820,  color: "#fb8c00", pct: 63 },
-  { rank: 4, name: "صامولة M10",         code: "SAM-010",    qty: 700,  color: "#ea0606", pct: 54 },
-  { rank: 5, name: "شريط عازل كهربائي", code: "SHR-EL",     qty: 560,  color: "#7928ca", pct: 43 },
-];
-
-// ─── Top Salespersons ─────────────────────────────────────────────────────────
-const topSalespeople = [
-  { name: "محمد سعيد",  orders: 18, amount: "312,000", rate: 94, color: "#17c1e8" },
-  { name: "شركة الرياض", orders: 12, amount: "145,200", rate: 92, color: "#82d616" },
-  { name: "يوسف علي",   orders: 11, amount: "117,000", rate: 87, color: "#fb8c00" },
-  { name: "خالد عمر",   orders: 10, amount: "98,000",  rate: 82, color: "#ea0606" },
-  { name: "أحمد محمد",  orders: 8,  amount: "72,400",  rate: 75, color: "#7928ca" },
-];
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, trend, color }) {
+function StatCard({ label, value, color }) {
   return (
     <Card sx={{ p: 2.5 }}>
       <SoftTypography variant="caption" color="secondary" fontWeight="bold" textTransform="uppercase" display="block" mb={0.5}>
         {label}
       </SoftTypography>
-      <SoftTypography variant="h3" fontWeight="bold" color={color || "text"}>
-        {value}
-      </SoftTypography>
-      {sub && <SoftTypography variant="caption" color="text">{sub}</SoftTypography>}
-      {trend && (
-        <SoftBadge
-          variant="gradient"
-          color={trend > 0 ? "success" : "error"}
-          size="xs"
-          badgeContent={`${trend > 0 ? "+" : ""}${trend}%`}
-          container
-          sx={{ mt: 0.5 }}
-        />
-      )}
+      <SoftTypography variant="h3" fontWeight="bold" color={color || "text"}>{value}</SoftTypography>
     </Card>
   );
 }
 
-// ─── Orders Report Tab ────────────────────────────────────────────────────────
-function OrdersReport() {
+function LoadingBox() {
+  return (
+    <SoftBox display="flex" justifyContent="center" py={6}>
+      <CircularProgress size={32} />
+    </SoftBox>
+  );
+}
+
+function EmptyBox({ text = "لا توجد بيانات للفترة المحددة" }) {
+  return (
+    <SoftBox textAlign="center" py={6}>
+      <SoftTypography variant="body2" color="secondary">{text}</SoftTypography>
+    </SoftBox>
+  );
+}
+
+// ─── Orders Tab (uses dashboard stats) ───────────────────────────────────────
+function OrdersReport({ stats }) {
+  if (!stats) return <LoadingBox />;
+  const byStatus = stats.ordersByStatus || [];
+  const monthly = stats.monthlySales || [];
+  const maxRevenue = Math.max(...monthly.map((m) => Number(m.revenue || 0)), 1);
+
   return (
     <SoftBox>
       <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={3}><StatCard label="إجمالي الطلبيات"    value="256"      trend={12}  color="info" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="مؤكدة"              value="198"      trend={8}   color="success" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="ملغاة"              value="23"       trend={-5}  color="error" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="إجمالي المبيعات"    value="1.17M دج" trend={15}  color="dark" /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="إجمالي الطلبيات" value={fmt(stats.totalOrders)} color="info" /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="مكتملة + مشحونة" value={fmt(stats.completedOrders)} color="success" /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="في الانتظار" value={fmt(stats.pendingOrders)} color="warning" /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="مبيعات هذا الشهر" value={`${fmt(stats.revenueThisMonth)} دج`} color="dark" /></Grid>
       </Grid>
       <Grid container spacing={3}>
         <Grid item xs={12} md={7}>
-          <ReportsBarChart
-            title="الطلبيات الشهرية"
-            description={<>المؤكدة مقارنة بالملغاة</>}
-            chart={reportsBarData.chart}
-            items={reportsBarData.items}
-          />
+          <Card sx={{ p: 3 }}>
+            <SoftTypography variant="h6" fontWeight="bold" mb={2}>المبيعات الشهرية</SoftTypography>
+            {monthly.length === 0 ? <EmptyBox /> : (
+              <SoftBox>
+                <SoftBox display="flex" alignItems="flex-end" gap={1} height={140} mb={1}>
+                  {monthly.map((m, i) => {
+                    const pct = Math.round((Number(m.revenue || 0) / maxRevenue) * 100);
+                    return (
+                      <SoftBox key={m.month} flex={1} display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+                        <SoftTypography variant="caption" color="info" sx={{ fontSize: 9 }}>
+                          {fmt(Number(m.revenue) / 1000)}k
+                        </SoftTypography>
+                        <SoftBox sx={{ width: "100%", background: COLORS[i % COLORS.length],
+                          borderRadius: "4px 4px 0 0", height: `${Math.max(pct, 4)}%` }} />
+                        <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 9 }}>
+                          {(m.month_label || m.month || "").slice(0, 3)}
+                        </SoftTypography>
+                      </SoftBox>
+                    );
+                  })}
+                </SoftBox>
+                <SoftBox display="flex" gap={2} flexWrap="wrap">
+                  {monthly.map((m) => (
+                    <SoftBox key={m.month} textAlign="center">
+                      <SoftTypography variant="caption" fontWeight="bold" display="block">{m.orders_count} طلبية</SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 9 }}>{m.month_label || m.month}</SoftTypography>
+                    </SoftBox>
+                  ))}
+                </SoftBox>
+              </SoftBox>
+            )}
+          </Card>
         </Grid>
         <Grid item xs={12} md={5}>
           <Card sx={{ p: 3, height: "100%" }}>
             <SoftTypography variant="h6" fontWeight="bold" mb={2}>توزيع حالات الطلبيات</SoftTypography>
-            {[
-              { label: "مؤكدة",       value: 198, pct: 77, color: "#66BB6A" },
-              { label: "مرسلة",       value: 22,  pct: 9,  color: "#17c1e8" },
-              { label: "قيد المراجعة", value: 13,  pct: 5,  color: "#fb8c00" },
-              { label: "ملغاة",       value: 15,  pct: 6,  color: "#ea0606" },
-              { label: "مرفوضة",      value: 8,   pct: 3,  color: "#8392ab" },
-            ].map((row) => (
-              <SoftBox key={row.label} mb={2}>
-                <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
-                  <SoftTypography variant="caption" color="text">{row.label}</SoftTypography>
-                  <SoftTypography variant="caption" fontWeight="bold">{row.value} ({row.pct}%)</SoftTypography>
-                </SoftBox>
-                <LinearProgress
-                  variant="determinate"
-                  value={row.pct}
-                  sx={{
-                    height: 8, borderRadius: 4, bgcolor: "#e9ecef",
-                    "& .MuiLinearProgress-bar": { background: row.color },
-                  }}
-                />
-              </SoftBox>
-            ))}
+            {byStatus.length === 0 ? <EmptyBox /> : (() => {
+              const total = byStatus.reduce((s, r) => s + Number(r.count || 0), 0);
+              const LABELS = { draft: "مسودة", submitted: "مرسلة", under_review: "قيد المراجعة",
+                confirmed: "مؤكدة", shipped: "مشحونة", completed: "مكتملة", cancelled: "ملغاة", rejected: "مرفوضة" };
+              return byStatus.map((row, i) => {
+                const pct = total > 0 ? Math.round((Number(row.count) / total) * 100) : 0;
+                return (
+                  <SoftBox key={row.status} mb={2}>
+                    <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
+                      <SoftTypography variant="caption" color="text">{LABELS[row.status] || row.status}</SoftTypography>
+                      <SoftTypography variant="caption" fontWeight="bold">{row.count} ({pct}%)</SoftTypography>
+                    </SoftBox>
+                    <LinearProgress variant="determinate" value={pct}
+                      sx={{ height: 8, borderRadius: 4, bgcolor: "#e9ecef",
+                        "& .MuiLinearProgress-bar": { background: COLORS[i % COLORS.length] } }} />
+                  </SoftBox>
+                );
+              });
+            })()}
           </Card>
         </Grid>
       </Grid>
@@ -143,190 +141,163 @@ function OrdersReport() {
   );
 }
 
-// ─── Products Report Tab ──────────────────────────────────────────────────────
-function ProductsReport() {
+// ─── Products Tab ─────────────────────────────────────────────────────────────
+function ProductsReport({ from, to }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    setData(null);
+    reportsApi.salesByProduct(from, to)
+      .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .catch(() => setData([]));
+  }, [from, to]);
+
+  if (!data) return <LoadingBox />;
+  if (data.length === 0) return <EmptyBox />;
+
+  const maxQty = Math.max(...data.map((d) => Number(d.totalQty || d.qty || 0)), 1);
+
   return (
-    <SoftBox>
-      <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={3}><StatCard label="إجمالي الأصناف"     value="16"  color="info" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="أصناف نشطة"         value="14"  color="success" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="أصناف منخفضة"       value="3"   color="warning" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="أصناف نفذت"         value="1"   color="error" /></Grid>
-      </Grid>
-      <Card sx={{ p: 3 }}>
-        <SoftTypography variant="h6" fontWeight="bold" mb={2}>أكثر الأصناف مبيعاً</SoftTypography>
-        {topProducts.map((p) => (
-          <SoftBox key={p.rank} mb={2.5}>
+    <Card sx={{ p: 3 }}>
+      <SoftTypography variant="h6" fontWeight="bold" mb={2}>أكثر الأصناف مبيعاً</SoftTypography>
+      {data.slice(0, 10).map((p, i) => {
+        const qty = Number(p.totalQty || p.qty || 0);
+        const pct = Math.round((qty / maxQty) * 100);
+        return (
+          <SoftBox key={p.entityId || i} mb={2.5}>
             <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
               <SoftBox display="flex" alignItems="center" gap={1}>
-                <SoftBox
-                  sx={{
-                    width: 24, height: 24, borderRadius: 1,
-                    background: p.color, display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                    color: "#fff", fontSize: 11, fontWeight: "bold",
-                  }}
-                >
-                  {p.rank}
+                <SoftBox sx={{ width: 24, height: 24, borderRadius: 1, background: COLORS[i % COLORS.length],
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: "bold" }}>
+                  {i + 1}
                 </SoftBox>
-                <SoftTypography variant="button" fontWeight="medium">{p.name}</SoftTypography>
-                <SoftTypography variant="caption" color="secondary">{p.code}</SoftTypography>
+                <SoftTypography variant="button" fontWeight="medium">{p.entityName || p.name || "—"}</SoftTypography>
               </SoftBox>
-              <SoftTypography variant="caption" fontWeight="bold">{p.qty.toLocaleString()} وحدة</SoftTypography>
+              <SoftBox textAlign="right">
+                <SoftTypography variant="caption" fontWeight="bold" display="block">{fmt(qty)} وحدة</SoftTypography>
+                <SoftTypography variant="caption" color="secondary">{fmt(p.totalAmount)} دج</SoftTypography>
+              </SoftBox>
             </SoftBox>
-            <LinearProgress
-              variant="determinate"
-              value={p.pct}
-              sx={{
-                height: 6, borderRadius: 3, bgcolor: "#e9ecef",
-                "& .MuiLinearProgress-bar": { background: p.color },
-              }}
-            />
+            <LinearProgress variant="determinate" value={pct}
+              sx={{ height: 6, borderRadius: 3, bgcolor: "#e9ecef",
+                "& .MuiLinearProgress-bar": { background: COLORS[i % COLORS.length] } }} />
           </SoftBox>
-        ))}
-      </Card>
-    </SoftBox>
+        );
+      })}
+    </Card>
   );
 }
 
-// ─── Sales Reps Report Tab ────────────────────────────────────────────────────
-function SalesRepsReport() {
+// ─── Sales Reps Tab ───────────────────────────────────────────────────────────
+function SalesRepsReport({ from, to }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    setData(null);
+    reportsApi.salesBySalesperson(from, to)
+      .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .catch(() => setData([]));
+  }, [from, to]);
+
+  if (!data) return <LoadingBox />;
+  if (data.length === 0) return <EmptyBox text="لا توجد مبيعات مكتملة في هذه الفترة" />;
+
+  const maxAmount = Math.max(...data.map((d) => Number(d.totalAmount || 0)), 1);
+
   return (
-    <SoftBox>
-      <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={3}><StatCard label="عدد البائعين"    value="5"       color="info" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="إجمالي الطلبيات" value="256"     color="success" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="أعلى مبيعات"     value="312K دج" color="dark" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="معدل الإلغاء"    value="9%"      color="warning" /></Grid>
-      </Grid>
-      <Card sx={{ p: 3 }}>
-        <SoftTypography variant="h6" fontWeight="bold" mb={2}>أداء البائعين</SoftTypography>
-        <SoftBox sx={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "#f8f9fa" }}>
-                {["البائع", "عدد الطلبيات", "إجمالي المبيعات (دج)", "معدل النجاح", "التقييم"].map((h) => (
-                  <th key={h} style={{ padding: "10px 14px", textAlign: "right" }}>
-                    <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {topSalespeople.map((sp, i) => (
-                <tr key={sp.name} style={{ borderBottom: "1px solid #f0f2f5", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
+    <Card sx={{ p: 3 }}>
+      <SoftTypography variant="h6" fontWeight="bold" mb={2}>أداء البائعين</SoftTypography>
+      <SoftBox sx={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f8f9fa" }}>
+              {["البائع", "عدد الطلبيات", "إجمالي المبيعات", "المشاركة"].map((h) => (
+                <th key={h} style={{ padding: "10px 14px", textAlign: "right" }}>
+                  <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((sp, i) => {
+              const pct = Math.round((Number(sp.totalAmount || 0) / maxAmount) * 100);
+              return (
+                <tr key={sp.entityId || i} style={{ borderBottom: "1px solid #f0f2f5", background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
                   <td style={{ padding: "10px 14px" }}>
                     <SoftBox display="flex" alignItems="center" gap={1.5}>
-                      <SoftBox
-                        sx={{
-                          width: 36, height: 36, borderRadius: "50%",
-                          background: sp.color,
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          color: "#fff", fontSize: 12, fontWeight: "bold",
-                        }}
-                      >
-                        {sp.name[0]}
+                      <SoftBox sx={{ width: 36, height: 36, borderRadius: "50%", background: COLORS[i % COLORS.length],
+                        display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: "bold" }}>
+                        {(sp.entityName || "?")[0]}
                       </SoftBox>
-                      <SoftTypography variant="button" fontWeight="medium">{sp.name}</SoftTypography>
+                      <SoftTypography variant="button" fontWeight="medium">{sp.entityName || "—"}</SoftTypography>
                     </SoftBox>
                   </td>
                   <td style={{ padding: "10px 14px" }}>
-                    <SoftTypography variant="caption" fontWeight="bold">{sp.orders}</SoftTypography>
+                    <SoftTypography variant="caption" fontWeight="bold">{sp.orderCount}</SoftTypography>
                   </td>
                   <td style={{ padding: "10px 14px" }}>
-                    <SoftTypography variant="caption" fontWeight="bold">{sp.amount}</SoftTypography>
+                    <SoftTypography variant="caption" fontWeight="bold">{fmt(sp.totalAmount)} دج</SoftTypography>
                   </td>
                   <td style={{ padding: "10px 14px" }}>
                     <SoftBox display="flex" alignItems="center" gap={1}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={sp.rate}
-                        sx={{
-                          height: 6, borderRadius: 3, bgcolor: "#e9ecef", width: 80,
-                          "& .MuiLinearProgress-bar": { background: sp.color },
-                        }}
-                      />
-                      <SoftTypography variant="caption" fontWeight="bold">{sp.rate}%</SoftTypography>
+                      <LinearProgress variant="determinate" value={pct}
+                        sx={{ height: 6, borderRadius: 3, bgcolor: "#e9ecef", width: 80,
+                          "& .MuiLinearProgress-bar": { background: COLORS[i % COLORS.length] } }} />
+                      <SoftTypography variant="caption" fontWeight="bold">{pct}%</SoftTypography>
                     </SoftBox>
                   </td>
-                  <td style={{ padding: "10px 14px" }}>
-                    <SoftBadge
-                      variant="gradient"
-                      color={sp.rate >= 90 ? "success" : sp.rate >= 80 ? "info" : "warning"}
-                      size="xs"
-                      badgeContent={sp.rate >= 90 ? "ممتاز" : sp.rate >= 80 ? "جيد" : "متوسط"}
-                      container
-                    />
-                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </SoftBox>
-      </Card>
-    </SoftBox>
+              );
+            })}
+          </tbody>
+        </table>
+      </SoftBox>
+    </Card>
   );
 }
 
-// ─── Inventory Report Tab ─────────────────────────────────────────────────────
-function InventoryReport() {
+// ─── Customers Tab ────────────────────────────────────────────────────────────
+function CustomersReport({ from, to }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    setData(null);
+    reportsApi.salesByCustomer(from, to)
+      .then((r) => setData(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .catch(() => setData([]));
+  }, [from, to]);
+
+  if (!data) return <LoadingBox />;
+  if (data.length === 0) return <EmptyBox text="لا توجد مبيعات مكتملة في هذه الفترة" />;
+
+  const maxAmount = Math.max(...data.map((d) => Number(d.totalAmount || 0)), 1);
+
   return (
-    <SoftBox>
-      <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={3}><StatCard label="إجمالي وحدات المخزون" value="4,395"  color="info" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="محجوز"                value="1,010"  color="warning" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="متاح"                 value="3,385"  color="success" /></Grid>
-        <Grid item xs={6} sm={3}><StatCard label="نسبة الاستخدام"       value="23%"    color="dark" /></Grid>
-      </Grid>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3 }}>
-            <SoftTypography variant="h6" fontWeight="bold" mb={2}>توزيع المخزون حسب الفئة</SoftTypography>
-            {[
-              { label: "مسامير وبراغي", value: 2650, pct: 60, color: "#FF6B6B" },
-              { label: "كهرباء",        value: 1500, pct: 34, color: "#FFE66D" },
-              { label: "أدوات",         value: 75,   pct: 2,  color: "#4ECDC4" },
-              { label: "سباكة",         value: 265,  pct: 6,  color: "#A8E6CF" },
-              { label: "دهانات",        value: 140,  pct: 3,  color: "#DDA0DD" },
-            ].map((row) => (
-              <SoftBox key={row.label} mb={2}>
-                <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
-                  <SoftTypography variant="caption" color="text">{row.label}</SoftTypography>
-                  <SoftTypography variant="caption" fontWeight="bold">{row.value.toLocaleString()}</SoftTypography>
-                </SoftBox>
-                <LinearProgress
-                  variant="determinate"
-                  value={row.pct}
-                  sx={{
-                    height: 8, borderRadius: 4, bgcolor: "#e9ecef",
-                    "& .MuiLinearProgress-bar": { background: row.color },
-                  }}
-                />
+    <Card sx={{ p: 3 }}>
+      <SoftTypography variant="h6" fontWeight="bold" mb={2}>أفضل الزبائن</SoftTypography>
+      {data.slice(0, 10).map((c, i) => {
+        const pct = Math.round((Number(c.totalAmount || 0) / maxAmount) * 100);
+        return (
+          <SoftBox key={c.entityId || i} mb={2}>
+            <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
+              <SoftBox display="flex" alignItems="center" gap={1}>
+                <SoftBadge variant="gradient" color="info" size="xs" badgeContent={i + 1} container />
+                <SoftTypography variant="caption" fontWeight="medium">{c.entityName || "—"}</SoftTypography>
               </SoftBox>
-            ))}
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3 }}>
-            <SoftTypography variant="h6" fontWeight="bold" mb={2}>أصناف تحتاج تموين</SoftTypography>
-            {[
-              { name: "كماشة عالمية",    code: "KMA-UNI",    status: "نفذ",     color: "error" },
-              { name: "أنبوب PVC 1 بوصة", code: "ANB-PVC-1", status: "منخفض",   color: "warning" },
-              { name: "مفتاح ربط 17mm",  code: "MFT-017",    status: "منخفض",   color: "warning" },
-              { name: "مفتاح ربط 22mm",  code: "MFT-022",    status: "منخفض",   color: "warning" },
-            ].map((item) => (
-              <SoftBox key={item.code} display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <SoftBox>
-                  <SoftTypography variant="caption" fontWeight="bold">{item.name}</SoftTypography>
-                  <SoftTypography variant="caption" color="secondary" display="block">{item.code}</SoftTypography>
-                </SoftBox>
-                <SoftBadge variant="gradient" color={item.color} size="xs" badgeContent={item.status} container />
+              <SoftBox textAlign="right">
+                <SoftTypography variant="caption" fontWeight="bold" color="info" display="block">
+                  {fmt(c.totalAmount)} دج
+                </SoftTypography>
+                <SoftTypography variant="caption" color="secondary">{c.orderCount} طلبية</SoftTypography>
               </SoftBox>
-            ))}
-          </Card>
-        </Grid>
-      </Grid>
-    </SoftBox>
+            </SoftBox>
+            <LinearProgress variant="determinate" value={pct}
+              sx={{ height: 6, borderRadius: 3, bgcolor: "#e9ecef",
+                "& .MuiLinearProgress-bar": { background: COLORS[i % COLORS.length] } }} />
+          </SoftBox>
+        );
+      })}
+    </Card>
   );
 }
 
@@ -334,49 +305,53 @@ function InventoryReport() {
 function Reports() {
   const [tab, setTab] = useState(0);
   const [period, setPeriod] = useState("month");
+  const [stats, setStats] = useState(null);
+
+  const { from, to } = periodDates(period);
+
+  useEffect(() => {
+    dashboardApi.getStats()
+      .then((r) => setStats(r.data))
+      .catch(console.error);
+  }, []);
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
-        {/* Header */}
-        <SoftBox mb={3} display="flex" justifyContent="space-between" alignItems="center">
+        <SoftBox mb={3} display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
           <SoftBox>
             <SoftTypography variant="h4" fontWeight="bold">التقارير</SoftTypography>
             <SoftTypography variant="body2" color="text">تحليلات ومؤشرات أداء النظام</SoftTypography>
           </SoftBox>
           <SoftBox display="flex" gap={1} alignItems="center">
-            <TextField
-              select
-              size="small"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              sx={{ width: 140 }}
-            >
+            <TextField select size="small" value={period}
+              onChange={(e) => setPeriod(e.target.value)} sx={{ width: 140 }}>
               <MenuItem value="week">هذا الأسبوع</MenuItem>
               <MenuItem value="month">هذا الشهر</MenuItem>
               <MenuItem value="quarter">هذا الربع</MenuItem>
               <MenuItem value="year">هذه السنة</MenuItem>
             </TextField>
-            <SoftButton variant="outlined" color="secondary" size="small">تصدير</SoftButton>
+            <SoftTypography variant="caption" color="secondary">
+              {from} → {to}
+            </SoftTypography>
           </SoftBox>
         </SoftBox>
 
-        {/* Tabs */}
         <Card sx={{ mb: 3 }}>
           <SoftBox px={2} pt={2} borderBottom="1px solid #eee">
             <Tabs value={tab} onChange={(_, v) => setTab(v)} textColor="inherit"
               TabIndicatorProps={{ style: { background: "#17c1e8" } }}>
-              {["الطلبيات", "الأصناف", "البائعون", "المخزون"].map((t) => (
+              {["الطلبيات", "الأصناف", "البائعون", "الزبائن"].map((t) => (
                 <Tab key={t} label={<SoftTypography variant="caption" fontWeight="medium">{t}</SoftTypography>} />
               ))}
             </Tabs>
           </SoftBox>
           <SoftBox p={3}>
-            {tab === 0 && <OrdersReport />}
-            {tab === 1 && <ProductsReport />}
-            {tab === 2 && <SalesRepsReport />}
-            {tab === 3 && <InventoryReport />}
+            {tab === 0 && <OrdersReport stats={stats} />}
+            {tab === 1 && <ProductsReport from={from} to={to} />}
+            {tab === 2 && <SalesRepsReport from={from} to={to} />}
+            {tab === 3 && <CustomersReport from={from} to={to} />}
           </SoftBox>
         </Card>
       </SoftBox>

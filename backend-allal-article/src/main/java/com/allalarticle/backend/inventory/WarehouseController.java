@@ -37,7 +37,7 @@ public class WarehouseController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.warehouses.update')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.adjust')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> update(
             @PathVariable Long id, @Valid @RequestBody WarehouseRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(warehouseService.update(id, req)));

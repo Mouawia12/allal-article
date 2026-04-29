@@ -59,6 +59,11 @@ insert into permissions (code, module, name_ar, description) values
   ('reports.sales',         'reports',      'تقارير المبيعات',            null),
   ('reports.inventory',     'reports',      'تقارير المخزون',             null),
   ('reports.financial',     'reports',      'التقارير المالية',           null),
+  -- Suppliers
+  ('suppliers.view',        'suppliers',    'عرض الموردين',               null),
+  ('suppliers.create',      'suppliers',    'إضافة مورد',                 null),
+  ('suppliers.edit',        'suppliers',    'تعديل مورد',                 null),
+  ('suppliers.delete',      'suppliers',    'حذف مورد',                   null),
   -- Partners
   ('partners.view',         'partners',     'عرض الشركاء',                null),
   ('partners.manage',       'partners',     'إدارة الشركاء',               null)

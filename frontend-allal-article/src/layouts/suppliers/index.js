@@ -1,8 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
 
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Dialog from "@mui/material/Dialog";
+import Snackbar from "@mui/material/Snackbar";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
@@ -38,16 +40,31 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
-import { WILAYAS } from "data/wilayas";
+import { purchasesApi, suppliersApi, referenceApi } from "services";
+
+const formatDZD = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "0");
+const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
+const getSupplierBalance = () => 0;
+
 const supplierMatchLabels = {
   partnerUuid: "معرف الشريك", taxNumber: "الرقم الضريبي",
   commercialRegister: "السجل التجاري", email: "البريد الإلكتروني", phone: "رقم الهاتف",
 };
-const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
-const getSupplierBalance = () => 0;
-import { formatDZD } from "layouts/purchases/mockData";
-import { purchasesApi } from "services";
-import { suppliersApi } from "services";
+
+function normalizeSupplier(s) {
+  return {
+    totalPurchases: 0,
+    paidAmount: 0,
+    orders: [],
+    payments: [],
+    lastPurchase: "—",
+    partnerUuid: null,
+    manualPartnerUuid: null,
+    status: "active",
+    ...s,
+    wilaya: s.wilayaNameAr || null,
+  };
+}
 
 const emptySupplierForm = {
   name: "",
@@ -57,13 +74,30 @@ const emptySupplierForm = {
   taxNumber: "",
   commercialRegister: "",
   nisNumber: "",
-  wilaya: "",
+  wilayaId: "",
   address: "",
   category: "",
   paymentTerms: "",
   openingBalance: "",
-  manualPartnerUuid: "",
 };
+
+function buildSupplierForm(supplier = null) {
+  if (!supplier) return { ...emptySupplierForm };
+  return {
+    name: supplier.name || "",
+    legalName: supplier.legalName || "",
+    phone: supplier.phone || "",
+    email: supplier.email || "",
+    taxNumber: supplier.taxNumber || "",
+    commercialRegister: supplier.commercialRegister || "",
+    nisNumber: supplier.nisNumber || "",
+    wilayaId: supplier.wilayaId || "",
+    address: supplier.address || "",
+    category: supplier.category || "",
+    paymentTerms: supplier.paymentTerms || "",
+    openingBalance: supplier.openingBalance || "",
+  };
+}
 
 function SupplierCard({ supplier, onView }) {
   const link = resolveSupplierLink(supplier);
@@ -125,26 +159,6 @@ function SupplierCard({ supplier, onView }) {
       </SoftBox>
     </Card>
   );
-}
-
-function buildSupplierForm(supplier = null) {
-  if (!supplier) return { ...emptySupplierForm };
-
-  return {
-    name: supplier.name || "",
-    legalName: supplier.legalName || "",
-    phone: supplier.phone || "",
-    email: supplier.email || "",
-    taxNumber: supplier.taxNumber || "",
-    commercialRegister: supplier.commercialRegister || "",
-    nisNumber: supplier.nisNumber || "",
-    wilaya: supplier.wilaya || "",
-    address: supplier.address || "",
-    category: supplier.category || "",
-    paymentTerms: supplier.paymentTerms || "",
-    openingBalance: supplier.openingBalance || "",
-    manualPartnerUuid: supplier.manualPartnerUuid || supplier.partnerUuid || "",
-  };
 }
 
 function SupplierDetailDialog({ supplier, onClose, onEdit }) {
@@ -213,7 +227,9 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
               ["العنوان", supplier.address],
               ["التصنيف", supplier.category],
               ["شروط الدفع", supplier.paymentTerms],
-              ["آخر شراء", supplier.lastPurchase],
+              ["الرقم الضريبي", supplier.taxNumber],
+              ["السجل التجاري", supplier.commercialRegister],
+              ["NIS", supplier.nisNumber],
             ].map(([label, value]) => (
               <Grid item xs={12} sm={6} key={label}>
                 <SoftTypography variant="caption" color="secondary" fontWeight="bold">{label}</SoftTypography>
@@ -232,7 +248,7 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
                 <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                   <SoftBox>
                     <SoftTypography variant="caption" fontWeight="bold">{purchase.id}</SoftTypography>
-                    <SoftTypography variant="caption" color="secondary" display="block">{purchase.date} - {purchase.itemsCount} صنف</SoftTypography>
+                    <SoftTypography variant="caption" color="secondary" display="block">{purchase.date}</SoftTypography>
                   </SoftBox>
                   <SoftTypography variant="button" fontWeight="bold">{formatDZD(purchase.totalAmount)} دج</SoftTypography>
                 </SoftBox>
@@ -243,14 +259,14 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
 
         {tab === 2 && (
           <SoftBox>
-            {supplier.payments.length === 0 ? (
+            {(supplier.payments || []).length === 0 ? (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>لا توجد دفعات مسجلة</SoftTypography>
-            ) : supplier.payments.map((payment) => (
+            ) : (supplier.payments || []).map((payment) => (
               <SoftBox key={payment.id} p={1.5} mb={1.2} sx={{ border: "1px solid #66BB6A44", borderRight: "4px solid #66BB6A", borderRadius: 1.5, background: "#f0fff4" }}>
                 <SoftBox display="flex" justifyContent="space-between" alignItems="center">
                   <SoftBox>
                     <SoftTypography variant="caption" fontWeight="bold">دفع للمورد - {payment.type}</SoftTypography>
-                    <SoftTypography variant="caption" color="secondary" display="block">{payment.date} | دفع: {payment.payer}</SoftTypography>
+                    <SoftTypography variant="caption" color="secondary" display="block">{payment.date}</SoftTypography>
                   </SoftBox>
                   <SoftTypography variant="button" fontWeight="bold" sx={{ color: "#66BB6A" }}>{formatDZD(payment.amount)} دج</SoftTypography>
                 </SoftBox>
@@ -274,9 +290,6 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
                   <SoftTypography variant="caption" color="secondary" display="block">
                     تم التعرف على الربط عبر: {supplierMatchLabels[link.matchedBy]}
                   </SoftTypography>
-                  <SoftTypography variant="caption" color="secondary" display="block">
-                    UUID: {link.partner.uuid}
-                  </SoftTypography>
                 </>
               ) : (
                 <SoftTypography variant="body2" color="text">
@@ -287,7 +300,6 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
 
             <Grid container spacing={2} mt={1}>
               {[
-                ["معرف الشريك", supplier.partnerUuid || supplier.manualPartnerUuid],
                 ["الرقم الضريبي", supplier.taxNumber],
                 ["السجل التجاري", supplier.commercialRegister],
                 ["NIS", supplier.nisNumber],
@@ -314,20 +326,29 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
   );
 }
 
-function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
+function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = [] }) {
   const [form, setForm] = useState(() => buildSupplierForm(supplier));
+  const [errors, setErrors] = useState({});
   const isEdit = Boolean(supplier);
 
   useEffect(() => {
     if (open) {
       setForm(buildSupplierForm(supplier));
+      setErrors({});
     }
   }, [open, supplier]);
 
-  const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const set = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: "" }));
+  };
 
   const save = () => {
-    if (!form.name.trim() || !form.phone.trim()) return;
+    const errs = {};
+    if (!form.name.trim()) errs.name = "اسم المورد مطلوب";
+    if (!form.phone.trim()) errs.phone = "رقم الهاتف مطلوب";
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "بريد إلكتروني غير صالح";
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     onSave(form);
     setForm(buildSupplierForm(null));
   };
@@ -338,69 +359,65 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid item xs={12}>
-            <TextField fullWidth autoFocus size="small" label="اسم المورد *" value={form.name} onChange={(e) => set("name", e.target.value)} />
+            <TextField fullWidth autoFocus size="small" label="اسم المورد *" value={form.name}
+              onChange={(e) => set("name", e.target.value)} error={!!errors.name} helperText={errors.name} />
           </Grid>
           <Grid item xs={12}>
-            <TextField fullWidth size="small" label="الاسم القانوني" value={form.legalName} onChange={(e) => set("legalName", e.target.value)} />
+            <TextField fullWidth size="small" label="الاسم القانوني" value={form.legalName}
+              onChange={(e) => set("legalName", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="الهاتف *" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <TextField fullWidth size="small" label="الهاتف *" value={form.phone}
+              onChange={(e) => set("phone", e.target.value)} error={!!errors.phone} helperText={errors.phone} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="البريد الإلكتروني" value={form.email} onChange={(e) => set("email", e.target.value)} />
+            <TextField fullWidth size="small" label="البريد الإلكتروني" value={form.email}
+              onChange={(e) => set("email", e.target.value)} error={!!errors.email} helperText={errors.email} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="الرقم الضريبي NIF" value={form.taxNumber} onChange={(e) => set("taxNumber", e.target.value)} />
+            <TextField fullWidth size="small" label="الرقم الضريبي NIF" value={form.taxNumber}
+              onChange={(e) => set("taxNumber", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="السجل التجاري RC" value={form.commercialRegister} onChange={(e) => set("commercialRegister", e.target.value)} />
+            <TextField fullWidth size="small" label="السجل التجاري RC" value={form.commercialRegister}
+              onChange={(e) => set("commercialRegister", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="NIS" value={form.nisNumber} onChange={(e) => set("nisNumber", e.target.value)} />
+            <TextField fullWidth size="small" label="NIS" value={form.nisNumber}
+              onChange={(e) => set("nisNumber", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
             <FormControl size="small" fullWidth>
               <InputLabel>الولاية</InputLabel>
-              <Select value={form.wilaya} label="الولاية" onChange={(e) => set("wilaya", e.target.value)}>
-                {WILAYAS.map((wilaya) => (
-                  <MenuItem key={wilaya.code} value={wilaya.name}>{wilaya.code} - {wilaya.name}</MenuItem>
+              <Select value={form.wilayaId} label="الولاية" onChange={(e) => set("wilayaId", e.target.value)}>
+                <MenuItem value=""><em>بدون ولاية</em></MenuItem>
+                {wilayas.map((w) => (
+                  <MenuItem key={w.id} value={w.id}>{w.code} - {w.nameAr}</MenuItem>
                 ))}
               </Select>
             </FormControl>
           </Grid>
           <Grid item xs={12}>
-            <TextField fullWidth size="small" label="العنوان" value={form.address} onChange={(e) => set("address", e.target.value)} />
+            <TextField fullWidth size="small" label="العنوان" value={form.address}
+              onChange={(e) => set("address", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="التصنيف" value={form.category} onChange={(e) => set("category", e.target.value)} />
+            <TextField fullWidth size="small" label="التصنيف" value={form.category}
+              onChange={(e) => set("category", e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="الرصيد الافتتاحي (دج)" type="number" value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)} />
+            <TextField fullWidth size="small" label="الرصيد الافتتاحي (دج)" type="number"
+              value={form.openingBalance} onChange={(e) => set("openingBalance", e.target.value)} />
           </Grid>
-          <Grid item xs={12}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>ربط يدوي بشريك</InputLabel>
-              <Select value={form.manualPartnerUuid} label="ربط يدوي بشريك" onChange={(e) => set("manualPartnerUuid", e.target.value)}>
-                <MenuItem value="">بدون ربط يدوي</MenuItem>
-                {/* Partners loaded from API */}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              size="small"
-              label="معرف الشريك UUID"
-              value={form.manualPartnerUuid}
-              onChange={(e) => set("manualPartnerUuid", e.target.value)}
-              helperText="استخدمه إذا كان المورد أضيف قبل الربط وتريد ربطه لاحقاً بعد قبول الشريك."
-            />
+          <Grid item xs={12} sm={6}>
+            <TextField fullWidth size="small" label="شروط الدفع" value={form.paymentTerms}
+              onChange={(e) => set("paymentTerms", e.target.value)} />
           </Grid>
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
         <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" disabled={!form.name.trim() || !form.phone.trim()} onClick={save}>
+        <SoftButton variant="gradient" color="info" size="small" onClick={save}>
           {isEdit ? "حفظ التعديلات" : "حفظ المورد"}
         </SoftButton>
       </DialogActions>
@@ -410,12 +427,26 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null }) {
 
 function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
+  const [wilayas, setWilayas] = useState([]);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(0);
   const [wilayaFilter, setWilayaFilter] = useState("all");
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [editSupplier, setEditSupplier] = useState(null);
+  const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
+  const showToast = (message, severity = "success") => setToast({ open: true, message, severity });
+
+  useEffect(() => {
+    suppliersApi.list()
+      .then((r) => setSuppliers((r.data?.content ?? r.data ?? []).map(normalizeSupplier)))
+      .catch(console.error);
+    referenceApi.wilayas()
+      .then((r) => setWilayas(r.data ?? []))
+      .catch(console.error);
+  }, []);
+
+  const uniqueWilayas = [...new Set(suppliers.map((s) => s.wilaya).filter(Boolean))].sort();
 
   const filtered = suppliers.filter((supplier) => {
     const link = resolveSupplierLink(supplier);
@@ -439,19 +470,8 @@ function Suppliers() {
     return matchTab && matchWilaya && matchSearch;
   });
 
-  const linkedCount = suppliers.filter((supplier) => resolveSupplierLink(supplier).isLinked).length;
-  const totalBalance = suppliers.reduce((sum, supplier) => sum + getSupplierBalance(supplier), 0);
-
-  useEffect(() => {
-    suppliersApi.list()
-      .then((r) => setSuppliers((r.data?.content ?? r.data ?? []).map((s) => ({
-        totalPurchases: 0, paidAmount: 0, orders: [], payments: [],
-        lastPurchase: "—", partnerUuid: null, manualPartnerUuid: null,
-        status: "active",
-        ...s,
-      }))))
-      .catch(console.error);
-  }, []);
+  const linkedCount = suppliers.filter((s) => resolveSupplierLink(s).isLinked).length;
+  const totalBalance = suppliers.reduce((sum, s) => sum + getSupplierBalance(s), 0);
 
   const upsertSupplier = (supplier) => {
     setSuppliers((current) => (
@@ -471,16 +491,18 @@ function Suppliers() {
       taxNumber: formData.taxNumber || null,
       commercialRegister: formData.commercialRegister || null,
       nisNumber: formData.nisNumber || null,
-      wilaya: formData.wilaya || null,
+      wilayaId: formData.wilayaId ? Number(formData.wilayaId) : null,
       address: formData.address || null,
       category: formData.category || "عام",
       paymentTerms: formData.paymentTerms || null,
       openingBalance: Number(formData.openingBalance) || 0,
     };
     const apiCall = existingSupplier?.id
-      ? suppliersApi.update(existingSupplier.id, apiData).then((r) => ({ ...existingSupplier, ...r.data }))
-      : suppliersApi.create(apiData).then((r) => ({ totalPurchases: 0, paidAmount: 0, orders: [], payments: [], lastPurchase: "—", partnerUuid: null, manualPartnerUuid: null, status: "active", ...r.data }));
-    apiCall.then(upsertSupplier).catch(console.error);
+      ? suppliersApi.update(existingSupplier.id, apiData).then((r) => normalizeSupplier({ ...existingSupplier, ...r.data }))
+      : suppliersApi.create(apiData).then((r) => normalizeSupplier(r.data));
+    apiCall
+      .then((s) => { upsertSupplier(s); showToast("تم حفظ المورد بنجاح"); })
+      .catch((e) => showToast(e.response?.data?.message || "حدث خطأ أثناء الحفظ", "error"));
   };
 
   return (
@@ -526,8 +548,8 @@ function Suppliers() {
                 <FormControl size="small" sx={{ minWidth: 160 }}>
                   <Select value={wilayaFilter} onChange={(e) => setWilayaFilter(e.target.value)} displayEmpty>
                     <MenuItem value="all">كل الولايات</MenuItem>
-                    {WILAYAS.map((wilaya) => (
-                      <MenuItem key={wilaya.code} value={wilaya.name}>{wilaya.code} - {wilaya.name}</MenuItem>
+                    {uniqueWilayas.map((name) => (
+                      <MenuItem key={name} value={name}>{name}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -560,10 +582,11 @@ function Suppliers() {
       <SupplierDetailDialog
         supplier={selectedSupplier}
         onClose={() => setSelectedSupplier(null)}
-        onEdit={(supplier) => setEditSupplier(supplier)}
+        onEdit={(supplier) => { setEditSupplier(supplier); setSelectedSupplier(null); }}
       />
       <SupplierFormDialog
         open={addDialog}
+        wilayas={wilayas}
         onClose={() => setAddDialog(false)}
         onSave={(formData) => {
           handleSaveSupplier(formData, null);
@@ -573,12 +596,21 @@ function Suppliers() {
       <SupplierFormDialog
         open={!!editSupplier}
         supplier={editSupplier}
+        wilayas={wilayas}
         onClose={() => setEditSupplier(null)}
         onSave={(formData) => {
           handleSaveSupplier(formData, editSupplier);
           setEditSupplier(null);
         }}
       />
+
+      <Snackbar open={toast.open} autoHideDuration={4000}
+        onClose={() => setToast((t) => ({ ...t, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+        <Alert severity={toast.severity} onClose={() => setToast((t) => ({ ...t, open: false }))}>
+          {toast.message}
+        </Alert>
+      </Snackbar>
 
       <Footer />
     </DashboardLayout>

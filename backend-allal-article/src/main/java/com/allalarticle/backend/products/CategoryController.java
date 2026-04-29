@@ -49,7 +49,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'categories.update')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'categories.edit')")
     public ResponseEntity<ApiResponse<CategoryResponse>> update(
             @PathVariable Long id, @Valid @RequestBody CategoryRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(categoryService.update(id, req)));

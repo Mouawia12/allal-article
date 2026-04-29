@@ -1,11 +1,12 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import CircularProgress from "@mui/material/CircularProgress";
+import { ordersApi } from "services";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -38,113 +39,46 @@ import Footer from "examples/Footer";
 import ResourceLockBanner from "components/ResourceLockBanner";
 const getMockResourceLock = () => null;
 
-const mockOrderDetail = {
-  id: "ORD-2024-003",
-  customer: "شركة الإنشاءات المتحدة",
-  customerPhone: "0555-123456",
-  customerAddress: "الرياض، حي الملك فهد",
-  salesperson: "محمد سعيد",
-  date: "2024-01-17",
-  status: "under_review",
-  shippingStatus: "pending",
-  priceListName: "أسعار نصف جملة",
-  notes: "يرجى الشحن في أسرع وقت ممكن",
-  createdBy: "محمد سعيد",
-  lines: [
-    {
-      id: 1,
-      product: "برغي M10 × 50mm",
-      code: "BRG-010-50",
-      requestedQty: 500,
-      approvedQty: 500,
-      shippedQty: 0,
-      returnedQty: 0,
-      cancelledQty: 0,
-      unitPrice: 11,
-      status: "pending",
-      willShip: true,
-      notes: "",
-    },
-    {
-      id: 2,
-      product: "صامولة M10",
-      code: "SAM-010",
-      requestedQty: 500,
-      approvedQty: 400,
-      shippedQty: 0,
-      returnedQty: 0,
-      cancelledQty: 100,
-      unitPrice: 4.5,
-      status: "modified",
-      willShip: true,
-      notes: "الكمية عدلت من الإدارة",
-    },
-    {
-      id: 3,
-      product: "مفتاح ربط 17mm",
-      code: "MFT-017",
-      requestedQty: 10,
-      approvedQty: 0,
-      shippedQty: 0,
-      returnedQty: 0,
-      cancelledQty: 10,
-      unitPrice: 430,
-      status: "cancelled",
-      willShip: false,
-      notes: "غير متوفر في المخزون",
-    },
-    {
-      id: 4,
-      product: "شريط عازل كهربائي",
-      code: "SHR-EL",
-      requestedQty: 50,
-      approvedQty: 50,
-      shippedQty: 0,
-      returnedQty: 0,
-      cancelledQty: 0,
-      unitPrice: 32,
-      status: "approved",
-      willShip: true,
-      notes: "",
-    },
-    {
-      id: 5,
-      product: "كابل كهربائي 2.5mm",
-      code: "KBL-25",
-      requestedQty: 200,
-      approvedQty: 0,
-      shippedQty: 0,
-      returnedQty: 0,
-      cancelledQty: 200,
-      unitPrice: 88,
-      status: "cancelled",
-      willShip: false,
-      notes: "ألغي من قبل الإدارة",
-    },
-  ],
-};
-
-function toDateInputValue(date) {
-  return date.toISOString().slice(0, 10);
+function normalize(apiOrder) {
+  return {
+    id: apiOrder.orderNumber,
+    _id: apiOrder.id,
+    customer: apiOrder.customerName ?? "—",
+    customerPhone: apiOrder.customerPhone ?? "—",
+    customerAddress: apiOrder.customerAddress ?? "—",
+    salesperson: apiOrder.salesUserName ?? "—",
+    date: apiOrder.createdAt ? apiOrder.createdAt.slice(0, 10) : "—",
+    status: apiOrder.orderStatus ?? "draft",
+    shippingStatus: apiOrder.shippingStatus ?? "none",
+    notes: apiOrder.notes ?? "",
+    createdBy: apiOrder.salesUserName ?? "—",
+    priceListName: apiOrder.priceListName ?? "",
+    shippedAt: apiOrder.shippedAt ? apiOrder.shippedAt.slice(0, 10) : null,
+    lines: (apiOrder.items ?? []).map((item) => ({
+      id: item.id,
+      product: item.productName ?? "—",
+      code: item.productSku ?? "—",
+      requestedQty: item.requestedQty ?? 0,
+      approvedQty: item.approvedQty ?? 0,
+      shippedQty: item.shippedQty ?? 0,
+      returnedQty: item.returnedQty ?? 0,
+      cancelledQty: item.cancelledQty ?? 0,
+      unitPrice: item.unitPrice ?? 0,
+      status: item.lineStatus ?? "pending",
+      willShip: (item.approvedQty ?? 0) > 0 && item.lineStatus !== "cancelled",
+      notes: item.notes ?? "",
+    })),
+  };
 }
 
-function relativeDate(daysOffset) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  return toDateInputValue(date);
+function normalizeEvent(evt) {
+  return {
+    time: evt.createdAt ? new Date(evt.createdAt).toLocaleString("ar-DZ") : "—",
+    user: evt.performedByName ?? "النظام",
+    action: evt.eventType ?? "حدث",
+  };
 }
 
-function daysSince(dateValue) {
-  if (!dateValue) return 0;
-  const start = new Date(`${dateValue}T00:00:00`);
-  const today = new Date();
-  const diff = today.getTime() - start.getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function shouldAutoCompleteOrder(status, shippedAt) {
-  return status === "shipped" && daysSince(shippedAt) >= 3;
-}
 
 function formatDZD(value) {
   return Number(value || 0).toLocaleString("fr-DZ", {
@@ -152,14 +86,6 @@ function formatDZD(value) {
   });
 }
 
-const routeStateById = {
-  "ORD-2024-001": { status: "shipped", shippingStatus: "shipped", shippedAt: relativeDate(-4) },
-  "ORD-2024-002": { status: "submitted", shippingStatus: "pending" },
-  "ORD-2024-004": { status: "draft", shippingStatus: "none" },
-  "ORD-2024-005": { status: "shipped", shippingStatus: "shipped", shippedAt: relativeDate(-1) },
-  "ORD-2024-006": { status: "cancelled", shippingStatus: "none" },
-  "ORD-2024-008": { status: "rejected", shippingStatus: "none" },
-};
 
 const statusConfig = {
   draft: { label: "مسودة", color: "secondary" },
@@ -241,12 +167,6 @@ const orderActionFlow = {
   },
 };
 
-const initialActivityLog = [
-  { time: "2024-01-17 09:15", user: "محمد سعيد", action: "أنشأ الطلبية وأرسلها للإدارة" },
-  { time: "2024-01-17 10:30", user: "الإدارة", action: "تم فتح الطلبية للمراجعة" },
-  { time: "2024-01-17 10:45", user: "الإدارة", action: "عدّل كمية صامولة M10 من 500 إلى 400" },
-  { time: "2024-01-17 10:46", user: "الإدارة", action: "ألغى مفتاح ربط 17mm - السبب: غير متوفر" },
-];
 
 function InfoRow({ icon: IconComp, label, value }) {
   return (
@@ -297,62 +217,59 @@ function describeLineChange(before, after) {
 function OrderDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const routeState = routeStateById[id] || {};
-  const baseStatus = routeState.status || mockOrderDetail.status;
-  const baseShippedAt = routeState.shippedAt || null;
-  const autoCompleted = shouldAutoCompleteOrder(baseStatus, baseShippedAt);
-  const order = {
-    ...mockOrderDetail,
-    id: id || mockOrderDetail.id,
-    status: autoCompleted ? "completed" : baseStatus,
-    shippingStatus: routeState.shippingStatus || mockOrderDetail.shippingStatus,
-    shippedAt: baseShippedAt,
-  };
 
+  const [loading, setLoading] = useState(true);
+  const [orderData, setOrderData] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [adminNote, setAdminNote] = useState("");
-  const [orderStatus, setOrderStatus] = useState(order.status);
-  const [shippingStatus, setShippingStatus] = useState(order.shippingStatus);
-  const [shippedAt, setShippedAt] = useState(order.shippedAt);
-  const [orderLines, setOrderLines] = useState(() =>
-    order.lines.map((line) => ({
-      ...line,
-      shippedQty: routeState.shippingStatus === "shipped" && !isLineCancelled(line) ? line.approvedQty : line.shippedQty,
-      status: routeState.shippingStatus === "shipped" && !isLineCancelled(line) ? "shipped" : line.status,
-      willShip: routeState.shippingStatus === "shipped" ? !isLineCancelled(line) : line.willShip,
-    }))
-  );
+  const [orderStatus, setOrderStatus] = useState("draft");
+  const [shippingStatus, setShippingStatus] = useState("none");
+  const [shippedAt, setShippedAt] = useState(null);
+  const [orderLines, setOrderLines] = useState([]);
   const [draftLines, setDraftLines] = useState([]);
   const [editMode, setEditMode] = useState(false);
   const [returnDialog, setReturnDialog] = useState(false);
-  const [activity, setActivity] = useState(() =>
-    autoCompleted
-      ? [
-          {
-            time: new Date().toLocaleString("ar-DZ"),
-            user: "النظام",
-            action: "حول الطلبية تلقائياً إلى مكتملة بعد مرور 3 أيام على الشحن",
-          },
-          ...initialActivityLog,
-        ]
-      : initialActivityLog
-  );
+  const [activity, setActivity] = useState([]);
 
+  const loadOrder = useCallback(() => {
+    setLoading(true);
+    Promise.all([ordersApi.getById(id), ordersApi.getEvents(id)])
+      .then(([orderRes, eventsRes]) => {
+        const norm = normalize(orderRes.data);
+        setOrderData(norm);
+        setOrderStatus(norm.status);
+        setShippingStatus(norm.shippingStatus);
+        setShippedAt(norm.shippedAt);
+        setOrderLines(norm.lines);
+        setActivity((eventsRes.data ?? []).map(normalizeEvent));
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => { loadOrder(); }, [loadOrder]);
+
+  if (loading || !orderData) {
+    return (
+      <DashboardLayout>
+        <DashboardNavbar />
+        <SoftBox display="flex" justifyContent="center" alignItems="center" py={10}>
+          <CircularProgress />
+        </SoftBox>
+        <Footer />
+      </DashboardLayout>
+    );
+  }
+
+  const order = orderData;
   const sc = statusConfig[orderStatus] || { label: orderStatus, color: "secondary" };
   const sh = shippingConfig[shippingStatus] || { label: "—", color: "secondary" };
-  const editLock = getMockResourceLock("sales_order", order.id);
+  const editLock = getMockResourceLock("sales_order", order._id);
   const isShipped = ["shipped", "completed"].includes(orderStatus) || shippingStatus === "shipped";
   const canEdit = !isShipped && !["cancelled", "rejected"].includes(orderStatus) && !editLock;
   const canCancelOrder = !["shipped", "completed", "cancelled", "rejected"].includes(orderStatus);
   const primaryAction = orderActionFlow[orderStatus];
   const displayedLines = editMode ? draftLines : orderLines;
-
-  const appendActivity = (action) => {
-    setActivity((items) => [
-      { time: new Date().toLocaleString("ar-DZ"), user: "المستخدم الحالي", action },
-      ...items,
-    ]);
-  };
 
   const startEdit = () => {
     setDraftLines(orderLines.map((line) => ({ ...line, _touched: false })));
@@ -440,66 +357,31 @@ function OrderDetail() {
     setOrderLines(nextLines);
     setEditMode(false);
     setDraftLines([]);
-    appendActivity(
-      changes.length
-        ? `حفظ تعديل الفاتورة: ${changes.join(" | ")}`
-        : "حفظ تعديل الفاتورة بدون تغيير كميات"
-    );
   };
 
-  const handleAction = (action) => {
-    if (action === "reject") {
-      setOrderStatus("rejected");
-      appendActivity(adminNote.trim() ? `رفض الطلبية: ${adminNote.trim()}` : "رفض الطلبية");
-    } else if (action === "cancel") {
-      setOrderStatus("cancelled");
-      setShippingStatus("none");
-      setOrderLines((lines) =>
-        lines.map((line) => ({
-          ...line,
-          approvedQty: 0,
-          cancelledQty: Number(line.requestedQty || 0),
-          shippedQty: 0,
-          returnedQty: 0,
-          willShip: false,
-          status: "cancelled",
-          notes: line.notes || "ألغيت مع الطلبية",
-        }))
-      );
-      appendActivity(adminNote.trim() ? `ألغى الطلبية: ${adminNote.trim()}` : "ألغى الطلبية قبل الشحن");
-    } else {
-      const flow = orderActionFlow[action];
-      if (flow) {
-        setOrderStatus(flow.nextStatus);
-        setShippingStatus(flow.nextShippingStatus);
-
-        if (action === "under_review") {
-          setOrderLines((lines) =>
-            lines.map((line) =>
-              isLineCancelled(line)
-                ? { ...line, approvedQty: 0, willShip: false, status: "cancelled" }
-                : { ...line, status: "approved", willShip: true }
-            )
-          );
-        }
-
-        if (action === "confirmed") {
-          setShippedAt(toDateInputValue(new Date()));
-          setOrderLines((lines) =>
-            lines.map((line) =>
-              isLineCancelled(line)
-                ? { ...line, shippedQty: 0, willShip: false, status: "cancelled" }
-                : { ...line, shippedQty: line.approvedQty, willShip: true, status: "shipped" }
-            )
-          );
-        }
-
-        appendActivity(flow.log);
+  const handleAction = async (action) => {
+    try {
+      if (action === "reject") {
+        await ordersApi.reject(id, adminNote.trim() || undefined);
+      } else if (action === "cancel") {
+        await ordersApi.cancel(id, adminNote.trim() || undefined);
+      } else if (action === "draft") {
+        await ordersApi.submit(id);
+      } else if (action === "submitted" || action === "under_review") {
+        await ordersApi.confirm(id, {});
+      } else if (action === "confirmed") {
+        await ordersApi.ship(id);
+      } else if (action === "shipped") {
+        await ordersApi.complete(id);
       }
+      setConfirmDialog(null);
+      setAdminNote("");
+      loadOrder();
+    } catch (err) {
+      console.error(err);
+      setConfirmDialog(null);
+      setAdminNote("");
     }
-
-    setConfirmDialog(null);
-    setAdminNote("");
   };
 
   return (

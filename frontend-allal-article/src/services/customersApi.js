@@ -3,9 +3,11 @@ import apiClient from "./apiClient";
 const BASE = "/api/customers";
 
 export const customersApi = {
-  list: (params) => apiClient.get(BASE, { params }),
-  getById: (id) => apiClient.get(`${BASE}/${id}`),
-  create: (data) => apiClient.post(BASE, data),
-  update: (id, data) => apiClient.put(`${BASE}/${id}`, data),
-  delete: (id) => apiClient.delete(`${BASE}/${id}`),
+  list:         (params) => apiClient.get(BASE, { params }),
+  getById:      (id)     => apiClient.get(`${BASE}/${id}`),
+  create:       (data)   => apiClient.post(BASE, data),
+  update:       (id, data) => apiClient.put(`${BASE}/${id}`, data),
+  delete:       (id)     => apiClient.delete(`${BASE}/${id}`),
+  listPayments: (id)     => apiClient.get(`${BASE}/${id}/payments`),
+  addPayment:   (id, data) => apiClient.post(`${BASE}/${id}/payments`, data),
 };

@@ -438,10 +438,11 @@ function Users() {
     } catch (e) { console.error(e); }
   };
 
-  const toggleStatus = (userId) => {
-    setUsers((prev) => prev.map((u) =>
-      u.id === userId ? { ...u, status: u.status === "active" ? "inactive" : "active" } : u
-    ));
+  const toggleStatus = async (userId) => {
+    try {
+      const updated = await usersApi.toggleStatus(userId);
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, status: updated.status } : u));
+    } catch (e) { console.error(e); }
   };
 
   const savePermissions = (user, perms) => {

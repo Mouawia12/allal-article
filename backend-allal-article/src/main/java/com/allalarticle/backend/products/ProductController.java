@@ -43,7 +43,7 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.update')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.edit')")
     public ResponseEntity<ApiResponse<ProductResponse>> update(
             @PathVariable Long id, @Valid @RequestBody ProductRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(productService.update(id, req)));

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback } from "react";
-import apiClient from "services/apiClient";
+import { ownerClient } from "services/ownerApi";
 
 const OwnerAuthContext = createContext(null);
 
@@ -19,14 +19,17 @@ export function OwnerAuthProvider({ children }) {
   });
 
   const login = useCallback(async (email, password) => {
-    const { data } = await apiClient.post("/api/platform/auth/login", { email, password });
-    const { token } = data.data;
+    // Use ownerClient directly — 401 interceptor skips redirect for login URL
+    const res = await ownerClient.post("/api/platform/auth/login", { email, password });
+    const payload = res.data; // auto-unwrapped by ownerClient interceptor
+    if (!payload?.token) throw new Error("Invalid response from server");
+    const { token } = payload;
     const claims = parseJwt(token);
     const user = {
       id: claims?.userId,
-      email: data.data.email,
-      name: data.data.name || "مالك المنصة",
-      roleCode: data.data.roleCode,
+      email: payload.email,
+      name: payload.name || payload.email,
+      roleCode: payload.roleCode,
     };
     localStorage.setItem(STORAGE_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -38,9 +41,11 @@ export function OwnerAuthProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(USER_KEY);
     setOwner(null);
+    window.location.href = "/owner/login";
   }, []);
 
-  const isAuthenticated = !!owner && !!localStorage.getItem(STORAGE_KEY);
+  // Trust React state — token presence in localStorage is enforced by ownerClient's 401 handler
+  const isAuthenticated = !!owner;
 
   return (
     <OwnerAuthContext.Provider value={{ owner, login, logout, isAuthenticated }}>

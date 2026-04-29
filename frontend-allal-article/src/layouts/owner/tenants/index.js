@@ -25,6 +25,7 @@ import Tooltip from "@mui/material/Tooltip";
 
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
+import LockResetIcon from "@mui/icons-material/LockReset";
 import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import PlayCircleIcon from "@mui/icons-material/PlayCircle";
 import SearchIcon from "@mui/icons-material/Search";
@@ -51,7 +52,7 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
     setLoading(true); setError("");
     try {
       const r = await ownerApi.createTenant(form);
-      setResult(r.data?.data);
+      setResult(r.data);
       onCreated?.();
     } catch (e) {
       setError(e.response?.data?.message || "حدث خطأ أثناء الإنشاء");
@@ -120,9 +121,92 @@ function NewTenantDialog({ open, onClose, plans, onCreated }) {
   ), t);
 }
 
+// ─── Reset Password Dialog ────────────────────────────────────────────────────
+function ResetPasswordDialog({ tenant, onClose }) {
+  const { t } = useI18n();
+  const [password, setPassword] = useState("");
+  const [confirm,  setConfirm]  = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
+  const [done,     setDone]     = useState(false);
+
+  if (!tenant) return null;
+
+  const handleReset = async () => {
+    if (password.length < 8) return setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+    if (password !== confirm) return setError("كلمتا المرور غير متطابقتين");
+    setLoading(true); setError("");
+    try {
+      await ownerApi.resetPassword(tenant.id, password);
+      setDone(true);
+    } catch (e) {
+      setError(e.response?.data?.message || "حدث خطأ أثناء تغيير كلمة المرور");
+    } finally { setLoading(false); }
+  };
+
+  const handleClose = () => { setPassword(""); setConfirm(""); setError(""); setDone(false); onClose(); };
+
+  return localizeNode((
+    <Dialog open={!!tenant} onClose={handleClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box sx={{ fontWeight: 700 }}>تغيير كلمة مرور المدير</Box>
+        <IconButton size="small" onClick={handleClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        {done ? (
+          <Box sx={{ background: "#f0fde4", border: "1px solid #82d61644", borderRadius: 2, p: 2, fontSize: 13, color: "#82d616", fontWeight: 600 }}>
+            ✓ تم تغيير كلمة المرور بنجاح للمشترك <b>{tenant.company_name}</b>
+          </Box>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
+            <Box sx={{ fontSize: 12, color: "#8392ab", background: "#f8f9fa", borderRadius: 2, p: 1.5 }}>
+              المشترك: <b style={{ color: "#344767" }}>{tenant.company_name}</b>
+              <br />سيتم تغيير كلمة مرور حساب المدير الأول ({tenant.contact_email})
+            </Box>
+            <TextField
+              label="كلمة المرور الجديدة *"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              size="small" fullWidth
+              helperText="8 أحرف على الأقل"
+            />
+            <TextField
+              label="تأكيد كلمة المرور *"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              size="small" fullWidth
+            />
+            {error && (
+              <Box sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5, fontSize: 12, color: "#ea0606" }}>
+                {error}
+              </Box>
+            )}
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <Box component="button" onClick={handleClose}
+          sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab", fontFamily: "inherit" }}>
+          {done ? "إغلاق" : "إلغاء"}
+        </Box>
+        {!done && (
+          <Box component="button" onClick={handleReset} disabled={loading}
+            sx={{ background: loading ? "#b0e8f5" : "linear-gradient(135deg, #7928ca, #5e1e9e)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: loading ? "not-allowed" : "pointer", fontSize: 13, color: "#fff", fontWeight: 600, opacity: loading ? 0.7 : 1, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 0.8 }}>
+            <LockResetIcon sx={{ fontSize: 15 }} />
+            {loading ? "جاري التغيير..." : "تغيير كلمة المرور"}
+          </Box>
+        )}
+      </DialogActions>
+    </Dialog>
+  ), t);
+}
+
 // ─── Tenant Detail Dialog ─────────────────────────────────────────────────────
 function TenantDetailDialog({ tenant, onClose, onStatusChange }) {
   const { t } = useI18n();
+  const [resetOpen, setResetOpen] = useState(false);
   if (!tenant) return null;
   const sc = statusConfig[tenant.status];
   const userPct = tenant.maxUsers ? Math.round((tenant.usersCount / tenant.maxUsers) * 100) : 0;
@@ -181,7 +265,7 @@ function TenantDetailDialog({ tenant, onClose, onStatusChange }) {
           )}
         </Box>
       </DialogContent>
-      <DialogActions sx={{ p: 2, gap: 1 }}>
+      <DialogActions sx={{ p: 2, gap: 1, flexWrap: "wrap" }}>
         {tenant.status === "active" && (
           <Box component="button" onClick={() => onStatusChange(tenant.id, "suspended")}
             sx={{ background: "#ffeaea", border: "1px solid #ea060644", color: "#ea0606", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
@@ -194,12 +278,16 @@ function TenantDetailDialog({ tenant, onClose, onStatusChange }) {
             <PlayCircleIcon sx={{ fontSize: 15 }} /> استئناف الاشتراك
           </Box>
         )}
-        {(tenant.status === "trial" || tenant.status === "active") && (
+        {tenant.status === "trial" && (
           <Box component="button" onClick={() => onStatusChange(tenant.id, "active")}
-            sx={{ display: tenant.status === "trial" ? "flex" : "none", background: "#e3f8fd", border: "1px solid #17c1e844", color: "#17c1e8", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
+            sx={{ background: "#e3f8fd", border: "1px solid #17c1e844", color: "#17c1e8", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
             <PlayCircleIcon sx={{ fontSize: 15 }} /> تفعيل الاشتراك
           </Box>
         )}
+        <Box component="button" onClick={() => setResetOpen(true)}
+          sx={{ background: "#f3e8ff", border: "1px solid #7928ca44", color: "#7928ca", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 0.5, fontFamily: "inherit" }}>
+          <LockResetIcon sx={{ fontSize: 15 }} /> تغيير كلمة المرور
+        </Box>
         <Box
           component="button"
           onClick={onClose}
@@ -208,6 +296,7 @@ function TenantDetailDialog({ tenant, onClose, onStatusChange }) {
           إغلاق
         </Box>
       </DialogActions>
+      <ResetPasswordDialog tenant={resetOpen ? tenant : null} onClose={() => setResetOpen(false)} />
     </Dialog>
   ), t);
 }
@@ -223,8 +312,8 @@ export default function OwnerTenants() {
   const [plans, setPlans]             = useState([]);
 
   const load = () => {
-    ownerApi.listTenants().then((r) => setTenants(r.data?.data ?? [])).catch(console.error);
-    ownerApi.listPlans().then((r) => setPlans(r.data?.data ?? [])).catch(console.error);
+    ownerApi.listTenants().then((r) => setTenants(r.data ?? [])).catch(console.error);
+    ownerApi.listPlans().then((r) => setPlans(r.data ?? [])).catch(console.error);
   };
   useEffect(load, []);
 
@@ -302,9 +391,13 @@ export default function OwnerTenants() {
               </TableHead>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا يوجد مشتركون بعد</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} sx={{ textAlign: "center", py: 4, color: "#8392ab" }}>لا يوجد مشتركون بعد</TableCell></TableRow>
                 ) : filtered.map((t) => {
-                  const sc = statusConfig[t.status];
+                  const sc         = statusConfig[t.status];
+                  const usersCount  = Number(t.users_count ?? 0);
+                  const maxUsers    = t.max_users ? Number(t.max_users) : null;
+                  const usersPct    = maxUsers ? Math.round((usersCount / maxUsers) * 100) : null;
+                  const ordersCount = Number(t.orders_this_month ?? 0);
                   return (
                     <TableRow key={t.id} sx={{ "&:hover": { background: "#f8f9fa" }, cursor: "pointer" }} onClick={() => setDetail(t)}>
                       <TableCell>
@@ -319,8 +412,24 @@ export default function OwnerTenants() {
                       <TableCell>
                         <Chip label={sc?.labelAr ?? t.status} size="small" sx={{ background: sc?.bg ?? "#f8f9fa", color: sc?.color ?? "#344767", fontWeight: 600, fontSize: 10 }} />
                       </TableCell>
+                      {/* المستخدمون */}
+                      <TableCell sx={{ minWidth: 80 }}>
+                        <Box sx={{ fontSize: 12, fontWeight: 600, color: usersPct >= 90 ? "#ea0606" : usersPct >= 70 ? "#fb8c00" : "#344767" }}>
+                          {usersCount}{maxUsers ? `/${maxUsers}` : ""}
+                        </Box>
+                        {usersPct != null && (
+                          <LinearProgress variant="determinate" value={usersPct}
+                            sx={{ height: 3, borderRadius: 2, mt: 0.5, background: "#f0f2f5",
+                              "& .MuiLinearProgress-bar": { background: usersPct >= 90 ? "#ea0606" : usersPct >= 70 ? "#fb8c00" : "#17c1e8", borderRadius: 2 } }} />
+                        )}
+                      </TableCell>
+                      {/* الطلبيات/الشهر */}
+                      <TableCell sx={{ fontSize: 12, fontWeight: 600, color: ordersCount > 0 ? "#17c1e8" : "#adb5bd" }}>
+                        {ordersCount.toLocaleString("fr-DZ")}
+                      </TableCell>
+                      {/* آخر نشاط */}
                       <TableCell sx={{ fontSize: 11, color: "#8392ab", whiteSpace: "nowrap" }}>
-                        {t.created_at ? new Date(t.created_at).toLocaleDateString("ar-DZ") : "—"}
+                        {t.last_activity_at ? new Date(t.last_activity_at).toLocaleDateString("ar-DZ") : "—"}
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Tooltip title="تفاصيل">

@@ -83,6 +83,9 @@ function Purchases() {
       .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({
         items: [], returnItems: [], totalAmount: 0, paymentStatus: "unpaid",
         ...p,
+        id: p.poNumber || String(p.id),
+        _id: p.id,
+        supplier: p.supplierName || "—",
       }))))
       .catch(console.error);
   }, []);
@@ -94,9 +97,10 @@ function Purchases() {
     const matchStatus = tabStatus === "all" || p.status === tabStatus;
     const matchPayment = paymentFilter === "all" || p.paymentStatus === paymentFilter;
     const matchSupplier = supplierFilter === "all" || p.supplier === supplierFilter;
-    const matchSearch =
-      p.id.toLowerCase().includes(search.toLowerCase()) ||
-      p.supplier.includes(search);
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      String(p.id).toLowerCase().includes(q) ||
+      String(p.supplier).toLowerCase().includes(q);
     return matchStatus && matchPayment && matchSupplier && matchSearch;
   });
 

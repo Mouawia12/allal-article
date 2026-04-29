@@ -41,42 +41,6 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { inventoryApi } from "services";
 
-const products = [
-  { id: 1, code: "BRG-010-50", name: "برغي M10 × 50mm", category: "مسامير وبراغي", unit: "قطعة", minStock: 100, color: "#FF6B6B" },
-  { id: 2, code: "BRG-008-30", name: "برغي M8 × 30mm", category: "مسامير وبراغي", unit: "قطعة", minStock: 200, color: "#FF6B6B" },
-  { id: 3, code: "SAM-010", name: "صامولة M10", category: "مسامير وبراغي", unit: "قطعة", minStock: 100, color: "#FF8E53" },
-  { id: 4, code: "MFT-017", name: "مفتاح ربط 17mm", category: "أدوات", unit: "قطعة", minStock: 20, color: "#4ECDC4" },
-  { id: 5, code: "MFT-022", name: "مفتاح ربط 22mm", category: "أدوات", unit: "قطعة", minStock: 15, color: "#4ECDC4" },
-  { id: 6, code: "KMA-UNI", name: "كماشة عالمية", category: "أدوات", unit: "قطعة", minStock: 10, color: "#4ECDC4" },
-  { id: 7, code: "KBL-25", name: "كابل كهربائي 2.5mm", category: "كهرباء", unit: "متر", minStock: 100, color: "#FFE66D" },
-  { id: 8, code: "KBL-15", name: "كابل كهربائي 1.5mm", category: "كهرباء", unit: "متر", minStock: 100, color: "#FFE66D" },
-  { id: 9, code: "SHR-EL", name: "شريط عازل كهربائي", category: "كهرباء", unit: "لفة", minStock: 50, color: "#F7DC6F" },
-  { id: 10, code: "ANB-PVC-2", name: "أنبوب PVC 2 بوصة", category: "سباكة", unit: "متر", minStock: 30, color: "#A8E6CF" },
-  { id: 11, code: "ANB-PVC-1", name: "أنبوب PVC 1 بوصة", category: "سباكة", unit: "متر", minStock: 20, color: "#A8E6CF" },
-  { id: 12, code: "DHN-WHT-4", name: "دهان أبيض 4L", category: "دهانات", unit: "علبة", minStock: 20, color: "#DDA0DD" },
-];
-
-const initialStockLines = [
-  { productId: 1, warehouseId: "WH-MAIN", onHand: 520, reserved: 120, pending: 70 },
-  { productId: 1, warehouseId: "WH-TOOLS", onHand: 210, reserved: 60, pending: 20 },
-  { productId: 1, warehouseId: "WH-PLUMB", onHand: 120, reserved: 20, pending: 10 },
-  { productId: 2, warehouseId: "WH-MAIN", onHand: 780, reserved: 160, pending: 100 },
-  { productId: 2, warehouseId: "WH-TOOLS", onHand: 420, reserved: 140, pending: 100 },
-  { productId: 3, warehouseId: "WH-MAIN", onHand: 360, reserved: 90, pending: 40 },
-  { productId: 3, warehouseId: "WH-TOOLS", onHand: 240, reserved: 60, pending: 40 },
-  { productId: 4, warehouseId: "WH-TOOLS", onHand: 45, reserved: 10, pending: 5 },
-  { productId: 5, warehouseId: "WH-TOOLS", onHand: 30, reserved: 5, pending: 10 },
-  { productId: 6, warehouseId: "WH-TOOLS", onHand: 0, reserved: 0, pending: 5 },
-  { productId: 7, warehouseId: "WH-MAIN", onHand: 330, reserved: 60, pending: 120 },
-  { productId: 7, warehouseId: "WH-PLUMB", onHand: 170, reserved: 40, pending: 80 },
-  { productId: 8, warehouseId: "WH-MAIN", onHand: 600, reserved: 100, pending: 80 },
-  { productId: 8, warehouseId: "WH-PLUMB", onHand: 200, reserved: 50, pending: 20 },
-  { productId: 9, warehouseId: "WH-MAIN", onHand: 140, reserved: 20, pending: 10 },
-  { productId: 9, warehouseId: "WH-RETURN", onHand: 60, reserved: 0, pending: 10 },
-  { productId: 10, warehouseId: "WH-PLUMB", onHand: 100, reserved: 40, pending: 30 },
-  { productId: 11, warehouseId: "WH-PLUMB", onHand: 15, reserved: 10, pending: 5 },
-  { productId: 12, warehouseId: "WH-MAIN", onHand: 80, reserved: 20, pending: 10 },
-];
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("fr-DZ", {
@@ -124,26 +88,33 @@ function getWarehouseName(id, warehouses) {
 
 function hydrateStockLines(stockLines, warehouses) {
   return stockLines.map((line) => {
-    const product = products.find((item) => item.id === line.productId);
-    const warehouse = warehouses.find((item) => item.id === line.warehouseId);
-    const available = Number(line.onHand || 0) - Number(line.reserved || 0);
-    const projected = available - Number(line.pending || 0);
-
+    const warehouse = warehouses.find((w) => w.id === (line.warehouseId ?? line.warehouse_id));
+    // Normalize field names: API uses onHandQty/reservedQty/availableQty
+    const onHand = Number(line.onHand ?? line.onHandQty ?? 0);
+    const reserved = Number(line.reserved ?? line.reservedQty ?? 0);
+    const pending = Number(line.pending ?? 0);
+    const available = onHand - reserved;
+    const projected = available - pending;
+    const name = line.name ?? line.productName ?? "";
+    const code = line.code ?? line.productSku ?? line.productCode ?? "";
+    const category = line.category ?? "";
+    const unit = line.unit ?? "وحدة";
     return {
       ...line,
-      ...product,
-      warehouseName: warehouse?.name || "—",
-      warehouseType: warehouse?.type || "—",
-      available,
-      projected,
+      name, code, category, unit,
+      onHand, reserved, pending,
+      warehouseName: line.warehouseName ?? warehouse?.name ?? "—",
+      warehouseType: line.warehouseType ?? warehouse?.type ?? "—",
+      available, projected,
+      color: "#17c1e8",
     };
   });
 }
 
 const emptyTransfer = {
-  fromWarehouseId: "WH-MAIN",
-  toWarehouseId: "WH-TOOLS",
-  productId: 1,
+  fromWarehouseId: "",
+  toWarehouseId: "",
+  productId: "",
   qty: 0,
   reason: "",
 };
@@ -168,35 +139,12 @@ function Inventory() {
     capacity: 1000,
     isDefault: false,
   });
-  const [transferLog, setTransferLog] = useState([
-    {
-      id: "TR-2026-001",
-      type: "product",
-      fromWarehouseId: "WH-MAIN",
-      toWarehouseId: "WH-PLUMB",
-      productName: "كابل كهربائي 2.5mm",
-      qty: 40,
-      unit: "متر",
-      at: "2026-04-21 10:30",
-      user: "أمين المخزن",
-    },
-  ]);
+  const [transferLog, setTransferLog] = useState([]);
 
   useEffect(() => {
-    inventoryApi.listWarehouses()
-      .then((r) => setWarehouses(r.data?.content ?? r.data ?? []))
-      .catch(console.error);
-    inventoryApi.listStock()
-      .then((r) => setStockLines((r.data?.content ?? r.data ?? []).map((s) => ({
-        productCode: s.productCode ?? s.product?.code ?? "",
-        productName: s.productName ?? s.product?.name ?? "",
-        category: s.category ?? s.product?.category ?? "",
-        unit: s.unit ?? s.product?.unit ?? "قطعة",
-        minStock: s.minStock ?? 0,
-        color: "#17c1e8",
-        ...s,
-      }))))
-      .catch(console.error);
+    const extract = (r) => Array.isArray(r.data) ? r.data : (r.data?.content ?? []);
+    inventoryApi.listWarehouses().then((r) => setWarehouses(extract(r))).catch(console.error);
+    inventoryApi.listStock().then((r) => setStockLines(extract(r))).catch(console.error);
   }, []);
 
   const inventory = useMemo(() => hydrateStockLines(stockLines, warehouses), [stockLines, warehouses]);
@@ -216,10 +164,10 @@ function Inventory() {
       (filterStatus === "ok" && status.color === "success");
 
     const matchSearch =
-      item.name.includes(search) ||
-      item.code.toLowerCase().includes(search.toLowerCase()) ||
-      item.category.includes(search) ||
-      item.warehouseName.includes(search);
+      (item.name || "").includes(search) ||
+      (item.code || "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.category || "").includes(search) ||
+      (item.warehouseName || "").includes(search);
 
     return matchStatus && matchSearch;
   });
@@ -231,7 +179,6 @@ function Inventory() {
   const totalReserved = filteredByWarehouse.reduce((sum, item) => sum + Number(item.reserved || 0), 0);
   const totalPending = filteredByWarehouse.reduce((sum, item) => sum + Number(item.pending || 0), 0);
 
-  const selectedProduct = products.find((product) => product.id === Number(transfer.productId)) || products[0];
   const fromLine = stockLines.find(
     (line) =>
       line.productId === Number(transfer.productId) && line.warehouseId === transfer.fromWarehouseId
@@ -321,9 +268,9 @@ function Inventory() {
           type: "product",
           fromWarehouseId: transfer.fromWarehouseId,
           toWarehouseId: transfer.toWarehouseId,
-          productName: selectedProduct.name,
+          productName: fromLine?.name || fromLine?.productName || "—",
           qty,
-          unit: selectedProduct.unit,
+          unit: fromLine?.unit || "وحدة",
           at: now,
           user: "المستخدم الحالي",
           reason: transfer.reason,
@@ -346,8 +293,7 @@ function Inventory() {
     transferableLines.forEach((line) => {
       const qty = Math.max(0, Number(line.onHand || 0) - Number(line.reserved || 0));
       nextLines = moveLineQty(nextLines, line.productId, transfer.fromWarehouseId, transfer.toWarehouseId, qty);
-      const product = products.find((item) => item.id === line.productId);
-      movedItems.push(`${product?.name || line.productId}: ${formatNumber(qty)} ${product?.unit || ""}`);
+      movedItems.push(`${line.name || line.productName || line.productId}: ${formatNumber(qty)} ${line.unit || ""}`);
     });
 
     setStockLines(nextLines);
@@ -864,8 +810,10 @@ function Inventory() {
                   <FormControl fullWidth size="small">
                     <InputLabel>الصنف</InputLabel>
                     <Select value={transfer.productId} label="الصنف" onChange={setTransferField("productId")}>
-                      {products.map((product) => (
-                        <MenuItem key={product.id} value={product.id}>{product.name} - {product.code}</MenuItem>
+                      {[...new Map(stockLines.map((s) => [s.productId ?? s.product_id, s])).values()].map((s) => (
+                        <MenuItem key={s.productId ?? s.product_id} value={s.productId ?? s.product_id}>
+                          {s.name || s.productName || "—"} - {s.code || s.productSku || ""}
+                        </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
@@ -879,7 +827,7 @@ function Inventory() {
                     value={transfer.qty}
                     onChange={setTransferField("qty")}
                     inputProps={{ min: 0, max: maxTransferQty }}
-                    helperText={`المتاح للتحويل: ${formatNumber(maxTransferQty)} ${selectedProduct.unit}`}
+                    helperText={`المتاح للتحويل: ${formatNumber(maxTransferQty)} ${fromLine?.unit || "وحدة"}`}
                   />
                 </Grid>
               </>

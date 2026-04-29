@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import apiClient from "services/apiClient";
 
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -123,25 +124,44 @@ function CompletenessBar({ profile }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+const EMPTY_FORM = {
+  nameAr: "", nameFr: "", legalForm: "SARL", tradeRegisterNumber: "",
+  taxId: "", statisticalId: "", articleImposition: "",
+  address: "", wilaya: "", postalCode: "",
+  phone: "", mobile: "", fax: "", email: "", website: "",
+  bankName: "", bankBranch: "", rib: "", capitalSocial: "",
+  logoUrl: null, stampImageUrl: null, signatureImageUrl: null,
+  invoiceFooterAr: "", invoiceFooterFr: "",
+};
+
 export default function CompanyProfile() {
   const [tab, setTab] = useState(0);
-  const [form, setForm] = useState({
-    nameAr: "", nameFr: "", legalForm: "SARL", tradeRegisterNumber: "",
-    taxId: "", statisticalId: "", articleImposition: "",
-    address: "", wilaya: "", postalCode: "",
-    phone: "", mobile: "", fax: "", email: "", website: "",
-    bankName: "", bankBranch: "", rib: "", capitalSocial: "",
-    logoUrl: null, stampImageUrl: null, signatureImageUrl: null,
-    invoiceFooterAr: "", invoiceFooterFr: "",
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    apiClient.get("/api/settings/company")
+      .then((r) => {
+        if (r.data && typeof r.data === "object" && Object.keys(r.data).length > 0) {
+          setForm((prev) => ({ ...prev, ...r.data }));
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setSaved(false);
   };
 
-  const handleSave = () => setSaved(true);
+  const handleSave = () => {
+    setSaving(true);
+    apiClient.put("/api/settings/company", form)
+      .then(() => setSaved(true))
+      .catch(console.error)
+      .finally(() => setSaving(false));
+  };
 
   const TABS = [
     { label: "بيانات الشركة",  icon: <BusinessIcon sx={{ fontSize: 16 }} /> },
@@ -176,7 +196,7 @@ export default function CompanyProfile() {
               transition: "background 300ms",
             }}
           >
-            {saved ? <><CheckCircleIcon sx={{ fontSize: 16 }} /> تم الحفظ</> : "حفظ التعديلات"}
+            {saved ? <><CheckCircleIcon sx={{ fontSize: 16 }} /> تم الحفظ</> : saving ? "جاري الحفظ..." : "حفظ التعديلات"}
           </Box>
         </SoftBox>
 

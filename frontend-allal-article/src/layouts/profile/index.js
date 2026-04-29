@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
@@ -46,6 +46,7 @@ import {
   roleConfig,
 } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
+import apiClient from "services/apiClient";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 const avatarColors = ["#17c1e8", "#82d616", "#ea0606", "#fb8c00", "#7928ca", "#344767"];
@@ -150,22 +151,40 @@ function MyPermissions({ user }) {
 }
 
 // ─── Edit Profile tab ─────────────────────────────────────────────────────────
-function EditProfile({ user }) {
+function EditProfile({ user, onSaved }) {
   const [form, setForm] = useState({
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
-    lang: user.lang,
+    name: user.name || "",
+    email: user.email || "",
+    phone: user.phone || "",
+    lang: user.lang || "ar",
   });
   const [showPass, setShowPass] = useState(false);
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      const body = { name: form.name, phone: form.phone };
+      if (newPass) {
+        if (newPass.length < 8) { setError("كلمة المرور يجب أن تكون 8 أحرف على الأقل"); setSaving(false); return; }
+        if (newPass !== confirmPass) { setError("كلمتا المرور غير متطابقتين"); setSaving(false); return; }
+        body.password = newPass;
+      }
+      await apiClient.patch("/api/users/me", body);
+      setSaved(true);
+      onSaved?.();
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setError(e.response?.data?.message || "حدث خطأ أثناء الحفظ");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -231,15 +250,20 @@ function EditProfile({ user }) {
         </Grid>
       </Grid>
 
+      {error && (
+        <SoftBox mb={1} sx={{ background: "#ffeaea", border: "1px solid #ea060644", borderRadius: 2, p: 1.5 }}>
+          <SoftTypography variant="caption" sx={{ color: "#ea0606" }}>{error}</SoftTypography>
+        </SoftBox>
+      )}
       <SoftBox display="flex" justifyContent="flex-end" gap={1}>
         {saved && (
           <SoftBox display="flex" alignItems="center" gap={0.5}>
             <CheckCircleIcon sx={{ color: "#82d616", fontSize: 18 }} />
-            <SoftTypography variant="caption" sx={{ color: "#82d616" }}>تم الحفظ</SoftTypography>
+            <SoftTypography variant="caption" sx={{ color: "#82d616" }}>تم الحفظ بنجاح</SoftTypography>
           </SoftBox>
         )}
-        <SoftButton variant="gradient" color="info" size="small" onClick={handleSave}>
-          حفظ التعديلات
+        <SoftButton variant="gradient" color="info" size="small" onClick={handleSave} disabled={saving}>
+          {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
         </SoftButton>
       </SoftBox>
     </SoftBox>
@@ -249,8 +273,21 @@ function EditProfile({ user }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function Profile() {
   const { user: authUser } = useAuth();
-  const user = { ...authUser, role: authUser?.roleCode || "viewer", assignedWilaya: "", maxDiscountPct: 0 };
+  const [fullUser, setFullUser] = useState(null);
+  const user = {
+    ...authUser,
+    ...fullUser,
+    role: (fullUser?.roleCode || authUser?.roleCode) ?? "viewer",
+    assignedWilaya: "",
+    maxDiscountPct: 0,
+  };
   const [tab, setTab] = useState(0);
+
+  useEffect(() => {
+    apiClient.get("/api/users/me")
+      .then(({ data }) => setFullUser(data))
+      .catch(() => {});
+  }, []);
   const rc = roleConfig[user.role] || roleConfig.viewer;
   const colorIdx = user.id % avatarColors.length;
   const perms = getUserPermissions(user);
@@ -369,7 +406,9 @@ function Profile() {
               </SoftBox>
               <SoftBox p={2.5}>
                 {tab === 0 && <MyPermissions user={user} />}
-                {tab === 1 && <EditProfile user={user} />}
+                {tab === 1 && <EditProfile user={user} onSaved={() => {
+                  apiClient.get("/api/users/me").then(({ data }) => setFullUser(data)).catch(() => {});
+                }} />}
               </SoftBox>
             </Card>
           </Grid>

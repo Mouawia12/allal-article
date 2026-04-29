@@ -68,7 +68,7 @@ function PurchaseLine({ line, canDelete, priceListId, onChange, onDelete, onEnte
       <td style={{ padding: "10px 8px", minWidth: 260 }}>
         <Autocomplete
           size="small"
-          options={productOptions ?? purchaseProducts}
+          options={productOptions}
           value={line.product}
           onChange={(_, product) => {
             if (product) {
@@ -184,19 +184,17 @@ export default function PurchaseForm() {
     if (isEdit) {
       purchasesApi.getById(id).then((r) => {
         const p = r.data;
-        setDate(p.date || new Date().toISOString().slice(0, 10));
         setExpectedDate(p.expectedDate || "");
-        setWarehouse(p.warehouseId || "");
         setNotes(p.notes || "");
-        if (p.supplier) setSupplier({ name: p.supplier });
-        if (p.lines?.length) {
-          setLines(p.lines.map((l) => ({
+        if (p.supplierId) setSupplier({ id: p.supplierId, name: p.supplierName || "" });
+        if (p.items?.length) {
+          setLines(p.items.map((l) => ({
             id: lineId++,
-            product: l.productCode ? { id: l.productCode, name: l.product, unit: l.unit, taxRate: l.taxRate } : null,
-            qty: l.qty,
-            unitPrice: l.unitPrice,
-            pricingSource: l.pricingSource || "product_default",
-            taxRate: l.taxRate ?? 19,
+            product: l.productId ? { id: l.productId, name: l.productName || "", unit: l.unit || "وحدة", taxRate: l.taxRate ?? 19 } : null,
+            qty: l.orderedQty ?? 0,
+            unitPrice: l.unitPrice ?? 0,
+            pricingSource: "product_default",
+            taxRate: 0,
             notes: l.notes || "",
           })));
         }
@@ -249,20 +247,16 @@ export default function PurchaseForm() {
 
   const save = (mode) => {
     if (!supplier || totals.validLines.length === 0) return;
-    const supplierName = typeof supplier === "string" ? supplier : (supplier.name || supplier.nameAr || "");
+    const supplierId = typeof supplier === "object" ? supplier.id : null;
+    if (!supplierId) return;
     const payload = {
-      supplier: supplierName,
-      date,
-      expectedDate,
-      warehouseId: warehouse,
-      priceListId: selectedPriceListId,
-      paymentTerms,
-      notes,
+      supplierId,
+      expectedDate: expectedDate || null,
+      notes: notes || null,
       items: totals.validLines.map((l) => ({
         productId: l.product.id,
         qty: Number(l.qty),
-        unitPrice: Number(l.unitPrice),
-        taxRate: Number(l.taxRate),
+        unitPrice: Number(l.unitPrice) || null,
         notes: l.notes || null,
       })),
     };

@@ -9,6 +9,7 @@ export const inventoryApi = {
 
   // Stock
   listStock: (params) => apiClient.get("/api/inventory/stock", { params }),
+  getProductStock: (productId) => apiClient.get(`/api/inventory/stock/product/${productId}`),
   initStock: (data) => apiClient.post("/api/inventory/stock/init", data),
   adjust: (data) => apiClient.post("/api/inventory/adjust", data),
   listMovements: (params) => apiClient.get("/api/inventory/movements", { params }),

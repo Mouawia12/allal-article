@@ -111,6 +111,16 @@ function SignIn() {
             {loading ? "جاري الدخول..." : "تسجيل الدخول"}
           </SoftButton>
         </SoftBox>
+        <SoftBox mt={1} textAlign="center">
+          <SoftTypography
+            variant="caption"
+            color="secondary"
+            sx={{ cursor: "pointer", "&:hover": { color: "#17c1e8" } }}
+            onClick={() => window.location.href = "/owner/login"}
+          >
+            دخول لوحة المالك ←
+          </SoftTypography>
+        </SoftBox>
       </SoftBox>
     </CoverLayout>
   );

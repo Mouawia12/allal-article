@@ -21,19 +21,19 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import MenuOpenIcon from "@mui/icons-material/MenuOpen";
 import MenuIcon from "@mui/icons-material/Menu";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import TranslateIcon from "@mui/icons-material/Translate";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 
 import { localizeNode, useI18n } from "i18n";
+import { useOwnerAuth } from "context/OwnerAuthContext";
 
 const NAV_ITEMS = [
-  { label: "Overview",    icon: <DashboardIcon />, path: "/owner/dashboard" },
-  { label: "Tenants",     icon: <PeopleIcon />,    path: "/owner/tenants" },
-  { label: "Plans",       icon: <StarIcon />,      path: "/owner/plans" },
-  { label: "Revenue",     icon: <ReceiptIcon />,   path: "/owner/revenue" },
-  { label: "Notifications", icon: <NotificationsIcon />, path: "/owner/notifications" },
-  { label: "Support", icon: <SupportAgentIcon />, path: "/owner/support" },
+  { label: "نظرة عامة",  icon: <DashboardIcon />,     path: "/owner/dashboard" },
+  { label: "المشتركون",  icon: <PeopleIcon />,         path: "/owner/tenants" },
+  { label: "الخطط",      icon: <StarIcon />,           path: "/owner/plans" },
+  { label: "الإيرادات",  icon: <ReceiptIcon />,        path: "/owner/revenue" },
+  { label: "الإشعارات",  icon: <NotificationsIcon />,  path: "/owner/notifications" },
+  { label: "الدعم",      icon: <SupportAgentIcon />,   path: "/owner/support" },
 ];
 
 const SIDEBAR_W = 220;
@@ -45,6 +45,7 @@ export default function OwnerLayout({ children }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { direction, languages, locale, setLocale, t } = useI18n();
+  const { logout, owner } = useOwnerAuth();
 
   const isActive = (path) => pathname.startsWith(path);
   const isRtl = direction === "rtl";
@@ -127,44 +128,31 @@ export default function OwnerLayout({ children }) {
 
         <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", mx: 1 }} />
 
-        {/* Bottom: toggle + logout */}
+        {/* Bottom: user info + toggle + logout */}
         <Box sx={{ p: 1.5, display: "flex", flexDirection: "column", gap: 0.5 }}>
-          <Tooltip title={t("language.switcher")} placement={isRtl ? "left" : "right"}>
-            <IconButton
-              size="small"
-              onClick={openLanguageMenu}
-              sx={{ color: "#8392ab", "&:hover": { color: "#fff" }, borderRadius: "8px" }}
-            >
-              <TranslateIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={languageAnchor}
-            open={Boolean(languageAnchor)}
-            onClose={closeLanguageMenu}
-            anchorOrigin={{ vertical: "top", horizontal: isRtl ? "left" : "right" }}
-            transformOrigin={{ vertical: "bottom", horizontal: isRtl ? "right" : "left" }}
-          >
-            {languages.map((language) => (
-              <MenuItem
-                key={language.code}
-                selected={locale === language.code}
-                onClick={() => {
-                  setLocale(language.code);
-                  closeLanguageMenu();
-                }}
-              >
-                {language.label}
-              </MenuItem>
-            ))}
-          </Menu>
+
+          {/* Owner name */}
+          {!mini && owner && (
+            <Box sx={{ px: 1, py: 1, mb: 0.5, borderRadius: "8px", background: "rgba(255,255,255,0.06)" }}>
+              <Box sx={{ color: "#fff", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {owner.name || owner.email}
+              </Box>
+              <Box sx={{ color: "#8392ab", fontSize: 10 }}>مالك المنصة</Box>
+            </Box>
+          )}
+
           <Tooltip title={mini ? t("Expand sidebar") : t("Collapse sidebar")} placement={isRtl ? "left" : "right"}>
             <IconButton size="small" onClick={() => setMini((p) => !p)} sx={{ color: "#8392ab", "&:hover": { color: "#fff" }, borderRadius: "8px" }}>
               {mini ? <MenuIcon fontSize="small" /> : <MenuOpenIcon fontSize="small" />}
             </IconButton>
           </Tooltip>
-          <Tooltip title={t("Back to tenant app")} placement={isRtl ? "left" : "right"}>
-            <IconButton size="small" onClick={() => navigate("/dashboard")} sx={{ color: "#8392ab", "&:hover": { color: "#ea0606" }, borderRadius: "8px" }}>
+
+          <Tooltip title="تسجيل خروج" placement={isRtl ? "left" : "right"}>
+            <IconButton
+              size="small"
+              onClick={() => { logout(); navigate("/owner/login"); }}
+              sx={{ color: "#8392ab", "&:hover": { color: "#ea0606", background: "rgba(234,6,6,0.1)" }, borderRadius: "8px" }}
+            >
               <LogoutIcon fontSize="small" />
             </IconButton>
           </Tooltip>

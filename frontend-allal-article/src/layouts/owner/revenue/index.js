@@ -32,8 +32,8 @@ export default function OwnerRevenue() {
       ownerApi.listTenants(),
     ])
       .then(([rv, tn]) => {
-        setRevenue(rv.data?.data ?? null);
-        setTenants(tn.data?.data ?? []);
+        setRevenue(rv.data ?? null);
+        setTenants(tn.data ?? []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));

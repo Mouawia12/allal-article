@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
@@ -31,8 +31,8 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import { accountingApi } from "services";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
 const BOOK_TYPES = [
   { type: "sales",     label: "مبيعات",   color: "#17c1e8", isSystem: true },
   { type: "purchases", label: "مشتريات",  color: "#fb8c00", isSystem: true },
@@ -44,16 +44,6 @@ const BOOK_TYPES = [
   { type: "closing",   label: "إقفال",    color: "#627594", isSystem: true },
 ];
 
-const initialBooks = [
-  { id: 1, type: "sales",     name: "دفتر المبيعات",    prefix: "SAL", nextSeq: 42, yearFormat: "YYYY", requireApproval: false,  allowManual: false, active: true  },
-  { id: 2, type: "purchases", name: "دفتر المشتريات",   prefix: "PUR", nextSeq: 17, yearFormat: "YYYY", requireApproval: false,  allowManual: false, active: true  },
-  { id: 3, type: "cash",      name: "دفتر الصندوق",     prefix: "CSH", nextSeq: 88, yearFormat: "YYYY", requireApproval: false,  allowManual: true,  active: true  },
-  { id: 4, type: "bank",      name: "دفتر البنك",       prefix: "BNK", nextSeq: 23, yearFormat: "YYYY", requireApproval: true,   allowManual: true,  active: true  },
-  { id: 5, type: "stock",     name: "دفتر المخزون",     prefix: "STK", nextSeq: 56, yearFormat: "YYYY", requireApproval: false,  allowManual: false, active: true  },
-  { id: 6, type: "manual",    name: "دفتر اليومية العام", prefix: "JRN", nextSeq: 12, yearFormat: "YYYY", requireApproval: true, allowManual: true,  active: true  },
-  { id: 7, type: "opening",   name: "دفتر الافتتاح",   prefix: "OPN", nextSeq: 2,  yearFormat: "YYYY", requireApproval: false,  allowManual: false, active: true  },
-  { id: 8, type: "closing",   name: "دفتر الإقفال",    prefix: "CLO", nextSeq: 1,  yearFormat: "YYYY", requireApproval: false,  allowManual: false, active: true  },
-];
 
 function getTypeInfo(type) {
   return BOOK_TYPES.find((t) => t.type === type) ?? {};
@@ -122,13 +112,20 @@ function BookDialog({ book, onClose, onSave }) {
 }
 
 export default function JournalBooks() {
-  const [books, setBooks] = useState(initialBooks);
-  const [dialog, setDialog] = useState(null); // null | "new" | bookObj
+  const [books, setBooks] = useState([]);
+  const [dialog, setDialog] = useState(null);
+
+  useEffect(() => {
+    accountingApi.listJournalBooks()
+      .then((r) => setBooks(Array.isArray(r.data) ? r.data : []))
+      .catch(console.error);
+  }, []);
 
   const handleSave = (form) => {
     if (dialog === "new") {
       setBooks((p) => [...p, { ...form, id: Date.now() }]);
     } else {
+      accountingApi.updateJournalBook(dialog.id, form).catch(console.error);
       setBooks((p) => p.map((b) => b.id === dialog.id ? { ...b, ...form } : b));
     }
     setDialog(null);

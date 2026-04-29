@@ -46,7 +46,7 @@ public class SupplierController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'suppliers.update')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'suppliers.edit')")
     public ResponseEntity<ApiResponse<SupplierResponse>> update(
             @PathVariable Long id, @Valid @RequestBody SupplierRequest req) {
         return ResponseEntity.ok(ApiResponse.ok(supplierService.update(id, req)));

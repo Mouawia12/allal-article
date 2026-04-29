@@ -59,7 +59,7 @@ export default function OwnerNotifications() {
   useEffect(() => {
     ownerApi.listEvents(50)
       .then((r) => {
-        const events = (r.data?.data ?? []).map((ev) => ({
+        const events = (r.data ?? []).map((ev) => ({
           publicId: ev.id,
           tenantName: ev.company_name ?? "—",
           title: ev.event_type === "provision" ? "تهيئة مشترك جديد" : ev.event_type,

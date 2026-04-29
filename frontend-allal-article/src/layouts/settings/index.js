@@ -41,6 +41,7 @@ import { useI18n } from "i18n";
 import { WILAYAS } from "data/wilayas";
 import { getUserPermissions, permissionsByModule, roleConfig } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
+import { customersApi } from "services";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
 function SectionHeader({ title, description }) {
@@ -403,22 +404,22 @@ function SystemInfo() {
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 // ─── Road Invoice Settings ────────────────────────────────────────────────────
-const mockCustomers = [
-  "موزع وهران الرئيسي", "موزع العاصمة", "موزع الشرق", "موزع سطيف الرئيسي",
-  "موزع قسنطينة", "موزع عنابة", "موزع الجنوب",
-];
-
 function RoadInvoiceSettings() {
-  const [wilayaDefaults, setWilayaDefaults] = useState({
-    "وهران":    "موزع وهران الرئيسي",
-    "الجزائر": "موزع العاصمة",
-    "قسنطينة": "موزع الشرق",
-    "سطيف":    "موزع سطيف الرئيسي",
-  });
+  const [customers, setCustomers] = useState([]);
+  const [wilayaDefaults, setWilayaDefaults] = useState({});
   const [aiUpdating, setAiUpdating] = useState(false);
   const [editingWilaya, setEditingWilaya] = useState(null);
+
+  useEffect(() => {
+    customersApi.list({ size: 200 })
+      .then((r) => {
+        const list = Array.isArray(r.data?.content) ? r.data.content
+                   : Array.isArray(r.data)           ? r.data : [];
+        setCustomers(list);
+      })
+      .catch(console.error);
+  }, []);
 
   const handleAiUpdate = () => {
     setAiUpdating(true);
@@ -500,7 +501,7 @@ function RoadInvoiceSettings() {
                         displayEmpty
                       >
                         <MenuItem value="">— بدون زبون تلقائي —</MenuItem>
-                        {mockCustomers.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                        {customers.map((c) => <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>)}
                       </Select>
                     </FormControl>
                   ) : (

@@ -22,9 +22,11 @@ public record CustomerResponse(
         String salespersonName,
         String status,
         String notes,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        BigDecimal totalAmount,
+        BigDecimal paidAmount
 ) {
-    public static CustomerResponse from(Customer c) {
+    public static CustomerResponse from(Customer c, BigDecimal totalAmount, BigDecimal paidAmount) {
         var wilaya = c.getWilaya();
         var sales  = c.getSalesperson();
         return new CustomerResponse(
@@ -35,7 +37,13 @@ public record CustomerResponse(
                 c.getAddress(), c.getShippingRoute(), c.getOpeningBalance(),
                 sales != null ? sales.getId()   : null,
                 sales != null ? sales.getName() : null,
-                c.getStatus(), c.getNotes(), c.getCreatedAt()
+                c.getStatus(), c.getNotes(), c.getCreatedAt(),
+                totalAmount != null ? totalAmount : BigDecimal.ZERO,
+                paidAmount  != null ? paidAmount  : BigDecimal.ZERO
         );
+    }
+
+    public static CustomerResponse from(Customer c) {
+        return from(c, BigDecimal.ZERO, BigDecimal.ZERO);
     }
 }
