@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -20,8 +21,9 @@ public class WarehouseService {
     private final WarehouseRepository warehouseRepo;
     private final TenantUserRepository userRepo;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<WarehouseResponse> listActive() {
+        ensureDefaultWarehouse();
         return warehouseRepo.findByActiveTrueOrderByNameAsc()
                 .stream().map(WarehouseResponse::from).toList();
     }
@@ -82,6 +84,48 @@ public class WarehouseService {
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Warehouse not found", HttpStatus.NOT_FOUND));
         wh.setActive(false);
         warehouseRepo.save(wh);
+    }
+
+    @Transactional
+    public WarehouseResponse setDefault(Long id) {
+        var wh = warehouseRepo.findById(id)
+                .filter(Warehouse::isActive)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Warehouse not found", HttpStatus.NOT_FOUND));
+        clearDefaultFlag();
+        wh.setDefault(true);
+        return WarehouseResponse.from(warehouseRepo.save(wh));
+    }
+
+    Warehouse ensureDefaultWarehouse() {
+        var active = warehouseRepo.findByActiveTrueOrderByNameAsc();
+        if (!active.isEmpty()) {
+            if (active.stream().noneMatch(Warehouse::isDefault)) {
+                active.get(0).setDefault(true);
+                return warehouseRepo.save(active.get(0));
+            }
+            return active.get(0);
+        }
+
+        var warehouse = warehouseRepo.findByCode("MAIN")
+                .orElseGet(() -> Warehouse.builder()
+                        .code("MAIN")
+                        .name("المستودع الرئيسي")
+                        .warehouseType("central")
+                        .city("غير محدد")
+                        .capacityQty(new BigDecimal("100000"))
+                        .build());
+        warehouse.setActive(true);
+        warehouse.setDefault(true);
+        if (warehouse.getName() == null || warehouse.getName().isBlank()) {
+            warehouse.setName("المستودع الرئيسي");
+        }
+        if (warehouse.getWarehouseType() == null || warehouse.getWarehouseType().isBlank()) {
+            warehouse.setWarehouseType("central");
+        }
+        if (warehouse.getCapacityQty() == null || warehouse.getCapacityQty().compareTo(BigDecimal.ZERO) <= 0) {
+            warehouse.setCapacityQty(new BigDecimal("100000"));
+        }
+        return warehouseRepo.save(warehouse);
     }
 
     private void clearDefaultFlag() {

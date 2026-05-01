@@ -1,5 +1,6 @@
 package com.allalarticle.backend.customers;
 
+import com.allalarticle.backend.audit.AuditLogService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.PageResponse;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +36,7 @@ public class CustomerService {
     private final OrderRepository           orderRepo;
     private final WilayaRepository          wilayaRepo;
     private final TenantUserRepository      userRepo;
+    private final AuditLogService           auditLogService;
 
     // ── Customers ─────────────────────────────────────────────────────────────
 
@@ -150,6 +153,24 @@ public class CustomerService {
                 .createdBy(userId)
                 .build();
 
-        return CustomerPaymentResponse.from(paymentRepo.save(payment));
+        var saved = paymentRepo.save(payment);
+        auditLogService.log(userId, "customer_payment", saved.getId(),
+                "out".equals(saved.getDirection()) ? "customer_payment_refund" : "customer_payment_received",
+                ("out".equals(saved.getDirection()) ? "دفعة عكسية للزبون " : "استلام دفعة من ") + customer.getName(),
+                saved.getReferenceNumber() != null && !saved.getReferenceNumber().isBlank()
+                        ? saved.getReferenceNumber()
+                        : "PAY-" + saved.getId(),
+                "إدارة",
+                Map.of(
+                        "amount", saved.getAmount(),
+                        "direction", saved.getDirection(),
+                        "paymentMethod", saved.getPaymentMethod(),
+                        "referenceNumber", saved.getReferenceNumber() != null ? saved.getReferenceNumber() : "",
+                        "customerId", customer.getId(),
+                        "customerName", customer.getName(),
+                        "paymentDate", saved.getPaymentDate().toString(),
+                        "notes", saved.getNotes() != null ? saved.getNotes() : ""
+                ));
+        return CustomerPaymentResponse.from(saved);
     }
 }

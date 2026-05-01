@@ -47,7 +47,8 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { customersApi, referenceApi, usersApi } from "services";
+import { customersApi, ordersApi, referenceApi, usersApi } from "services";
+import { buildCustomerShipments } from "utils/customerShipments";
 import { getApiErrorMessage } from "utils/formErrors";
 import { useI18n } from "i18n";
 
@@ -135,6 +136,7 @@ function normalizeCustomer(c) {
     wilaya: c.wilayaNameAr || "—",
     payments: [],
     orders: [],
+    shipments: [],
     ...c,
   };
 }
@@ -370,11 +372,33 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [paymentsError, setPaymentsError] = useState("");
-
-  useEffect(() => { setCustomer(initialCustomer); }, [initialCustomer]);
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
 
   useEffect(() => {
-    if (!customer || tab !== 2) return;
+    setCustomer(initialCustomer);
+    setOrders([]);
+    setOrdersError("");
+    setPayments([]);
+    setPaymentsError("");
+  }, [initialCustomer]);
+
+  useEffect(() => {
+    if (!customer?.id || (tab !== 1 && tab !== 3)) return;
+    setLoadingOrders(true);
+    setOrdersError("");
+    ordersApi.list({ customerId: customer.id, size: 50 })
+      .then((r) => setOrders(r.data?.content ?? r.data ?? []))
+      .catch((error) => {
+        setOrdersError(getApiErrorMessage(error, "تعذر تحميل طلبيات الزبون"));
+        setOrders([]);
+      })
+      .finally(() => setLoadingOrders(false));
+  }, [customer?.id, tab]);
+
+  useEffect(() => {
+    if (!customer?.id || tab !== 2) return;
     setLoadingPayments(true);
     setPaymentsError("");
     customersApi.listPayments(customer.id)
@@ -384,13 +408,14 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
         setPayments([]);
       })
       .finally(() => setLoadingPayments(false));
-  }, [customer, tab]);
+  }, [customer?.id, tab]);
 
   if (!customer) return null;
 
   const colorIdx = customer.id % avatarColors.length;
   const balance = netCustomerBalance(customer);
   const balanceLabel = balance < 0 ? "رصيد لصالح الزبون" : "الرصيد المتبقي";
+  const shipments = buildCustomerShipments(orders, customer);
 
   const handlePaymentSaved = (newPayment) => {
     const signedAmount = newPayment.direction === "in"
@@ -496,7 +521,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
           <SoftBox>
             <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <SoftTypography variant="caption" color="text">
-                {(customer.orders || []).length} طلبية
+                {orders.length} طلبية
               </SoftTypography>
               <SoftBox display="flex" gap={1}>
                 <SoftButton variant="outlined" color="secondary" size="small" startIcon={<PrintIcon />}
@@ -509,11 +534,19 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
                 </SoftButton>
               </SoftBox>
             </SoftBox>
-            {(!customer.orders || customer.orders.length === 0) ? (
+            {loadingOrders && (
+              <SoftTypography variant="body2" color="secondary" textAlign="center" py={2}>جارٍ تحميل الطلبيات...</SoftTypography>
+            )}
+            {ordersError && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError("")}>
+                {ordersError}
+              </Alert>
+            )}
+            {!loadingOrders && orders.length === 0 ? (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
                 لا توجد طلبيات مسجلة
               </SoftTypography>
-            ) : customer.orders.map((o) => {
+            ) : orders.map((o) => {
               const amount = o.totalAmount || o.amount || 0;
               const paid = o.paidAmount || o.paid || 0;
               const remaining = amount - paid;
@@ -640,25 +673,45 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
             <Divider />
             <SoftBox mt={2}>
               <SoftTypography variant="caption" color="secondary" fontWeight="bold" display="block" mb={1}>
-                سجل الشحنات
+                سجل الشحنات ({shipments.length})
               </SoftTypography>
-              {(customer.shipments || []).length === 0 ? (
+              {loadingOrders && (
+                <SoftTypography variant="body2" color="secondary" textAlign="center" py={2}>
+                  جارٍ تحميل الشحنات...
+                </SoftTypography>
+              )}
+              {ordersError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setOrdersError("")}>
+                  {ordersError}
+                </Alert>
+              )}
+              {!loadingOrders && shipments.length === 0 ? (
                 <SoftTypography variant="body2" color="secondary" textAlign="center" py={3}>
                   لا توجد شحنات مسجلة لهذا الزبون
                 </SoftTypography>
-              ) : (customer.shipments || []).map((s) => (
-                <SoftBox key={s.id || s.invoice} mb={1} p={1.5}
+              ) : shipments.map((s) => (
+                <SoftBox key={s.id || s.invoiceNumber} mb={1} p={1.5}
                   sx={{ background: "#f8f9fa", borderRadius: 1.5, border: "1px solid #e9ecef" }}>
-                  <SoftBox display="flex" justifyContent="space-between">
+                  <SoftBox display="flex" justifyContent="space-between" gap={2} alignItems="flex-start">
                     <SoftBox>
-                      <SoftTypography variant="caption" fontWeight="bold">{s.invoiceNumber || s.invoice}</SoftTypography>
+                      <SoftTypography variant="caption" fontWeight="bold">
+                        {s.invoiceNumber}
+                      </SoftTypography>
                       <SoftTypography variant="caption" color="secondary" display="block">
-                        {s.date} | السائق: {s.driverName || s.driver || "—"}
+                        {s.date} | المسار: {s.route || "—"} | البائع: {s.salesperson || "—"}
+                      </SoftTypography>
+                      <SoftTypography variant="caption" color="secondary" display="block">
+                        {s.itemsCount} سطر | الكمية المشحونة: {s.quantity.toLocaleString("fr-DZ")}
                       </SoftTypography>
                     </SoftBox>
-                    <SoftBadge variant="gradient"
-                      color={s.status === "delivered" || s.status === "مسلّمة" ? "success" : "info"}
-                      size="xs" badgeContent={s.status === "delivered" ? "مسلّمة" : s.status || "في الطريق"} container />
+                    <SoftBox textAlign="left">
+                      <SoftBadge variant="gradient"
+                        color={s.statusColor}
+                        size="xs" badgeContent={s.statusLabel} container />
+                      <SoftTypography variant="caption" color="text" display="block" mt={0.5}>
+                        <MoneyAmount value={s.amount} />
+                      </SoftTypography>
+                    </SoftBox>
                   </SoftBox>
                 </SoftBox>
               ))}

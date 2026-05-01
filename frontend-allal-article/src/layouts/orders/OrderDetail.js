@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
-import { ordersApi } from "services";
+import { ordersApi, returnsApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 
 import Card from "@mui/material/Card";
@@ -45,6 +45,7 @@ function normalize(apiOrder) {
   return {
     id: apiOrder.orderNumber,
     _id: apiOrder.id,
+    customerId: apiOrder.customerId,
     customer: apiOrder.customerName ?? "—",
     customerPhone: apiOrder.customerPhone ?? "—",
     customerAddress: apiOrder.customerAddress ?? "—",
@@ -58,6 +59,7 @@ function normalize(apiOrder) {
     shippedAt: apiOrder.shippedAt ? apiOrder.shippedAt.slice(0, 10) : null,
     lines: (apiOrder.items ?? []).map((item) => ({
       id: item.id,
+      productId: item.productId,
       product: item.productName ?? "—",
       code: item.productSku ?? "—",
       requestedQty: item.requestedQty ?? 0,
@@ -231,6 +233,9 @@ function OrderDetail() {
   const [draftLines, setDraftLines] = useState([]);
   const [editMode, setEditMode] = useState(false);
   const [returnDialog, setReturnDialog] = useState(false);
+  const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnNote, setReturnNote] = useState("");
+  const [returnSaving, setReturnSaving] = useState(false);
   const [activity, setActivity] = useState([]);
   const [actionSaving, setActionSaving] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -293,6 +298,16 @@ function OrderDetail() {
   const canCancelOrder = !["shipped", "completed", "cancelled", "rejected"].includes(orderStatus);
   const primaryAction = orderActionFlow[orderStatus];
   const displayedLines = editMode ? draftLines : orderLines;
+  const returnableLines = orderLines.filter(
+    (line) => Number(line.shippedQty || 0) > Number(line.returnedQty || 0)
+  );
+  const returnDraftItems = returnableLines
+    .map((line) => {
+      const available = Math.max(0, Number(line.shippedQty || 0) - Number(line.returnedQty || 0));
+      const qty = clampQty(returnQuantities[line.id] || 0, available);
+      return { line, qty };
+    })
+    .filter((item) => item.qty > 0);
 
   const startEdit = () => {
     setDraftLines(orderLines.map((line) => ({ ...line, _touched: false })));
@@ -302,6 +317,65 @@ function OrderDetail() {
   const cancelEdit = () => {
     setDraftLines([]);
     setEditMode(false);
+  };
+
+  const openReturnDialog = () => {
+    setActionError("");
+    setReturnQuantities({});
+    setReturnNote("");
+    setReturnDialog(true);
+  };
+
+  const closeReturnDialog = () => {
+    if (returnSaving) return;
+    setReturnDialog(false);
+    setReturnQuantities({});
+    setReturnNote("");
+  };
+
+  const setReturnQty = (line, value) => {
+    const available = Math.max(0, Number(line.shippedQty || 0) - Number(line.returnedQty || 0));
+    setReturnQuantities((current) => ({ ...current, [line.id]: clampQty(value, available) }));
+  };
+
+  const registerReturn = async () => {
+    if (returnDraftItems.length === 0) {
+      setActionError("حدد كمية مرتجع واحدة على الأقل");
+      return;
+    }
+
+    setReturnSaving(true);
+    setActionError("");
+    try {
+      const returnRes = await returnsApi.create({
+        orderId: order._id,
+        customerId: order.customerId || null,
+        returnDate: new Date().toISOString().slice(0, 10),
+        notes: returnNote.trim() || null,
+        items: returnDraftItems.map(({ line, qty }) => ({
+          productId: line.productId,
+          orderItemId: line.id,
+          qty,
+          conditionStatus: "usable",
+          notes: returnNote.trim() || null,
+        })),
+      });
+
+      const created = returnRes.data;
+      const acceptedQtyByItemId = {};
+      (created.items || []).forEach((item) => {
+        acceptedQtyByItemId[item.id] = item.returnedQty || 0;
+      });
+      await returnsApi.accept(created.id, { acceptedQtyByItemId, warehouseId: null });
+      setReturnDialog(false);
+      setReturnQuantities({});
+      setReturnNote("");
+      loadOrder();
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, "تعذر تسجيل المرتجع"));
+    } finally {
+      setReturnSaving(false);
+    }
   };
 
   const updateDraftLine = (lineId, updater) => {
@@ -392,7 +466,9 @@ function OrderDetail() {
         await ordersApi.cancel(id, adminNote.trim() || undefined);
       } else if (action === "draft") {
         await ordersApi.submit(id);
-      } else if (action === "submitted" || action === "under_review") {
+      } else if (action === "submitted") {
+        await ordersApi.review(id);
+      } else if (action === "under_review") {
         await ordersApi.confirm(id, {});
       } else if (action === "confirmed") {
         await ordersApi.ship(id);
@@ -503,7 +579,7 @@ function OrderDetail() {
                     color="warning"
                     size="small"
                     startIcon={<AssignmentReturnIcon />}
-                    onClick={() => setReturnDialog(true)}
+                    onClick={openReturnDialog}
                   >
                     إنشاء مرتجع
                   </SoftButton>
@@ -841,7 +917,7 @@ function OrderDetail() {
         </Grid>
       </SoftBox>
 
-      <Dialog open={returnDialog} onClose={() => setReturnDialog(false)} maxWidth="md" fullWidth>
+      <Dialog open={returnDialog} onClose={closeReturnDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           <SoftTypography variant="h6" fontWeight="bold">
             إنشاء مرتجع - {order.id}
@@ -851,6 +927,11 @@ function OrderDetail() {
           <SoftTypography variant="body2" color="text" mb={2}>
             حدد كميات المرتجع لكل صنف. لا يمكن إدخال كمية أكبر من الكمية المشحونة.
           </SoftTypography>
+          {actionError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setActionError("")}>
+              {actionError}
+            </Alert>
+          )}
           <SoftBox sx={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
@@ -865,7 +946,9 @@ function OrderDetail() {
                 </tr>
               </thead>
               <tbody>
-                {orderLines.filter((line) => line.shippedQty > 0).map((line) => (
+                {returnableLines.map((line) => {
+                  const available = Math.max(0, Number(line.shippedQty || 0) - Number(line.returnedQty || 0));
+                  return (
                   <tr key={line.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                     <td style={{ padding: "8px 12px" }}>
                       <SoftTypography variant="caption" fontWeight="bold">
@@ -879,22 +962,28 @@ function OrderDetail() {
                       <SoftTypography variant="caption" fontWeight="bold">
                         {line.shippedQty}
                       </SoftTypography>
+                      {Number(line.returnedQty || 0) > 0 && (
+                        <SoftTypography variant="caption" color="secondary" display="block">
+                          مرتجع سابق: {line.returnedQty}
+                        </SoftTypography>
+                      )}
                     </td>
                     <td style={{ padding: "8px 12px" }}>
                       <TextField
                         type="number"
                         size="small"
-                        defaultValue={0}
+                        value={returnQuantities[line.id] || ""}
+                        onChange={(event) => setReturnQty(line, event.target.value)}
                         inputProps={{
                           min: 0,
-                          max: line.shippedQty,
+                          max: available,
                           style: { padding: "4px 8px", width: 80 },
                         }}
-                        helperText={`الحد الأقصى: ${line.shippedQty}`}
+                        helperText={`الحد الأقصى: ${available}`}
                       />
                     </td>
                   </tr>
-                ))}
+                );})}
               </tbody>
             </table>
           </SoftBox>
@@ -902,7 +991,7 @@ function OrderDetail() {
             <Grid item xs={12} sm={6}>
               <FormControl size="small" fullWidth>
                 <InputLabel>السائق الذي شحن المرتجع</InputLabel>
-                <Select defaultValue="" label="السائق الذي شحن المرتجع">
+                <Select defaultValue="" label="السائق الذي شحن المرتجع" disabled>
                   {["حمزة بلقاسم", "كريم بوزيد", "يوسف منصوري", "عمر زياني"].map((d) => (
                     <MenuItem key={d} value={d}>
                       {d}
@@ -914,7 +1003,7 @@ function OrderDetail() {
             <Grid item xs={12} sm={6}>
               <FormControl size="small" fullWidth>
                 <InputLabel>من استلمه في الإدارة</InputLabel>
-                <Select defaultValue="" label="من استلمه في الإدارة">
+                <Select defaultValue="" label="من استلمه في الإدارة" disabled>
                   {["أحمد محمد", "خالد عمر", "محمد سعيد", "يوسف علي"].map((e) => (
                     <MenuItem key={e} value={e}>
                       {e}
@@ -924,16 +1013,30 @@ function OrderDetail() {
               </FormControl>
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth size="small" label="ملاحظات المرتجع" multiline rows={2} />
+              <TextField
+                fullWidth
+                size="small"
+                label="ملاحظات المرتجع"
+                multiline
+                rows={2}
+                value={returnNote}
+                onChange={(event) => setReturnNote(event.target.value)}
+              />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setReturnDialog(false)}>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={closeReturnDialog} disabled={returnSaving}>
             إلغاء
           </SoftButton>
-          <SoftButton variant="gradient" color="warning" size="small" onClick={() => setReturnDialog(false)}>
-            تسجيل المرتجع
+          <SoftButton
+            variant="gradient"
+            color="warning"
+            size="small"
+            disabled={returnSaving || returnDraftItems.length === 0}
+            onClick={registerReturn}
+          >
+            {returnSaving ? "جارٍ التسجيل..." : "تسجيل المرتجع"}
           </SoftButton>
         </DialogActions>
       </Dialog>

@@ -44,6 +44,7 @@ import { getApiErrorMessage } from "utils/formErrors";
 const actionConfig = {
   create_order:   { label: "إنشاء طلبية",     color: "#17c1e8", Icon: AddShoppingCartIcon },
   submit_order:   { label: "إرسال طلبية",     color: "#17c1e8", Icon: AddShoppingCartIcon },
+  review_order:   { label: "قيد مراجعة",      color: "#fb8c00", Icon: EditIcon },
   confirm_order:  { label: "تأكيد طلبية",     color: "#66BB6A", Icon: CheckCircleIcon },
   complete_order: { label: "إنجاز طلبية",     color: "#344767", Icon: AssignmentTurnedInIcon },
   reject_order:   { label: "رفض طلبية",       color: "#ea0606", Icon: CancelIcon },
@@ -56,6 +57,15 @@ const actionConfig = {
   product_price_changed: { label: "تغيير سعر", color: "#fb8c00", Icon: PriceChangeIcon },
   ship_order:     { label: "شحن طلبية",       color: "#17c1e8", Icon: LocalShippingIcon },
   create_return:  { label: "إنشاء مرتجع",     color: "#ea0606", Icon: AssignmentReturnIcon },
+  accept_return:  { label: "قبول مرتجع",      color: "#66BB6A", Icon: AssignmentReturnIcon },
+  reject_return:  { label: "رفض مرتجع",       color: "#ea0606", Icon: CancelIcon },
+  purchase_order_created: { label: "إنشاء شراء", color: "#17c1e8", Icon: AddShoppingCartIcon },
+  confirm_purchase: { label: "تأكيد شراء",    color: "#66BB6A", Icon: CheckCircleIcon },
+  receive_purchase: { label: "استلام مشتريات", color: "#66BB6A", Icon: InventoryIcon },
+  cancel_purchase: { label: "إلغاء شراء",     color: "#ea0606", Icon: CancelIcon },
+  purchase_return_created: { label: "مرتجع مشتريات", color: "#ea0606", Icon: AssignmentReturnIcon },
+  purchase_return_posted: { label: "ترحيل مرتجع مشتريات", color: "#fb8c00", Icon: AssignmentReturnIcon },
+  purchase_return_cancelled: { label: "إلغاء مرتجع مشتريات", color: "#ea0606", Icon: CancelIcon },
   inventory_adjustment: { label: "تسوية مخزون", color: "#fb8c00", Icon: InventoryIcon },
   stock_transfer: { label: "تحويل مخزون",     color: "#17c1e8", Icon: SwapHorizIcon },
   customer_payment_received: { label: "استلام دفعة", color: "#66BB6A", Icon: PaymentsIcon },
@@ -169,6 +179,7 @@ function AuditLogs() {
 
   const [search, setSearch]       = useState("");
   const [actionFilter, setActionFilter] = useState("");
+  const [dateSort, setDateSort] = useState("desc");
   const [draftSearch, setDraftSearch]   = useState("");
   const [loadError, setLoadError]       = useState("");
 
@@ -178,7 +189,7 @@ function AuditLogs() {
     const setter = newPage === 0 ? setLoading : setLoadingMore;
     setter(true);
     setLoadError("");
-    const params = { page: newPage, size: PAGE_SIZE };
+    const params = { page: newPage, size: PAGE_SIZE, sort: dateSort };
     if (search)       params.search = search;
     if (actionFilter) params.action = actionFilter;
     auditLogsApi.list(params)
@@ -194,7 +205,7 @@ function AuditLogs() {
         if (reset) setLogs([]);
       })
       .finally(() => setter(false));
-  }, [search, actionFilter]);
+  }, [search, actionFilter, dateSort]);
 
   useEffect(() => {
     fetchLogs(0, true);
@@ -208,6 +219,7 @@ function AuditLogs() {
 
   const orderCount   = logs.filter((l) => l.action?.includes("order")).length;
   const paymentCount = logs.filter((l) => l.action?.includes("payment")).length;
+  const returnCount  = logs.filter((l) => l.action?.includes("return")).length;
   const stockCount   = logs.filter((l) => ["inventory_adjustment", "stock_transfer"].includes(l.action)).length;
   const secCount     = logs.filter((l) => ["user_permission_changed", "failed_login"].includes(l.action)).length;
 
@@ -219,6 +231,7 @@ function AuditLogs() {
     setDraftSearch("");
     setSearch("");
     setActionFilter("");
+    setDateSort("desc");
   };
 
   return (
@@ -247,6 +260,7 @@ function AuditLogs() {
             { label: "إجمالي المُحمَّل",   value: logs.length,    color: "info" },
             { label: "عمليات الطلبيات",    value: orderCount,     color: "success" },
             { label: "عمليات الدفعات",     value: paymentCount,   color: "success" },
+            { label: "عمليات الإرجاع",     value: returnCount,    color: "error" },
             { label: "حركات المخزون",      value: stockCount,     color: "warning" },
             { label: "أمن وصلاحيات",       value: secCount,       color: "dark" },
           ].map((s) => (
@@ -339,6 +353,21 @@ function AuditLogs() {
                 {Object.entries(actionConfig).map(([key, cfg]) => (
                   <MenuItem key={key} value={key}>{cfg.label}</MenuItem>
                 ))}
+              </TextField>
+
+              <SoftTypography variant="caption" color="secondary" fontWeight="bold" mb={0.5} display="block">
+                ترتيب التاريخ
+              </SoftTypography>
+              <TextField
+                fullWidth
+                select
+                size="small"
+                value={dateSort}
+                onChange={(e) => setDateSort(e.target.value)}
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value="desc">الأحدث أولاً</MenuItem>
+                <MenuItem value="asc">الأقدم أولاً</MenuItem>
               </TextField>
 
               <SoftBox display="flex" gap={1}>

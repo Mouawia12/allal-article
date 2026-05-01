@@ -63,4 +63,12 @@ public class InventoryController {
             Authentication auth) {
         return ResponseEntity.ok(ApiResponse.ok(inventoryService.adjust(req, auth)));
     }
+
+    @PostMapping("/stock/transfer")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.transfer')")
+    public ResponseEntity<ApiResponse<List<StockMovementResponse>>> transfer(
+            @Valid @RequestBody StockTransferRequest req,
+            Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.ok(inventoryService.transfer(req, auth)));
+    }
 }

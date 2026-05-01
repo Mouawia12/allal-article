@@ -264,20 +264,23 @@ export default function App() {
   // Owner dashboard: standalone shell — render outside the tenant Sidenav/theme wrappers
   if (pathname.startsWith("/owner")) {
     return (
-      <OwnerAuthProvider>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/owner/login" element={<OwnerLogin />} />
-            <Route path="/owner/dashboard"     element={<OwnerPrivateRoute><OwnerDashboard /></OwnerPrivateRoute>} />
-            <Route path="/owner/tenants"       element={<OwnerPrivateRoute><OwnerTenants /></OwnerPrivateRoute>} />
-            <Route path="/owner/plans"         element={<OwnerPrivateRoute><OwnerPlans /></OwnerPrivateRoute>} />
-            <Route path="/owner/revenue"       element={<OwnerPrivateRoute><OwnerRevenue /></OwnerPrivateRoute>} />
-            <Route path="/owner/notifications" element={<OwnerPrivateRoute><OwnerNotifications /></OwnerPrivateRoute>} />
-            <Route path="/owner/support"       element={<OwnerPrivateRoute><OwnerSupport /></OwnerPrivateRoute>} />
-            <Route path="/owner/*"             element={<Navigate to="/owner/login" />} />
-          </Routes>
-        </Suspense>
-      </OwnerAuthProvider>
+      <ThemeProvider theme={direction === "rtl" ? themeRTL : theme}>
+        <CssBaseline />
+        <OwnerAuthProvider>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/owner/login" element={<OwnerLogin />} />
+              <Route path="/owner/dashboard"     element={<OwnerPrivateRoute><OwnerDashboard /></OwnerPrivateRoute>} />
+              <Route path="/owner/tenants"       element={<OwnerPrivateRoute><OwnerTenants /></OwnerPrivateRoute>} />
+              <Route path="/owner/plans"         element={<OwnerPrivateRoute><OwnerPlans /></OwnerPrivateRoute>} />
+              <Route path="/owner/revenue"       element={<OwnerPrivateRoute><OwnerRevenue /></OwnerPrivateRoute>} />
+              <Route path="/owner/notifications" element={<OwnerPrivateRoute><OwnerNotifications /></OwnerPrivateRoute>} />
+              <Route path="/owner/support"       element={<OwnerPrivateRoute><OwnerSupport /></OwnerPrivateRoute>} />
+              <Route path="/owner/*"             element={<Navigate to="/owner/login" />} />
+            </Routes>
+          </Suspense>
+        </OwnerAuthProvider>
+      </ThemeProvider>
     );
   }
 

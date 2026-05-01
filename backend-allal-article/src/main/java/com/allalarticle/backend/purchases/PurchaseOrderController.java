@@ -65,4 +65,13 @@ public class PurchaseOrderController {
     public ResponseEntity<ApiResponse<PurchaseOrderResponse>> cancel(@PathVariable Long id, Authentication auth) {
         return ResponseEntity.ok(ApiResponse.ok(poService.cancel(id, auth)));
     }
+
+    @PostMapping("/{id}/return")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'purchases.receive')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> registerReturn(
+            @PathVariable Long id,
+            @Valid @RequestBody CreatePurchaseReturnRequest req,
+            Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.ok("Purchase return posted", poService.registerReturn(id, req, auth)));
+    }
 }

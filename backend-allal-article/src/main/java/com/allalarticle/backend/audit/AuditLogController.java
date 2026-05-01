@@ -26,10 +26,11 @@ public class AuditLogController {
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
+            @RequestParam(defaultValue = "desc") String sort,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "50") int size
     ) {
         return ResponseEntity.ok(ApiResponse.ok(
-                auditLogService.list(search, entityType, action, from, to, page, size)));
+                auditLogService.list(search, entityType, action, from, to, sort, page, size)));
     }
 }

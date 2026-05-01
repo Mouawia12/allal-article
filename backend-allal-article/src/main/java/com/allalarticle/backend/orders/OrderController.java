@@ -59,6 +59,12 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(orderService.submit(id, auth)));
     }
 
+    @PostMapping("/{id}/review")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'orders.confirm')")
+    public ResponseEntity<ApiResponse<OrderResponse>> review(@PathVariable Long id, Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.ok(orderService.startReview(id, auth)));
+    }
+
     @PostMapping("/{id}/confirm")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'orders.confirm')")
     public ResponseEntity<ApiResponse<OrderResponse>> confirm(

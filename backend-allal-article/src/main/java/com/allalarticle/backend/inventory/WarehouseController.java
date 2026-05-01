@@ -30,7 +30,7 @@ public class WarehouseController {
     }
 
     @PostMapping
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.warehouses.create')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.adjust')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> create(@Valid @RequestBody WarehouseRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Warehouse created", warehouseService.create(req)));
@@ -44,9 +44,15 @@ public class WarehouseController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.warehouses.delete')")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.adjust')")
     public ResponseEntity<Void> deactivate(@PathVariable Long id) {
         warehouseService.deactivate(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/set-default")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'inventory.adjust')")
+    public ResponseEntity<ApiResponse<WarehouseResponse>> setDefault(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(warehouseService.setDefault(id)));
     }
 }

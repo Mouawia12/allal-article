@@ -133,15 +133,30 @@ public class OrderService {
         var order = getOrderForUpdate(orderId);
         requireStatus(order, "draft");
         order.setOrderStatus("submitted");
+        order.setShippingStatus("pending");
         order.setSubmittedAt(OffsetDateTime.now());
         recordEvent(order, "ORDER_SUBMITTED", null, extractUserId(auth));
         return OrderResponse.from(orderRepo.save(order));
     }
 
     @Transactional
+    public OrderResponse startReview(Long orderId, Authentication auth) {
+        var order = getOrderForUpdate(orderId);
+        requireStatus(order, "submitted");
+        Long userId = extractUserId(auth);
+
+        order.setOrderStatus("under_review");
+        order.setShippingStatus("pending");
+        order.setReviewStartedAt(OffsetDateTime.now());
+        order.setReviewedById(userId);
+        recordEvent(order, "ORDER_REVIEW_STARTED", null, userId);
+        return OrderResponse.from(orderRepo.save(order));
+    }
+
+    @Transactional
     public OrderResponse confirm(Long orderId, ConfirmOrderRequest req, Authentication auth) {
         var order = getOrderForUpdate(orderId);
-        requireStatus(order, "submitted", "under_review");
+        requireStatus(order, "under_review");
         Long userId = extractUserId(auth);
 
         // Apply approved quantities (full approval if no overrides provided)
@@ -260,10 +275,17 @@ public class OrderService {
             if (item.getDeletedAt() != null || item.getApprovedQty().compareTo(BigDecimal.ZERO) == 0) continue;
 
             var stockOpt = stockRepo.findForUpdate(item.getProduct().getId(), warehouse.getId());
-            if (stockOpt.isEmpty()) continue;
+            if (stockOpt.isEmpty()) {
+                throw new AppException(ErrorCode.CONFLICT,
+                        "لا يوجد مخزون للصنف: " + item.getProduct().getName(), HttpStatus.CONFLICT);
+            }
             var stock = stockOpt.get();
+            BigDecimal available = safeStockValue(stock.getAvailableQty());
 
-            if (stock.getAvailableQty().compareTo(item.getApprovedQty()) < 0) continue;
+            if (available.compareTo(item.getApprovedQty()) < 0) {
+                throw new AppException(ErrorCode.CONFLICT,
+                        "المخزون غير كاف للصنف: " + item.getProduct().getName(), HttpStatus.CONFLICT);
+            }
 
             stock.setReservedQty(stock.getReservedQty().add(item.getApprovedQty()));
             stock.setAvailableQty(stock.getOnHandQty().subtract(stock.getReservedQty()));
@@ -346,6 +368,10 @@ public class OrderService {
         order.setTotalAmount(total);
     }
 
+    private BigDecimal safeStockValue(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
     private void markCompleted(Order order, Long userId, boolean auto) {
         order.setOrderStatus("completed");
         order.setCompletedAt(OffsetDateTime.now());
@@ -359,6 +385,7 @@ public class OrderService {
     private static final Map<String, String[]> EVENT_TO_AUDIT = Map.of(
             "ORDER_CREATED",        new String[]{"create_order",   "إنشاء طلبية جديدة"},
             "ORDER_SUBMITTED",      new String[]{"submit_order",   "إرسال الطلبية للمراجعة"},
+            "ORDER_REVIEW_STARTED", new String[]{"review_order",   "تسجيل الطلبية قيد المراجعة"},
             "ORDER_CONFIRMED",      new String[]{"confirm_order",  "تأكيد الطلبية"},
             "ORDER_REJECTED",       new String[]{"reject_order",   "رفض الطلبية"},
             "ORDER_SHIPPED",        new String[]{"ship_order",     "شحن الطلبية"},

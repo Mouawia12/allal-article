@@ -81,6 +81,16 @@ function buildSku(code, attrs) {
   return `${code || "PRD"}-${parts}`.slice(0, 20);
 }
 
+function extractList(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.content)) return payload.content;
+  return [];
+}
+
+function joinLoadError(current, message) {
+  return current ? `${current}؛ ${message}` : message;
+}
+
 // ─── Section Card wrapper ─────────────────────────────────────────────────────
 function SectionCard({ icon, title, subtitle, action, accentColor = "#17c1e8", children, sx = {} }) {
   return (
@@ -198,8 +208,8 @@ function BarcodeInput({ value, onChange, label = "الباركود", placeholder
 }
 
 // ─── Units Section ────────────────────────────────────────────────────────────
-function UnitsSection({ units, onChange }) {
-  const unitNames = productSettings.units.map((u) => u.name);
+function UnitsSection({ units, unitOptions, onChange }) {
+  const unitNames = unitOptions.map((u) => u.name);
 
   const update = (id, field, val) =>
     onChange(units.map((u) => (u._id === id ? { ...u, [field]: val } : u)));
@@ -682,6 +692,8 @@ export default function ProductForm() {
   const [images, setImages] = useState(isEdit ? [{ color: "#FF6B6B88" }] : []);
   const [touched, setTouched] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
+  const [catalogCategories, setCatalogCategories] = useState([]);
+  const [catalogUnits, setCatalogUnits] = useState([]);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -689,13 +701,25 @@ export default function ProductForm() {
   useEffect(() => {
     setLoadError("");
     inventoryApi.listWarehouses().then((r) => {
-      const whs = r.data?.content ?? r.data ?? [];
+      const whs = extractList(r.data);
       setWarehouses(whs);
       const def = whs.find((w) => w.isDefault) ?? whs[0];
       if (def) setForm((p) => ({ ...p, initialWarehouseId: def.id }));
     }).catch((error) => {
-      setLoadError(getApiErrorMessage(error, "تعذر تحميل المستودعات"));
+      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل المستودعات")));
       setWarehouses([]);
+    });
+    productsApi.listCategories().then((r) => {
+      setCatalogCategories(extractList(r.data));
+    }).catch((error) => {
+      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل الفئات")));
+      setCatalogCategories([]);
+    });
+    productsApi.listUnits().then((r) => {
+      setCatalogUnits(extractList(r.data));
+    }).catch((error) => {
+      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل وحدات القياس")));
+      setCatalogUnits([]);
     });
     if (isEdit) {
       productsApi.getById(id).then((r) => {
@@ -748,7 +772,7 @@ export default function ProductForm() {
       ...p,
       code: p.code || `AI-${Date.now().toString().slice(-5)}`,
       baseUnit: p.baseUnit || "قطعة",
-      category: p.category || productSettings.categories[0]?.name || "",
+      category: p.category || catalogCategories[0]?.name || "",
       description: p.description || `${name} — منتج عالي الجودة مُولَّد بالذكاء الاصطناعي.`,
       weightPerUnit: p.weightPerUnit || "0.5",
       unitsPerPackage: p.unitsPerPackage || "12",
@@ -769,8 +793,8 @@ export default function ProductForm() {
 
   const handleSave = async () => {
     setTouched(true);
-    const selectedUnit = productSettings.units.find((u) => u.name === form.baseUnit);
-    const selectedCategory = productSettings.categories.find((c) => c.name === form.category);
+    const selectedUnit = catalogUnits.find((u) => u.name === form.baseUnit);
+    const selectedCategory = catalogCategories.find((c) => c.name === form.category);
     const baseUnitPrice = units.find((u) => u.isBase)?.price;
     const unitsPerPackageValue = form.unitsPerPackage === "" ? 1 : Number(form.unitsPerPackage);
     const weightPerUnitValue = form.weightPerUnit === "" ? 0 : Number(form.weightPerUnit);
@@ -820,8 +844,8 @@ export default function ProductForm() {
     }
   };
 
-  const cats   = productSettings.categories.map((c) => c.name);
-  const units_ = productSettings.units.map((u) => u.name);
+  const cats   = catalogCategories.map((c) => c.name);
+  const units_ = catalogUnits.map((u) => u.name);
 
   return (
     <DashboardLayout>
@@ -964,7 +988,7 @@ export default function ProductForm() {
             </SectionCard>
 
             {/* 2 — Units */}
-            <UnitsSection units={units} onChange={setUnits} />
+            <UnitsSection units={units} unitOptions={catalogUnits} onChange={setUnits} />
 
             {/* 3 — Variants */}
             <VariantsSection

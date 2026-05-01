@@ -177,18 +177,21 @@ function SupplierCard({ supplier, onView }) {
 function SupplierDetailDialog({ supplier, onClose, onEdit }) {
   const [tab, setTab] = useState(0);
   const [purchases, setPurchases] = useState([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(false);
   const [purchasesError, setPurchasesError] = useState("");
 
   useEffect(() => {
-    if (!supplier) return;
+    if (!supplier?.id) return;
+    setLoadingPurchases(true);
     setPurchasesError("");
-    purchasesApi.list({ supplier: supplier.name })
+    purchasesApi.list({ supplierId: supplier.id, size: 50 })
       .then((r) => setPurchases((r.data?.content ?? r.data ?? []).map((p) => ({ totalAmount: 0, ...p }))))
       .catch((error) => {
         setPurchasesError(getApiErrorMessage(error, "تعذر تحميل أوامر شراء المورد"));
         setPurchases([]);
-      });
-  }, [supplier]);
+      })
+      .finally(() => setLoadingPurchases(false));
+  }, [supplier?.id]);
 
   if (!supplier) return null;
 
@@ -264,14 +267,19 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
                 {purchasesError}
               </Alert>
             )}
-            {purchases.length === 0 ? (
+            {loadingPurchases && (
+              <SoftTypography variant="body2" color="secondary" textAlign="center" py={2}>جارٍ تحميل أوامر الشراء...</SoftTypography>
+            )}
+            {!loadingPurchases && purchases.length === 0 ? (
               <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>لا توجد أوامر شراء لهذا المورد</SoftTypography>
             ) : purchases.map((purchase) => (
               <SoftBox key={purchase.id} p={1.5} mb={1.2} sx={{ border: "1px solid #e9ecef", borderRadius: 1.5, background: "#f8f9fa" }}>
                 <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                   <SoftBox>
-                    <SoftTypography variant="caption" fontWeight="bold">{purchase.id}</SoftTypography>
-                    <SoftTypography variant="caption" color="secondary" display="block">{purchase.date}</SoftTypography>
+                    <SoftTypography variant="caption" fontWeight="bold">{purchase.poNumber || purchase.id}</SoftTypography>
+                    <SoftTypography variant="caption" color="secondary" display="block">
+                      {purchase.createdAt ? purchase.createdAt.slice(0, 10) : purchase.expectedDate || "—"}
+                    </SoftTypography>
                   </SoftBox>
                   <SoftTypography variant="button" fontWeight="bold">{formatDZD(purchase.totalAmount)} دج</SoftTypography>
                 </SoftBox>

@@ -71,6 +71,7 @@ public class Order {
     private BigDecimal totalWeight = BigDecimal.ZERO;
 
     @Column(name = "created_by") private Long createdById;
+    @Column(name = "reviewed_by") private Long reviewedById;
     @Column(name = "confirmed_by") private Long confirmedById;
     @Column(name = "shipped_by") private Long shippedById;
     @Column(name = "completed_by") private Long completedById;
@@ -78,6 +79,7 @@ public class Order {
     @Column(name = "rejected_by") private Long rejectedById;
 
     @Column(name = "submitted_at") private OffsetDateTime submittedAt;
+    @Column(name = "review_started_at") private OffsetDateTime reviewStartedAt;
     @Column(name = "confirmed_at") private OffsetDateTime confirmedAt;
     @Column(name = "shipped_at") private OffsetDateTime shippedAt;
     @Column(name = "completed_at") private OffsetDateTime completedAt;

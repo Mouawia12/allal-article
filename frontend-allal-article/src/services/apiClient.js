@@ -29,7 +29,10 @@ apiClient.interceptors.response.use(
   },
   (error) => {
     const url = error.config?.url ?? "";
-    if (error.response?.status === 401 && !url.includes("/auth/login")) {
+    const status = error.response?.status;
+    const emptyForbiddenResponse = status === 403 && !error.response?.data;
+    const staleTenantSession = status === 401 || emptyForbiddenResponse;
+    if (staleTenantSession && !url.includes("/auth/login")) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       localStorage.removeItem("tenantId");

@@ -3,6 +3,7 @@ import apiClient from "./apiClient";
 export const productsApi = {
   list: (params) => apiClient.get("/api/products", { params }),
   getById: (id) => apiClient.get(`/api/products/${id}`),
+  getPriceHistory: (id) => apiClient.get(`/api/products/${id}/price-history`),
   create: (data) => apiClient.post("/api/products", data),
   update: (id, data) => apiClient.put(`/api/products/${id}`, data),
   delete: (id) => apiClient.delete(`/api/products/${id}`),

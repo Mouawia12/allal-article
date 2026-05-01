@@ -61,8 +61,16 @@ import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumbe
 import { useI18n } from "i18n";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const getPriceListsFor = () => [];
-const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
-import { ordersApi, customersApi, productsApi, usersApi } from "services";
+import { ordersApi, customersApi, productsApi, usersApi, inventoryApi } from "services";
+import {
+  clampSalesQty,
+  extractArray,
+  getAvailableStock,
+  isOutOfStock,
+  normalizeProductsForOrder,
+  resolveProductPrice,
+  validateSalesQuantity,
+} from "utils/orderProductData";
 import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
 import demoToolsImage from "assets/images/products/demo-tools.jpg";
 import demoCablesImage from "assets/images/products/demo-cables.jpg";
@@ -161,11 +169,13 @@ function isTypingContext(target) {
 }
 
 function getOrderProductStatus(product) {
-  if (product.stock === 0) {
+  const availableStock = getAvailableStock(product);
+
+  if (availableStock <= 0) {
     return { label: "نفذ المخزون", color: "error" };
   }
 
-  if (product.stock < 50) {
+  if (availableStock < 50) {
     return { label: "مخزون منخفض", color: "warning" };
   }
 
@@ -187,8 +197,9 @@ function ProductCard({
   cardRef,
 }) {
   const inCart = !!cartItem;
-  const outOfStock = product.stock === 0;
-  const lowStock = product.stock > 0 && product.stock < 50;
+  const availableStock = getAvailableStock(product);
+  const outOfStock = isOutOfStock(product);
+  const lowStock = availableStock > 0 && availableStock < 50;
 
   return (
     <Card
@@ -299,9 +310,9 @@ function ProductCard({
         {outOfStock ? (
           <Chip label="نفذ المخزون" size="small" color="error" sx={{ height: 20, fontSize: 11 }} />
         ) : lowStock ? (
-          <Chip label={`مخزون منخفض: ${product.stock}`} size="small" color="warning" sx={{ height: 20, fontSize: 11 }} />
+          <Chip label={`مخزون منخفض: ${availableStock}`} size="small" color="warning" sx={{ height: 20, fontSize: 11 }} />
         ) : (
-          <Chip label={`${product.stock} ${product.unit}`} size="small" color="success" sx={{ height: 20, fontSize: 11 }} />
+          <Chip label={`${availableStock} ${product.unit}`} size="small" color="success" sx={{ height: 20, fontSize: 11 }} />
         )}
       </SoftBox>
 
@@ -371,7 +382,8 @@ function ProductListRow({
   onRemove,
 }) {
   const inCart = !!cartItem;
-  const outOfStock = product.stock === 0;
+  const availableStock = getAvailableStock(product);
+  const outOfStock = isOutOfStock(product);
   const status = getOrderProductStatus(product);
 
   return (
@@ -434,7 +446,7 @@ function ProductListRow({
       </td>
       <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
         <SoftTypography variant="caption" fontWeight="bold" color={outOfStock ? "error" : "success"}>
-          {product.stock}
+          {availableStock}
         </SoftTypography>
       </td>
       <td style={{ padding: "12px 14px", textAlign: "center", whiteSpace: "nowrap" }}>
@@ -548,20 +560,20 @@ function NewOrder() {
 
   useEffect(() => {
     setLoadError("");
-    productsApi.list().then((r) => {
-      const all = r.data?.content ?? r.data ?? [];
-      const mapped = all.map((p) => ({
-        id: p.id,
-        name: p.name ?? p.nameAr,
-        code: p.code ?? p.id,
-        category: p.category ?? "عام",
-        stock: p.stock ?? 0,
-        unit: p.unit ?? "وحدة",
-        color: "#17c1e8",
-        weightPerUnit: p.weightPerUnit ?? 0,
-        unitsPerPackage: p.unitsPerPackage ?? 1,
-        packageUnit: p.packageUnit ?? "وحدة",
-      }));
+    Promise.all([
+      productsApi.list({ size: 500 }),
+      inventoryApi.listStock({ size: 1000 }).catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل المخزون");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        return { data: [] };
+      }),
+    ]).then(([productsResponse, stockResponse]) => {
+      const mapped = normalizeProductsForOrder(
+        extractArray(productsResponse.data),
+        extractArray(stockResponse.data)
+      );
       setApiProducts(mapped);
       if (mapped.length) setSelectedProductId(mapped[0].id);
     }).catch((error) => {
@@ -591,17 +603,19 @@ function NewOrder() {
     });
   }, []);
 
-  const normalizeQty = (value) => {
+  const normalizeQty = (value, product = null) => {
     const digitsOnly = String(value ?? "").replace(/[^\d]/g, "");
 
     if (!digitsOnly) return "1";
 
-    const normalized = String(Math.max(1, Number(digitsOnly)));
+    const normalized = product
+      ? String(clampSalesQty(product, digitsOnly))
+      : String(Math.max(1, Number(digitsOnly)));
 
     return normalized;
   };
 
-  const parsedQty = Math.max(1, Number(normalizeQty(qtyInput)));
+  const parsedQty = Math.max(1, Number(normalizeQty(qtyInput, qtyDialog?.product)));
 
   const keypadButtons = [
     ["7", "8", "9"],
@@ -653,6 +667,13 @@ function NewOrder() {
   }, [newCustomerDialog, qtyDialog, selectedProductId, successDialog]);
 
   const openAddDialog = (product) => {
+    if (isOutOfStock(product)) {
+      setOrderErrors((current) => ({
+        ...current,
+        [`cart-${product.id}-qty`]: "نفذ المخزون لهذا الصنف",
+      }));
+      return;
+    }
     const step = product.hasVariants && product.variants?.length ? "variant" : "quantity";
     setQtyDialog({ product, isEdit: false, step, selectedVariant: null });
     setQtyInput("1");
@@ -669,7 +690,15 @@ function NewOrder() {
     if (!qtyDialog) return;
     if (qtyDialog.step === "variant") return; // should not be called before variant is picked
     if (qtyDialog.product.hasVariants && !qtyDialog.selectedVariant) return;
-    const nextQty = Math.max(1, Number(normalizeQty(rawQty)));
+    const stockError = validateSalesQuantity(qtyDialog.product, normalizeQty(rawQty));
+    if (stockError) {
+      setOrderErrors((current) => ({
+        ...current,
+        [`cart-${qtyDialog.product.id}-qty`]: stockError,
+      }));
+      return;
+    }
+    const nextQty = clampSalesQty(qtyDialog.product, normalizeQty(rawQty));
     const cartKey = qtyDialog.product.hasVariants
       ? `${qtyDialog.product.id}__${qtyDialog.selectedVariant.id}`
       : qtyDialog.product.id;
@@ -691,12 +720,12 @@ function NewOrder() {
 
   const handleQtyChange = (value) => {
     const digitsOnly = value.replace(/[^\d]/g, "");
-    setQtyInput(digitsOnly);
+    setQtyInput(digitsOnly && qtyDialog?.product ? normalizeQty(digitsOnly, qtyDialog.product) : digitsOnly);
     setReplaceQtyOnNextDigit(false);
   };
 
   const handleQtyBlur = () => {
-    setQtyInput(normalizeQty(qtyInput));
+    setQtyInput(normalizeQty(qtyInput, qtyDialog?.product));
   };
 
   const handleQtyKeyDown = (event) => {
@@ -746,16 +775,13 @@ function NewOrder() {
 
     setQtyInput((prev) => {
       const current = prev || "1";
+      const nextValue = replaceQtyOnNextDigit || current === "0" ? key : `${current}${key}`;
 
-      if (replaceQtyOnNextDigit || current === "0") {
-        return key;
-      }
-
-      if (current.length >= 6) {
+      if (!replaceQtyOnNextDigit && current !== "0" && current.length >= 6) {
         return current;
       }
 
-      return `${current}${key}`;
+      return qtyDialog?.product ? normalizeQty(nextValue, qtyDialog.product) : nextValue;
     });
     setReplaceQtyOnNextDigit(false);
   };
@@ -789,6 +815,8 @@ function NewOrder() {
     cartItems.forEach((item) => {
       if (!item.product?.id) validationErrors[`cart-${item.product?.id || "unknown"}-productId`] = t("الصنف مطلوب");
       if (!isPositiveNumber(item.qty)) validationErrors[`cart-${item.product?.id || "unknown"}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
+      const stockError = validateSalesQuantity(item.product, item.qty);
+      if (stockError) validationErrors[`cart-${item.product?.id || "unknown"}-qty`] = stockError;
     });
 
     setOrderErrors(validationErrors);
@@ -1391,11 +1419,12 @@ function NewOrder() {
                   </SoftBox>
                 ) : (
                   <SoftBox px={2.5} py={1}>
-                    {cartItems.map(({ product, qty, willShip }, index) => {
-                      const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
-                      const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
-                      const productError = orderErrors[`cart-${product.id}-productId`];
-                      const qtyError = orderErrors[`cart-${product.id}-qty`];
+	                    {cartItems.map(({ product, qty, willShip }, index) => {
+	                      const priceInfo = resolveProductPrice(product, selectedPriceListId, "sales");
+	                      const lineTotal = Number(qty || 0) * priceInfo.unitPrice;
+	                      const availableStock = getAvailableStock(product);
+	                      const productError = orderErrors[`cart-${product.id}-productId`];
+	                      const qtyError = orderErrors[`cart-${product.id}-qty`];
 
                       return (
                         <SoftBox
@@ -1438,9 +1467,9 @@ function NewOrder() {
 
                           {/* Row 2: code · price · qty controls · ship */}
                           <SoftBox display="flex" alignItems="center" gap={0.75} mt={0.5} flexWrap="wrap">
-                            <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10, whiteSpace: "nowrap" }}>
-                              {product.code} · {formatDZD(priceInfo.unitPrice)} دج
-                            </SoftTypography>
+	                              <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10, whiteSpace: "nowrap" }}>
+	                              {product.code} · {formatDZD(priceInfo.unitPrice)} دج · مخزون {availableStock}
+	                            </SoftTypography>
                             <SoftBox display="flex" alignItems="center" gap={0.25} ml="auto">
                               <IconButton
                                 size="small"
@@ -1462,17 +1491,18 @@ function NewOrder() {
                               >
                                 {qty}
                               </SoftTypography>
-                              <IconButton
-                                size="small"
-                                onClick={() => {
-                                  setOrderErrors((current) => ({ ...current, [`cart-${product.id}-qty`]: "", items: "", _global: "" }));
-                                  setCart(prev => ({
-                                    ...prev,
-                                    [product.id]: { ...prev[product.id], qty: qty + 1 }
-                                  }));
-                                }}
-                                sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
-                              >
+	                              <IconButton
+	                                size="small"
+	                                onClick={() => {
+	                                  setOrderErrors((current) => ({ ...current, [`cart-${product.id}-qty`]: "", items: "", _global: "" }));
+	                                  setCart(prev => ({
+	                                    ...prev,
+	                                    [product.id]: { ...prev[product.id], qty: clampSalesQty(product, Number(qty || 0) + 1) }
+	                                  }));
+	                                }}
+	                                disabled={qty >= availableStock}
+	                                sx={{ border: "1px solid #e0e0e0", p: "2px", borderRadius: 0.75, minWidth: 20 }}
+	                              >
                                 <AddIcon sx={{ fontSize: 11 }} />
                               </IconButton>
                               <SoftTypography variant="caption" color="secondary" sx={{ fontSize: 10, mx: 0.25 }}>
@@ -1657,10 +1687,11 @@ function NewOrder() {
                   onKeyDown={handleQtyKeyDown}
                   autoFocus
                   variant="outlined"
-                  inputProps={{
-                    inputMode: "numeric",
-                    pattern: "[0-9]*",
-                    style: {
+	                  inputProps={{
+	                    inputMode: "numeric",
+	                    pattern: "[0-9]*",
+	                    max: getAvailableStock(qtyDialog.product) || undefined,
+	                    style: {
                       textAlign: "center",
                       fontSize: 24,
                       fontWeight: "bold",
@@ -1675,13 +1706,14 @@ function NewOrder() {
                     },
                   }}
                 />
-                <IconButton
-                  onClick={() => {
-                    setQtyInput(String(parsedQty + 1));
-                    setReplaceQtyOnNextDigit(false);
-                  }}
-                  sx={{ border: "2px solid #17c1e8", p: 1 }}
-                >
+	                <IconButton
+	                  onClick={() => {
+	                    setQtyInput(String(clampSalesQty(qtyDialog.product, parsedQty + 1)));
+	                    setReplaceQtyOnNextDigit(false);
+	                  }}
+	                  disabled={parsedQty >= getAvailableStock(qtyDialog.product)}
+	                  sx={{ border: "2px solid #17c1e8", p: 1 }}
+	                >
                   <AddIcon />
                 </IconButton>
               </SoftBox>
@@ -1722,9 +1754,9 @@ function NewOrder() {
                   <SoftTypography variant="caption" color="secondary">
                     الوحدة: <strong>{qtyDialog.product.unit}</strong>
                   </SoftTypography>
-                  <SoftTypography variant="caption" color="secondary">
-                    المخزون المتاح: <strong>{qtyDialog.product.stock}</strong>
-                  </SoftTypography>
+	                  <SoftTypography variant="caption" color="secondary">
+	                    المخزون المتاح: <strong>{getAvailableStock(qtyDialog.product)}</strong>
+	                  </SoftTypography>
                 </SoftBox>
                 {qtyDialog.product.unitsPerPackage > 0 && (
                   <SoftBox display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
@@ -1753,7 +1785,13 @@ function NewOrder() {
               <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setQtyDialog(null)}>
                 إلغاء
               </SoftButton>
-              <SoftButton variant="gradient" color="info" size="small" onClick={() => confirmQty()}>
+              <SoftButton
+                variant="gradient"
+                color="info"
+                size="small"
+                onClick={() => confirmQty()}
+                disabled={isOutOfStock(qtyDialog.product)}
+              >
                 {qtyDialog.isEdit ? "تحديث" : "إضافة للسلة"}
               </SoftButton>
             </DialogActions>

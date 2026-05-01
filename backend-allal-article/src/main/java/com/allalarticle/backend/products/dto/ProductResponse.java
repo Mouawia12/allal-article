@@ -24,7 +24,8 @@ public record ProductResponse(
         BigDecimal minStockQty,
         String description,
         String status,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
     public static ProductResponse from(Product p) {
         var cat  = p.getCategory();
@@ -38,7 +39,7 @@ public record ProductResponse(
                 unit != null ? unit.getSymbol(): null,
                 p.getBarcode(), p.isHasVariants(), p.getUnitsPerPackage(),
                 p.getCurrentPriceAmount(), p.getPriceCurrency(),
-                p.getMinStockQty(), p.getDescription(), p.getStatus(), p.getCreatedAt()
+                p.getMinStockQty(), p.getDescription(), p.getStatus(), p.getCreatedAt(), p.getUpdatedAt()
         );
     }
 }

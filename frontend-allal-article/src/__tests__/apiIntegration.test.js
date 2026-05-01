@@ -13,6 +13,9 @@ import {
 } from "utils/formErrors";
 import { decodeJwtPayload } from "utils/jwt";
 import { generateInviteCode } from "utils/inviteCodes";
+import { buildCustomerShipments } from "utils/customerShipments";
+import { formatCatalogPrice, normalizeCatalogProducts } from "utils/productCatalog";
+import { calculateProductStockMetrics, getProductOrderQty } from "utils/productStockMetrics";
 import { getOrderFormVariant } from "utils/roles";
 
 // Test that apiClient unwraps ApiResponse correctly
@@ -96,6 +99,105 @@ test("inventory hydrateStockLines normalizes API field names", () => {
   expect(result[0].reserved).toBe(20);
   expect(result[0].available).toBe(80);
   expect(result[0].warehouseName).toBe("المستودع الرئيسي");
+});
+
+test("product detail stock metrics subtract unconfirmed order quantities", () => {
+  const metrics = calculateProductStockMetrics(
+    [{ onHandQty: 100, reservedQty: 50, availableQty: 50 }],
+    [
+      { orderStatus: "draft", items: [{ productId: 1, requestedQty: 20 }] },
+      { orderStatus: "draft", items: [{ productId: 1, requestedQty: 3 }] },
+      { orderStatus: "submitted", items: [{ productId: 1, requestedQty: 2 }] },
+      { orderStatus: "confirmed", items: [{ productId: 1, requestedQty: 50 }] },
+      { orderStatus: "draft", items: [{ productId: 2, requestedQty: 99 }] },
+    ],
+    1
+  );
+
+  expect(metrics.pending).toBe(25);
+  expect(metrics.projected).toBe(25);
+});
+
+test("product detail related order quantity reads backend requestedQty", () => {
+  const qty = getProductOrderQty({
+    items: [
+      { productId: 1, requestedQty: "5.5" },
+      { productId: 1, requestedQty: 3, cancelledQty: 1 },
+      { productId: 2, requestedQty: 10 },
+    ],
+  }, 1);
+
+  expect(qty).toBe(7.5);
+});
+
+test("product catalog cards use backend price and inventory stock fields", () => {
+  const products = [{
+    id: 1,
+    sku: "AI-72878",
+    name: "صنف تجريبي",
+    categoryName: null,
+    baseUnitSymbol: "قطعة",
+    currentPriceAmount: "1200.00",
+    minStockQty: "10",
+    updatedAt: "2026-04-29T13:20:00Z",
+  }];
+  const stockRows = [{
+    productId: 1,
+    onHandQty: "100",
+    reservedQty: "50",
+    pendingQty: "0",
+    availableQty: "50",
+    projectedQty: "50",
+  }];
+
+  const [product] = normalizeCatalogProducts(products, stockRows);
+
+  expect(product.code).toBe("AI-72878");
+  expect(product.category).toBe("غير مصنف");
+  expect(product.unit).toBe("قطعة");
+  expect(product.price).toBe(1200);
+  expect(product.onHand).toBe(100);
+  expect(product.reserved).toBe(50);
+  expect(product.available).toBe(50);
+  expect(formatCatalogPrice(product.price)).toBe("1.200 دج");
+});
+
+test("product catalog price formatter avoids NaN labels", () => {
+  expect(formatCatalogPrice(undefined)).toBe("غير محدد");
+});
+
+test("customer shipment history comes from shipped and completed orders", () => {
+  const shipments = buildCustomerShipments([
+    {
+      id: 1,
+      orderNumber: "ORD-1",
+      orderStatus: "completed",
+      shippingStatus: "shipped",
+      totalAmount: "3000",
+      shippedAt: "2026-04-29T08:00:00Z",
+      salesUserName: "معاوية",
+      items: [{ requestedQty: 10, approvedQty: 8, shippedQty: 8 }],
+    },
+    {
+      id: 2,
+      orderNumber: "ORD-2",
+      orderStatus: "confirmed",
+      shippingStatus: "pending",
+      totalAmount: "2000",
+      items: [{ requestedQty: 5, approvedQty: 5 }],
+    },
+  ], { shippingRoute: "oran", salesperson: "كمال" });
+
+  expect(shipments).toHaveLength(1);
+  expect(shipments[0]).toMatchObject({
+    invoiceNumber: "ORD-1",
+    status: "delivered",
+    statusLabel: "مكتملة",
+    route: "oran",
+    salesperson: "معاوية",
+    amount: 3000,
+    quantity: 8,
+  });
 });
 
 test("periodDates returns correct date range for month", () => {

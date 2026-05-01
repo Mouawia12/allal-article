@@ -5,6 +5,11 @@ import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
 import { productsApi, inventoryApi, ordersApi, priceListsApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
+import {
+  calculateProductStockMetrics,
+  getOrderStatus,
+  getProductOrderQty,
+} from "utils/productStockMetrics";
 
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
@@ -39,6 +44,24 @@ function formatPrice(value) {
   return `${new Intl.NumberFormat("ar-DZ").format(value)} دج`;
 }
 
+function formatDateTime(value) {
+  if (!value) return "—";
+  return value.slice(0, 16).replace("T", " ");
+}
+
+function extractPageContent(data) {
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
+function priceHistorySource(row) {
+  if (row.sourceType === "product_create") return { label: "إنشاء الصنف", color: "success" };
+  if (row.sourceType === "current_price_baseline") return { label: "سعر حالي", color: "secondary" };
+  if (row.sourceType === "price_list") return { label: "قائمة أسعار", color: "info" };
+  return { label: "السعر الرئيسي", color: "warning" };
+}
+
 // ─── Stock Metric Card ────────────────────────────────────────────────────────
 function StockMetric({ label, value, unit, color, subtext }) {
   return (
@@ -71,15 +94,19 @@ function ProductDetail() {
   const [stockLines, setStockLines] = useState([]);
   const [movements, setMovements] = useState([]);
   const [relatedOrders, setRelatedOrders] = useState([]);
+  const [priceHistoryRows, setPriceHistoryRows] = useState([]);
   const [priceListRows, setPriceListRows] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [relatedOrdersError, setRelatedOrdersError] = useState("");
+  const [priceHistoryError, setPriceHistoryError] = useState("");
   const [priceListError, setPriceListError] = useState("");
   const { isFavorite, toggleFavorite } = useProductFavorites();
 
   const load = useCallback(() => {
     setLoading(true);
     setLoadError("");
+    setRelatedOrdersError("");
+    setPriceHistoryError("");
     setPriceListError("");
     Promise.all([
       productsApi.getById(id),
@@ -89,9 +116,30 @@ function ProductDetail() {
         setPriceListError(getApiErrorMessage(error, "تعذر تحميل قوائم الأسعار"));
         return { data: [] };
       }),
+      ordersApi.list({ size: 500 }).catch((error) => {
+        setRelatedOrdersError(getApiErrorMessage(error, "تعذر تحميل الطلبيات المرتبطة"));
+        return { data: [] };
+      }),
+      productsApi.getPriceHistory(id).catch((error) => {
+        setPriceHistoryError(getApiErrorMessage(error, "تعذر تحميل سجل الأسعار"));
+        return { data: [] };
+      }),
     ])
-      .then(([pRes, sRes, mRes, plRes]) => {
+      .then(([pRes, sRes, mRes, plRes, oRes, phRes]) => {
         const p = pRes.data;
+        const historyRows = extractPageContent(phRes.data).map((h) => ({
+          id: h.id,
+          previousPrice: h.previousPriceAmount == null ? null : Number(h.previousPriceAmount),
+          newPrice: Number(h.newPriceAmount ?? 0),
+          currency: h.priceCurrency || "DZD",
+          changedBy: h.changedByName || "—",
+          reason: h.changeReason || "—",
+          sourceType: h.sourceType || "product_update",
+          sourceId: h.sourceId,
+          date: formatDateTime(h.effectiveAt || h.createdAt),
+        }));
+        const latestPriceChange = historyRows[0];
+        setPriceHistoryRows(historyRows);
         setProduct({
           id: p.id,
           name: p.name,
@@ -102,13 +150,25 @@ function ProductDetail() {
           color: "#17c1e8",
           image: null,
           price: Number(p.currentPriceAmount ?? 0),
-          lastPriceUpdatedAt: p.createdAt ? p.createdAt.slice(0, 10) : "—",
-          lastPriceUpdatedBy: "—",
+          lastPriceUpdatedAt: latestPriceChange?.date || (p.createdAt ? p.createdAt.slice(0, 10) : "—"),
+          lastPriceUpdatedBy: latestPriceChange?.changedBy || "—",
           lastUpdated: p.createdAt ? p.createdAt.slice(0, 10) : "—",
           status: p.status,
         });
         const lines = sRes.data ?? [];
         setStockLines(lines);
+        const allOrders = extractPageContent(oRes.data);
+        const related = allOrders
+          .map((o) => ({
+            id: o.id,
+            orderNumber: o.orderNumber || String(o.id),
+            customer: o.customerName || "—",
+            date: o.createdAt ? o.createdAt.slice(0, 10) : "—",
+            qty: getProductOrderQty(o, id),
+            status: getOrderStatus(o),
+          }))
+          .filter((o) => o.qty > 0);
+        setRelatedOrders(related);
         const mov = (mRes.data?.content ?? mRes.data ?? []);
         setMovements(mov.map((m) => ({
           date: m.createdAt ? m.createdAt.slice(0, 10) : "—",
@@ -146,33 +206,6 @@ function ProductDetail() {
       })
       .finally(() => setLoading(false));
   }, [id]);
-
-  useEffect(() => {
-    if (tab === 1) {
-      setRelatedOrdersError("");
-      ordersApi.list({ size: 100 })
-        .then((r) => {
-          const all = Array.isArray(r.data?.content) ? r.data.content
-            : Array.isArray(r.data) ? r.data : [];
-          const related = all.filter((o) =>
-            (o.items || []).some((item) => String(item.productId) === String(id))
-          );
-          setRelatedOrders(related.map((o) => ({
-            id: o.id,
-            orderNumber: o.orderNumber || String(o.id),
-            customer: o.customerName || "—",
-            date: o.createdAt ? o.createdAt.slice(0, 10) : "—",
-            qty: (o.items || []).filter((item) => String(item.productId) === String(id))
-              .reduce((s, item) => s + Number(item.orderedQty ?? item.qty ?? 0), 0),
-            status: o.orderStatus || o.status || "draft",
-          })));
-        })
-        .catch((error) => {
-          setRelatedOrdersError(getApiErrorMessage(error, "تعذر تحميل الطلبيات المرتبطة"));
-          setRelatedOrders([]);
-        });
-    }
-  }, [tab, id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -217,11 +250,8 @@ function ProductDetail() {
   }
 
   const favorite = isFavorite(product.id);
-  const onHand    = stockLines.reduce((s, l) => s + Number(l.onHandQty ?? 0), 0);
-  const reserved  = stockLines.reduce((s, l) => s + Number(l.reservedQty ?? 0), 0);
-  const available = stockLines.reduce((s, l) => s + Number(l.availableQty ?? 0), 0);
-  const stock = { onHand, reserved, available, pending: 0, projected: available };
-  const usedPercent = onHand > 0 ? Math.round((reserved / onHand) * 100) : 0;
+  const stock = calculateProductStockMetrics(stockLines, relatedOrders, id);
+  const usedPercent = stock.onHand > 0 ? Math.round((stock.reserved / stock.onHand) * 100) : 0;
 
   return (
     <DashboardLayout>
@@ -569,9 +599,65 @@ function ProductDetail() {
                       هذا السجل مخصص للبائعين والإدارة لمراجعة آخر تغيرات سعر الصنف ومصدرها.
                     </SoftTypography>
                   </SoftBox>
-                  <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
-                    لا يوجد سجل تغييرات سعر مسجّل لهذا الصنف
-                  </SoftTypography>
+                  {priceHistoryError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {priceHistoryError}
+                    </Alert>
+                  )}
+                  {priceHistoryRows.length === 0 ? (
+                    <SoftTypography variant="body2" color="secondary" textAlign="center" py={4}>
+                      لا يوجد سجل تغييرات سعر مسجّل لهذا الصنف
+                    </SoftTypography>
+                  ) : (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ background: "#f8f9fa" }}>
+                          {["التاريخ", "السعر السابق", "السعر الجديد", "المصدر", "بواسطة", "السبب"].map((h) => (
+                            <th key={h} style={{ padding: "8px 12px", textAlign: "right" }}>
+                              <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {priceHistoryRows.map((row) => {
+                          const source = priceHistorySource(row);
+                          return (
+                            <tr key={row.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftTypography variant="caption" color="secondary">{row.date}</SoftTypography>
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftTypography variant="caption" color="text">
+                                  {row.previousPrice == null ? "—" : formatPrice(row.previousPrice)}
+                                </SoftTypography>
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftTypography variant="caption" fontWeight="bold" color="info">
+                                  {formatPrice(row.newPrice)}
+                                </SoftTypography>
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftBadge
+                                  variant="gradient"
+                                  color={source.color}
+                                  size="xs"
+                                  badgeContent={source.label}
+                                  container
+                                />
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftTypography variant="caption" color="text">{row.changedBy}</SoftTypography>
+                              </td>
+                              <td style={{ padding: "10px 12px" }}>
+                                <SoftTypography variant="caption" color="secondary">{row.reason}</SoftTypography>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </SoftBox>
               )}
 

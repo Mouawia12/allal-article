@@ -5,6 +5,8 @@ import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.customers.CustomerRepository;
 import com.allalarticle.backend.customers.entity.Customer;
 import com.allalarticle.backend.inventory.*;
+import com.allalarticle.backend.inventory.entity.ProductStock;
+import com.allalarticle.backend.inventory.entity.Warehouse;
 import com.allalarticle.backend.orders.dto.ConfirmOrderRequest;
 import com.allalarticle.backend.orders.dto.CreateOrderRequest;
 import com.allalarticle.backend.orders.dto.OrderItemRequest;
@@ -151,6 +153,7 @@ class OrderServiceTest {
         var resp = service.submit(1L, null);
 
         assertThat(resp.orderStatus()).isEqualTo("submitted");
+        assertThat(resp.shippingStatus()).isEqualTo("pending");
     }
 
     @Test
@@ -163,11 +166,36 @@ class OrderServiceTest {
                 .hasMessageContaining("Invalid transition");
     }
 
+    // ── REVIEW ────────────────────────────────────────────────────────────────
+
+    @Test
+    void startReview_fromSubmitted_transitionsToUnderReview() {
+        var order = savedOrder("submitted");
+        when(orderRepo.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(eventRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var resp = service.startReview(1L, null);
+
+        assertThat(resp.orderStatus()).isEqualTo("under_review");
+        assertThat(resp.shippingStatus()).isEqualTo("pending");
+    }
+
+    @Test
+    void startReview_fromDraft_throwsBadRequest() {
+        var order = savedOrder("draft");
+        when(orderRepo.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.startReview(1L, null))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("Invalid transition");
+    }
+
     // ── CONFIRM ───────────────────────────────────────────────────────────────
 
     @Test
-    void confirm_fromSubmitted_transitionsToConfirmed() {
-        var order = savedOrder("submitted");
+    void confirm_fromUnderReview_transitionsToConfirmed() {
+        var order = savedOrder("under_review");
         when(orderRepo.findById(1L)).thenReturn(Optional.of(order));
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(eventRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -179,13 +207,35 @@ class OrderServiceTest {
     }
 
     @Test
-    void confirm_fromDraft_throwsBadRequest() {
-        var order = savedOrder("draft");
+    void confirm_fromSubmitted_throwsBadRequest() {
+        var order = savedOrder("submitted");
         when(orderRepo.findById(1L)).thenReturn(Optional.of(order));
 
         assertThatThrownBy(() -> service.confirm(1L, null, null))
                 .isInstanceOf(AppException.class)
                 .hasMessageContaining("Invalid transition");
+    }
+
+    @Test
+    void confirm_withInsufficientDefaultWarehouseStock_throwsConflict() {
+        var order = savedOrder("under_review");
+        var warehouse = Warehouse.builder().id(1L).code("MAIN").name("Main").isDefault(true).build();
+        var stock = ProductStock.builder()
+                .product(testProduct)
+                .warehouse(warehouse)
+                .onHandQty(new BigDecimal("5"))
+                .reservedQty(BigDecimal.ZERO)
+                .availableQty(new BigDecimal("5"))
+                .build();
+
+        when(orderRepo.findById(1L)).thenReturn(Optional.of(order));
+        when(warehouseRepo.findByIsDefaultTrue()).thenReturn(Optional.of(warehouse));
+        when(stockRepo.findForUpdate(1L, 1L)).thenReturn(Optional.of(stock));
+
+        assertThatThrownBy(() -> service.confirm(1L, null, null))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("المخزون غير كاف");
+        verify(reservationRepo, never()).save(any());
     }
 
     // ── SHIP ──────────────────────────────────────────────────────────────────
@@ -267,8 +317,8 @@ class OrderServiceTest {
     @Test
     void fullFlow_draftToCompleted_allTransitionsSucceed() {
         // This test verifies the full happy-path flow by checking each status
-        assertThat(List.of("draft", "submitted", "confirmed", "shipped", "completed"))
-                .containsExactly("draft", "submitted", "confirmed", "shipped", "completed");
+        assertThat(List.of("draft", "submitted", "under_review", "confirmed", "shipped", "completed"))
+                .containsExactly("draft", "submitted", "under_review", "confirmed", "shipped", "completed");
         // The individual tests above cover each transition; here we verify the expected sequence
     }
 

@@ -45,13 +45,24 @@ import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const getPriceListsFor = () => [];
-const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.sellingPrice || 0, listName: "—" });
+const ORDER_LINES_TABLE_MIN_WIDTH = 1240;
+const PRODUCT_SELECTOR_WIDTH = 320;
+const PRODUCT_SELECTOR_POPPER_WIDTH = "min(440px, calc(100vw - 32px))";
 import {
   CustomerInfoDialog,
   emptyNewCustomerForm,
 } from "./NewOrder";
-import { ordersApi, customersApi, productsApi } from "services";
+import { ordersApi, customersApi, productsApi, inventoryApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
+import {
+  clampSalesQty,
+  extractArray,
+  getAvailableStock,
+  isOutOfStock,
+  normalizeProductsForOrder,
+  resolveProductPrice,
+  validateSalesQuantity,
+} from "utils/orderProductData";
 import { useI18n } from "i18n";
 
 
@@ -89,9 +100,12 @@ function getCustomerDebt(customer) {
 // ─── Row Component ────────────────────────────────────────────────────────────
 function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, onProductConfirmed, onQtyEnter, qtyRef, apiProducts, errors = {} }) {
   const product = row.product;
-  const stockColor = !product ? "inherit" : product.stock === 0 ? "#ea0606" : product.stock < 10 ? "#fb8c00" : "#66BB6A";
+  const availableStock = getAvailableStock(product);
+  const stockColor = !product ? "inherit" : isOutOfStock(product) ? "#ea0606" : availableStock < 10 ? "#fb8c00" : "#66BB6A";
   const priceInfo = product ? resolveProductPrice(product, priceListId, "sales") : null;
   const lineTotal = product && row.qty ? Number(row.qty || 0) * Number(priceInfo.unitPrice || 0) : 0;
+  const stockBlocked = isOutOfStock(product);
+  const qtyHelperText = errors.qty || (stockBlocked ? "نفذ المخزون لهذا الصنف" : "");
 
   return (
     <TableRow
@@ -107,35 +121,69 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
       </TableCell>
 
       {/* Product search */}
-      <TableCell sx={{ py: 0.5, minWidth: 260 }}>
+      <TableCell sx={{ py: 0.5, width: PRODUCT_SELECTOR_WIDTH, minWidth: PRODUCT_SELECTOR_WIDTH }}>
         <Autocomplete
           size="small"
           options={apiProducts}
           value={product}
           inputValue={row.inputValue}
+          componentsProps={{
+            popper: {
+              placement: "bottom-end",
+              sx: {
+                minWidth: PRODUCT_SELECTOR_POPPER_WIDTH,
+                zIndex: (theme) => theme.zIndex.modal + 1,
+              },
+            },
+            paper: {
+              sx: {
+                minWidth: PRODUCT_SELECTOR_POPPER_WIDTH,
+                boxShadow: "0 12px 32px rgba(20, 20, 43, 0.14)",
+              },
+            },
+          }}
           onInputChange={(_, v) => onChange(row.id, "inputValue", v)}
           onChange={(_, selected) => {
             onChange(row.id, "product", selected);
             onChange(row.id, "inputValue", selected ? selected.name : "");
             if (selected) onProductConfirmed(row.id);
           }}
+          getOptionDisabled={isOutOfStock}
           getOptionLabel={(o) => `${o.name} (${o.code})`}
           filterOptions={(opts, { inputValue }) => {
             const q = inputValue.toLowerCase();
             return opts.filter(
-              (o) => o.name.includes(q) || o.code.toLowerCase().includes(q) || o.category.includes(q)
+              (o) =>
+                o.name.toLowerCase().includes(q) ||
+                o.code.toLowerCase().includes(q) ||
+                o.category.toLowerCase().includes(q)
             );
           }}
           renderOption={(props, option) => (
-            <li {...props} key={option.id} style={{ padding: "6px 12px" }}>
-              <SoftBox>
+            <li
+              {...props}
+              key={option.id}
+              style={{
+                ...props.style,
+                padding: "8px 12px",
+                opacity: isOutOfStock(option) ? 0.55 : 1,
+                direction: "rtl",
+                textAlign: "right",
+              }}
+            >
+              <SoftBox sx={{ minWidth: 0, width: "100%" }}>
                 <SoftTypography variant="button" fontWeight="medium" display="block" lineHeight={1.3}>
                   {option.name}
                 </SoftTypography>
-                <SoftTypography variant="caption" color="secondary">
+                <SoftTypography
+                  variant="caption"
+                  color="secondary"
+                  display="block"
+                  sx={{ whiteSpace: "normal", overflowWrap: "break-word" }}
+                >
                   {option.code} · {option.category} · مخزون:{" "}
-                  <span style={{ color: option.stock === 0 ? "#ea0606" : "#66BB6A", fontWeight: 600 }}>
-                    {option.stock}
+                  <span style={{ color: isOutOfStock(option) ? "#ea0606" : "#66BB6A", fontWeight: 600 }}>
+                    {isOutOfStock(option) ? "نفذ" : `${getAvailableStock(option)} ${option.unit}`}
                   </span>
                 </SoftTypography>
               </SoftBox>
@@ -157,6 +205,7 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
           noOptionsText="لا توجد نتائج"
           clearOnBlur={false}
           blurOnSelect
+          sx={{ width: "100%", minWidth: PRODUCT_SELECTOR_WIDTH - 24 }}
         />
       </TableCell>
 
@@ -168,10 +217,10 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
           value={row.qty}
           inputRef={qtyRef}
           placeholder="الكمية"
-          disabled={!product}
-          error={!!errors.qty}
-          helperText={errors.qty || ""}
-          inputProps={{ min: 1, style: { textAlign: "center" } }}
+          disabled={!product || stockBlocked}
+          error={!!qtyHelperText}
+          helperText={qtyHelperText}
+          inputProps={{ min: 1, max: availableStock || undefined, style: { textAlign: "center" } }}
           onChange={(e) => onChange(row.id, "qty", e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -235,7 +284,7 @@ function OrderRow({ row, rowIndex, totalRows, priceListId, onChange, onDelete, o
       {/* Stock */}
       <TableCell sx={{ py: 0.5, width: 80, textAlign: "center" }}>
         <SoftTypography variant="caption" fontWeight="medium" sx={{ color: stockColor }}>
-          {product ? product.stock : "—"}
+          {product ? availableStock : "—"}
         </SoftTypography>
       </TableCell>
 
@@ -314,9 +363,19 @@ export default function AdminNewOrder() {
         current || getApiErrorMessage(error, "تعذر تحميل الزبائن")
       );
     });
-    productsApi.list().then((r) => {
-      const all = r.data?.content ?? r.data ?? [];
-      setApiProducts(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, code: p.code ?? String(p.id), unit: p.unit ?? "وحدة", weightPerUnit: p.weightPerUnit ?? 0, unitsPerPackage: p.unitsPerPackage ?? 1, packageUnit: p.packageUnit ?? "وحدة" })));
+    Promise.all([
+      productsApi.list({ size: 500 }),
+      inventoryApi.listStock({ size: 1000 }).catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل المخزون");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        return { data: [] };
+      }),
+    ]).then(([productsResponse, stockResponse]) => {
+      const products = extractArray(productsResponse.data);
+      const stockRows = extractArray(stockResponse.data);
+      setApiProducts(normalizeProductsForOrder(products, stockRows));
     }).catch((error) => {
       setLoadError((current) => {
         const message = getApiErrorMessage(error, "تعذر تحميل الأصناف");
@@ -346,7 +405,21 @@ export default function AdminNewOrder() {
       delete next[`line-${rowId}-qty`];
       return next;
     });
-    setRows((prev) => prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r)));
+    setRows((prev) => prev.map((r) => {
+      if (r.id !== rowId) return r;
+      if (field === "product") {
+        return {
+          ...r,
+          product: value,
+          qty: value && r.qty && !isOutOfStock(value) ? String(clampSalesQty(value, r.qty)) : "",
+        };
+      }
+      if (field === "qty" && r.product) {
+        if (value === "") return { ...r, qty: "" };
+        return { ...r, qty: String(clampSalesQty(r.product, value)) };
+      }
+      return { ...r, [field]: value };
+    }));
   }, []);
 
   const handleDelete = useCallback((rowId) => {
@@ -398,6 +471,8 @@ export default function AdminNewOrder() {
     filledRows.forEach((row) => {
       if (!row.product?.id) validationErrors[`line-${row.id}-productId`] = t("الصنف مطلوب");
       if (!isPositiveNumber(row.qty)) validationErrors[`line-${row.id}-qty`] = t("الكمية يجب أن تكون أكبر من صفر");
+      const stockError = validateSalesQuantity(row.product, row.qty);
+      if (stockError) validationErrors[`line-${row.id}-qty`] = stockError;
     });
 
     setOrderErrors(validationErrors);
@@ -415,6 +490,16 @@ export default function AdminNewOrder() {
     };
     setOrderSaving(true);
     ordersApi.create(payload)
+      .then((response) => {
+        const orderId = response.data?.id;
+        if (action === "confirm" && orderId) {
+          return ordersApi
+            .submit(orderId)
+            .then(() => ordersApi.review(orderId))
+            .then(() => ordersApi.confirm(orderId, {}));
+        }
+        return response;
+      })
       .then(() => navigate("/orders"))
       .catch((error) => applyApiErrors(error, setOrderErrors, "فشل حفظ الطلبية"))
       .finally(() => setOrderSaving(false));
@@ -785,13 +870,20 @@ export default function AdminNewOrder() {
             )}
           </SoftBox>
 
-          <TableContainer sx={{ mt: 1 }}>
-            <Table size="small" sx={{ tableLayout: "fixed" }}>
+          <TableContainer
+            sx={{
+              mt: 1,
+              overflowX: "auto",
+              overflowY: "visible",
+              pb: 1,
+            }}
+          >
+            <Table size="small" sx={{ tableLayout: "fixed", minWidth: ORDER_LINES_TABLE_MIN_WIDTH }}>
               <TableHead>
                 <TableRow sx={{ background: "#f8f9fa" }}>
                   {[
                     { label: "#",          w: 40  },
-                    { label: "الصنف",      w: null },
+                    { label: "الصنف",      w: PRODUCT_SELECTOR_WIDTH },
                     { label: "الكمية",     w: 100 },
                     { label: "الوحدة",     w: 70  },
                     { label: "السعر",      w: 130 },

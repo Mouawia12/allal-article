@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -120,6 +120,26 @@ const actionText = {
   },
 };
 
+function normalizePurchase(raw) {
+  return {
+    returnItems: [],
+    ...raw,
+    id: raw.poNumber || String(raw.id),
+    _id: raw.id,
+    supplier: raw.supplierName || "—",
+    date: raw.createdAt ? raw.createdAt.slice(0, 10) : "—",
+    lines: (raw.items || []).map((item) => ({
+      ...item,
+      product: item.productName || item.product || "—",
+      productCode: item.productSku || item.productCode || "—",
+      unit: item.unit || "وحدة",
+      qty: item.orderedQty ?? item.qty ?? 0,
+      unitPrice: item.unitPrice ?? 0,
+      taxRate: item.taxRate ?? 0,
+    })),
+  };
+}
+
 export default function PurchaseDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -133,6 +153,8 @@ export default function PurchaseDetail() {
   const [returnNote, setReturnNote] = useState("");
   const [returnReceiver, setReturnReceiver] = useState("");
   const [returnQuantities, setReturnQuantities] = useState({});
+  const [returnSaving, setReturnSaving] = useState(false);
+  const [returnError, setReturnError] = useState("");
   const [dialog, setDialog] = useState(null);
   const [note, setNote] = useState("");
   const [activity, setActivity] = useState([]);
@@ -140,40 +162,28 @@ export default function PurchaseDetail() {
   const [actionError, setActionError] = useState("");
   const [loadError, setLoadError] = useState("");
 
+  const applyLoadedPurchase = useCallback((raw) => {
+    const p = normalizePurchase(raw);
+    setPurchase(p);
+    setStatus(p.status);
+    setPaymentStatus(p.paymentStatus);
+    setReceivedBy(p.receivedBy || "");
+    setInvoiceNo(p.invoiceNo || "");
+    const lines = p.lines.map((l) => ({ receivedQty: 0, returnedQty: 0, ...l }));
+    setReceivedLines(lines);
+    setReturnQuantities(Object.fromEntries(lines.map((l) => [l.id, 0])));
+    setActivity([
+      { time: p.date, user: "—", action: "أنشأ أمر الشراء" },
+      ...(p.receivedDate ? [{ time: p.receivedDate, user: "—", action: "سجل استلام البضاعة" }] : []),
+    ]);
+  }, []);
+
   useEffect(() => {
     setLoadError("");
     purchasesApi.getById(id)
-      .then((r) => {
-        const raw = r.data;
-        const p = {
-          returnItems: [],
-          ...raw,
-          id: raw.poNumber || String(raw.id),
-          _id: raw.id,
-          supplier: raw.supplierName || "—",
-          date: raw.createdAt ? raw.createdAt.slice(0, 10) : "—",
-          lines: (raw.items || []).map((item) => ({
-            ...item,
-            qty: item.orderedQty ?? 0,
-            unitPrice: item.unitPrice ?? 0,
-            taxRate: 0,
-          })),
-        };
-        setPurchase(p);
-        setStatus(p.status);
-        setPaymentStatus(p.paymentStatus);
-        setReceivedBy(p.receivedBy || "");
-        setInvoiceNo(p.invoiceNo || "");
-        const lines = p.lines.map((l) => ({ receivedQty: 0, returnedQty: 0, ...l }));
-        setReceivedLines(lines);
-        setReturnQuantities(Object.fromEntries(lines.map((l) => [l.id, 0])));
-        setActivity([
-          { time: p.date, user: "—", action: "أنشأ أمر الشراء" },
-          ...(p.receivedDate ? [{ time: p.receivedDate, user: "—", action: "سجل استلام البضاعة" }] : []),
-        ]);
-      })
+      .then((r) => applyLoadedPurchase(r.data))
       .catch((error) => setLoadError(getApiErrorMessage(error, "تعذر تحميل تفاصيل أمر الشراء")));
-  }, [id]);
+  }, [id, applyLoadedPurchase]);
 
   const totals = useMemo(() => {
     const untaxed = receivedLines.reduce((sum, line) => sum + Number(line.qty || 0) * Number(line.unitPrice || 0), 0);
@@ -226,6 +236,13 @@ export default function PurchaseDetail() {
     (sum, line) => sum + calcReturnLineTotal(line, Number(returnQuantities[line.id] || 0)),
     0
   );
+  const returnDraftItems = receivedLines
+    .map((line) => ({
+      purchaseOrderItemId: line.id,
+      qty: Number(returnQuantities[line.id] || 0),
+      notes: returnNote.trim() || null,
+    }))
+    .filter((line) => line.qty > 0);
   const hasReturnableQty = returnableLines.length > 0;
 
   const appendActivity = (action) => {
@@ -239,9 +256,11 @@ export default function PurchaseDetail() {
     setReturnQuantities(Object.fromEntries(receivedLines.map((line) => [line.id, 0])));
     setReturnNote("");
     setReturnReceiver("");
+    setReturnError("");
   };
 
   const closeReturnDialog = () => {
+    if (returnSaving) return;
     setReturnDialog(false);
     resetReturnDraft();
   };
@@ -254,30 +273,32 @@ export default function PurchaseDetail() {
     setReturnQuantities((items) => ({ ...items, [line.id]: normalized }));
   };
 
-  const handleRegisterReturn = () => {
-    if (returnDraftQty <= 0) return;
+  const handleRegisterReturn = async () => {
+    if (returnDraftQty <= 0 || returnSaving) return;
 
-    const draft = { ...returnQuantities };
-    setReceivedLines((lines) =>
-      lines.map((line) => {
-        const requestedQty = Number(draft[line.id] || 0);
-        const availableQty = Math.max(
-          0,
-          Number(line.receivedQty || 0) - Number(line.returnedQty || 0)
-        );
-        const confirmedQty = Math.min(requestedQty, availableQty);
-
-        if (!confirmedQty) return line;
-        return { ...line, returnedQty: Number(line.returnedQty || 0) + confirmedQty };
-      })
-    );
-
-    appendActivity(
-      `سجل مرتجع مشتريات بكمية ${returnDraftQty} وقيمة ${formatDZD(returnDraftAmount)} دج${
-        returnReceiver ? ` - مستلم المورد: ${returnReceiver}` : ""
-      }${returnNote.trim() ? ` - ${returnNote.trim()}` : ""}`
-    );
-    closeReturnDialog();
+    setReturnSaving(true);
+    setReturnError("");
+    try {
+      const response = await purchasesApi.registerReturn(id, {
+        returnDate: new Date().toISOString().slice(0, 10),
+        warehouseId: null,
+        receivedBySupplier: returnReceiver.trim() || null,
+        reason: returnNote.trim() || null,
+        items: returnDraftItems,
+      });
+      applyLoadedPurchase(response.data);
+      appendActivity(
+        `سجل مرتجع مشتريات بكمية ${returnDraftQty} وقيمة ${formatDZD(returnDraftAmount)} دج${
+          returnReceiver ? ` - مستلم المورد: ${returnReceiver}` : ""
+        }${returnNote.trim() ? ` - ${returnNote.trim()}` : ""}`
+      );
+      setReturnDialog(false);
+      resetReturnDraft();
+    } catch (error) {
+      setReturnError(getApiErrorMessage(error, "تعذر تسجيل مرتجع المشتريات"));
+    } finally {
+      setReturnSaving(false);
+    }
   };
 
   const openActionDialog = (nextDialog) => {
@@ -704,6 +725,11 @@ export default function PurchaseDetail() {
               />
             </Grid>
           </Grid>
+          {returnError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {returnError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
           <SoftBox flex={1}>
@@ -711,9 +737,9 @@ export default function PurchaseDetail() {
               المبلغ العكسي: {formatDZD(returnDraftAmount)} دج
             </SoftTypography>
           </SoftBox>
-          <SoftButton variant="text" color="secondary" onClick={closeReturnDialog}>تراجع</SoftButton>
-          <SoftButton variant="gradient" color="error" disabled={returnDraftQty <= 0} onClick={handleRegisterReturn}>
-            تسجيل المرتجع
+          <SoftButton variant="text" color="secondary" disabled={returnSaving} onClick={closeReturnDialog}>تراجع</SoftButton>
+          <SoftButton variant="gradient" color="error" disabled={returnSaving || returnDraftQty <= 0} onClick={handleRegisterReturn}>
+            {returnSaving ? "جارٍ التسجيل..." : "تسجيل المرتجع"}
           </SoftButton>
         </DialogActions>
       </Dialog>

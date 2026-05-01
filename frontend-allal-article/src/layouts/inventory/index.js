@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 
 import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
@@ -40,10 +40,41 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { inventoryApi } from "services";
+import { inventoryApi, productsApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 import { useI18n } from "i18n";
 
+const warehouseTypeLabels = {
+  central: "مركزي",
+  operational: "تشغيلي",
+  quarantine: "حجر/مرتجع",
+  default: "افتراضي",
+};
+
+const warehouseTypeOptions = [
+  { value: "central", label: "مركزي" },
+  { value: "operational", label: "تشغيلي" },
+  { value: "quarantine", label: "حجر/مرتجع" },
+  { value: "default", label: "افتراضي" },
+];
+
+const movementTypeLabels = {
+  INITIAL_STOCK: "رصيد افتتاحي",
+  ADJUSTMENT_IN: "تسوية دخول",
+  ADJUSTMENT_OUT: "تسوية خروج",
+  TRANSFER_IN: "تحويل دخول",
+  TRANSFER_OUT: "تحويل خروج",
+  PURCHASE_IN: "استلام مشتريات",
+  SALE_OUT: "خروج بيع",
+};
+
+const emptyAdjustment = {
+  productId: "",
+  warehouseId: "",
+  qty: "",
+  type: "IN",
+  notes: "",
+};
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString("fr-DZ", {
@@ -52,8 +83,9 @@ function formatNumber(value) {
 }
 
 function getStatus(item) {
-  const available = item.onHand - item.reserved;
-  if (item.onHand === 0) return { label: "نفذ", color: "error" };
+  const available = Number(item.available ?? Number(item.onHand || 0) - Number(item.reserved || 0));
+  if (Number(item.onHand || 0) === 0) return { label: "نفذ", color: "error" };
+  if (available <= 0) return { label: "غير متاح", color: "error" };
   if (available <= item.minStock) return { label: "منخفض", color: "warning" };
   return { label: "متوفر", color: "success" };
 }
@@ -86,26 +118,59 @@ function SummaryCard({ label, value, sub, color, icon: Icon }) {
 }
 
 function getWarehouseName(id, warehouses) {
-  return warehouses.find((warehouse) => warehouse.id === id)?.name || "—";
+  return warehouses.find((warehouse) => Number(warehouse.id) === Number(id))?.name || "—";
+}
+
+function extractApiList(response) {
+  if (Array.isArray(response.data)) return response.data;
+  return response.data?.content ?? [];
+}
+
+function normalizeWarehouse(warehouse) {
+  const warehouseType = warehouse.warehouseType || warehouse.type || "operational";
+  const capacity = Number(warehouse.capacity ?? warehouse.capacityQty ?? 0) || 1;
+
+  return {
+    ...warehouse,
+    warehouseType,
+    type: warehouseTypeLabels[warehouseType] || warehouseType,
+    manager: warehouse.managerName || warehouse.manager || "—",
+    capacity,
+    capacityQty: Number(warehouse.capacityQty ?? capacity),
+    isDefault: Boolean(warehouse.isDefault),
+  };
+}
+
+function normalizeProductOption(product) {
+  return {
+    ...product,
+    id: product.id,
+    name: product.name || product.nameAr || `صنف ${product.id}`,
+    code: product.sku || product.code || String(product.id),
+    category: product.categoryName || product.category || "عام",
+    unit: product.baseUnitSymbol || product.baseUnitName || product.unit || "وحدة",
+    minStock: Number(product.minStockQty ?? product.minStock ?? 0),
+  };
 }
 
 function hydrateStockLines(stockLines, warehouses) {
   return stockLines.map((line) => {
-    const warehouse = warehouses.find((w) => w.id === (line.warehouseId ?? line.warehouse_id));
+    const warehouse = warehouses.find((w) => Number(w.id) === Number(line.warehouseId ?? line.warehouse_id));
     // Normalize field names: API uses onHandQty/reservedQty/availableQty
     const onHand = Number(line.onHand ?? line.onHandQty ?? 0);
     const reserved = Number(line.reserved ?? line.reservedQty ?? 0);
-    const pending = Number(line.pending ?? 0);
-    const available = onHand - reserved;
-    const projected = available - pending;
+    const pending = Number(line.pending ?? line.pendingQty ?? 0);
+    const available = Number(line.available ?? line.availableQty ?? onHand - reserved);
+    const projected = Number(line.projected ?? line.projectedQty ?? available + pending);
     const name = line.name ?? line.productName ?? "";
     const code = line.code ?? line.productSku ?? line.productCode ?? "";
-    const category = line.category ?? "";
-    const unit = line.unit ?? "وحدة";
+    const category = line.category ?? line.categoryName ?? "";
+    const unit = line.unit ?? line.baseUnitSymbol ?? line.baseUnitName ?? "وحدة";
+    const minStock = Number(line.minStock ?? line.minStockQty ?? 0);
     return {
       ...line,
       name, code, category, unit,
-      onHand, reserved, pending,
+      onHand, reserved, pending, minStock,
       warehouseName: line.warehouseName ?? warehouse?.name ?? "—",
       warehouseType: line.warehouseType ?? warehouse?.type ?? "—",
       available, projected,
@@ -130,15 +195,23 @@ function Inventory() {
   const [viewTab, setViewTab] = useState(0);
   const [selectedWarehouse, setSelectedWarehouse] = useState("all");
   const [stockLines, setStockLines] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [transferMode, setTransferMode] = useState("product");
   const [transferOpen, setTransferOpen] = useState(false);
   const [transfer, setTransfer] = useState(emptyTransfer);
+  const [transferErrors, setTransferErrors] = useState({});
+  const [transferSaving, setTransferSaving] = useState(false);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [adjustment, setAdjustment] = useState(emptyAdjustment);
+  const [adjustmentErrors, setAdjustmentErrors] = useState({});
+  const [adjustmentSaving, setAdjustmentSaving] = useState(false);
   const [warehouseDialog, setWarehouseDialog] = useState(false);
   const [editingWarehouseId, setEditingWarehouseId] = useState(null);
   const [warehouseForm, setWarehouseForm] = useState({
     code: "",
     name: "",
-    type: "تشغيلي",
+    type: "operational",
     city: "",
     manager: "",
     capacity: 1000,
@@ -146,11 +219,10 @@ function Inventory() {
   });
   const [warehouseErrors, setWarehouseErrors] = useState({});
   const [warehouseSaving, setWarehouseSaving] = useState(false);
-  const [transferLog, setTransferLog] = useState([]);
   const [pageError, setPageError] = useState("");
+  const [dataLoading, setDataLoading] = useState(false);
 
-  useEffect(() => {
-    const extract = (r) => Array.isArray(r.data) ? r.data : (r.data?.content ?? []);
+  const loadInventoryData = useCallback(() => {
     const appendError = (error, fallback) => {
       setPageError((current) => {
         const message = getApiErrorMessage(error, fallback);
@@ -158,33 +230,58 @@ function Inventory() {
       });
     };
     setPageError("");
-    inventoryApi.listWarehouses()
-      .then((r) => setWarehouses(extract(r)))
-      .catch((error) => {
-        appendError(error, "تعذر تحميل المستودعات");
-        setWarehouses([]);
-      });
-    inventoryApi.listStock()
-      .then((r) => setStockLines(extract(r)))
-      .catch((error) => {
-        appendError(error, "تعذر تحميل المخزون");
-        setStockLines([]);
-      });
+    setDataLoading(true);
+
+    return Promise.all([
+      inventoryApi.listWarehouses()
+        .then((r) => extractApiList(r).map(normalizeWarehouse))
+        .catch((error) => {
+          appendError(error, "تعذر تحميل المستودعات");
+          return [];
+        }),
+      inventoryApi.listStock({ size: 1000 })
+        .then(extractApiList)
+        .catch((error) => {
+          appendError(error, "تعذر تحميل المخزون");
+          return [];
+        }),
+      inventoryApi.listMovements({ size: 100 })
+        .then(extractApiList)
+        .catch((error) => {
+          appendError(error, "تعذر تحميل حركات المخزون");
+          return [];
+        }),
+      productsApi.list({ size: 500 })
+        .then((r) => extractApiList(r).map(normalizeProductOption))
+        .catch((error) => {
+          appendError(error, "تعذر تحميل الأصناف");
+          return [];
+        }),
+    ]).then(([nextWarehouses, nextStock, nextMovements, nextProducts]) => {
+      setWarehouses(nextWarehouses);
+      setStockLines(nextStock);
+      setMovements(nextMovements);
+      setProducts(nextProducts);
+    }).finally(() => setDataLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadInventoryData();
+  }, [loadInventoryData]);
 
   const inventory = useMemo(() => hydrateStockLines(stockLines, warehouses), [stockLines, warehouses]);
 
   const filteredByWarehouse =
     selectedWarehouse === "all"
       ? inventory
-      : inventory.filter((item) => item.warehouseId === selectedWarehouse);
+      : inventory.filter((item) => Number(item.warehouseId) === Number(selectedWarehouse));
 
   const filterStatus = ["all", "out", "low", "ok"][statusTab];
   const filtered = filteredByWarehouse.filter((item) => {
     const status = getStatus(item);
     const matchStatus =
       filterStatus === "all" ||
-      (filterStatus === "out" && item.onHand === 0) ||
+      (filterStatus === "out" && status.color === "error") ||
       (filterStatus === "low" && status.color === "warning") ||
       (filterStatus === "ok" && status.color === "success");
 
@@ -197,27 +294,29 @@ function Inventory() {
     return matchStatus && matchSearch;
   });
 
-  const outCount = filteredByWarehouse.filter((item) => item.onHand === 0).length;
+  const outCount = filteredByWarehouse.filter((item) => getStatus(item).color === "error").length;
   const lowCount = filteredByWarehouse.filter((item) => getStatus(item).color === "warning").length;
   const okCount = filteredByWarehouse.filter((item) => getStatus(item).color === "success").length;
   const totalOnHand = filteredByWarehouse.reduce((sum, item) => sum + Number(item.onHand || 0), 0);
   const totalReserved = filteredByWarehouse.reduce((sum, item) => sum + Number(item.reserved || 0), 0);
   const totalPending = filteredByWarehouse.reduce((sum, item) => sum + Number(item.pending || 0), 0);
 
-  const fromLine = stockLines.find(
+  const fromLine = inventory.find(
     (line) =>
-      line.productId === Number(transfer.productId) && line.warehouseId === transfer.fromWarehouseId
+      Number(line.productId) === Number(transfer.productId) &&
+      Number(line.warehouseId) === Number(transfer.fromWarehouseId)
   );
-  const maxTransferQty = Math.max(0, Number(fromLine?.onHand || 0) - Number(fromLine?.reserved || 0));
+  const maxTransferQty = Math.max(0, Number(fromLine?.available || 0));
 
   const openTransfer = (mode, defaults = {}) => {
     setTransferMode(mode);
+    setTransferErrors({});
     setTransfer({
       ...emptyTransfer,
       ...defaults,
       toWarehouseId:
         defaults.toWarehouseId ||
-        warehouses.find((warehouse) => warehouse.id !== (defaults.fromWarehouseId || emptyTransfer.fromWarehouseId))?.id ||
+        warehouses.find((warehouse) => Number(warehouse.id) !== Number(defaults.fromWarehouseId || emptyTransfer.fromWarehouseId))?.id ||
         emptyTransfer.toWarehouseId,
     });
     setTransferOpen(true);
@@ -227,11 +326,15 @@ function Inventory() {
     const value = event.target.value;
     setTransfer((draft) => {
       const next = { ...draft, [field]: value };
-      if (field === "fromWarehouseId" && value === next.toWarehouseId) {
-        next.toWarehouseId = warehouses.find((warehouse) => warehouse.id !== value)?.id || "";
+      if (field === "fromWarehouseId" && Number(value) === Number(next.toWarehouseId)) {
+        next.toWarehouseId = warehouses.find((warehouse) => Number(warehouse.id) !== Number(value))?.id || "";
       }
-      if (field === "toWarehouseId" && value === next.fromWarehouseId) {
-        next.fromWarehouseId = warehouses.find((warehouse) => warehouse.id !== value)?.id || "";
+      if (field === "fromWarehouseId") {
+        next.productId = "";
+        next.qty = 0;
+      }
+      if (field === "toWarehouseId" && Number(value) === Number(next.fromWarehouseId)) {
+        next.fromWarehouseId = warehouses.find((warehouse) => Number(warehouse.id) !== Number(value))?.id || "";
       }
       return next;
     });
@@ -240,105 +343,116 @@ function Inventory() {
   const closeTransfer = () => {
     setTransferOpen(false);
     setTransfer(emptyTransfer);
+    setTransferErrors({});
   };
 
-  const moveLineQty = (lines, productId, fromWarehouseId, toWarehouseId, qty) => {
-    const nextLines = lines.map((line) => ({ ...line }));
-    const source = nextLines.find(
-      (line) => line.productId === productId && line.warehouseId === fromWarehouseId
-    );
-    if (!source || qty <= 0) return nextLines;
-
-    source.onHand = Math.max(0, Number(source.onHand || 0) - qty);
-
-    let destination = nextLines.find(
-      (line) => line.productId === productId && line.warehouseId === toWarehouseId
-    );
-    if (!destination) {
-      destination = {
-        productId,
-        warehouseId: toWarehouseId,
-        onHand: 0,
-        reserved: 0,
-        pending: 0,
-      };
-      nextLines.push(destination);
+  const handleTransfer = async () => {
+    const validationErrors = {};
+    if (!transfer.fromWarehouseId) validationErrors.fromWarehouseId = t("المستودع المصدر مطلوب");
+    if (!transfer.toWarehouseId) validationErrors.toWarehouseId = t("المستودع الوجهة مطلوب");
+    if (Number(transfer.fromWarehouseId) === Number(transfer.toWarehouseId)) {
+      validationErrors._global = t("لا يمكن التحويل إلى نفس المستودع");
     }
-    destination.onHand = Number(destination.onHand || 0) + qty;
-
-    return nextLines;
-  };
-
-  const handleTransfer = () => {
-    if (transfer.fromWarehouseId === transfer.toWarehouseId) return;
-
-    const now = new Date().toLocaleString("ar-DZ");
 
     if (transferMode === "product") {
       const qty = Math.min(Math.max(Number(transfer.qty || 0), 0), maxTransferQty);
-      if (!qty) return;
-
-      setStockLines((lines) =>
-        moveLineQty(
-          lines,
-          Number(transfer.productId),
-          transfer.fromWarehouseId,
-          transfer.toWarehouseId,
-          qty
-        )
+      if (!transfer.productId) validationErrors.productId = t("الصنف مطلوب");
+      if (!qty) validationErrors.qty = t("الكمية يجب أن تكون أكبر من صفر");
+      if (Number(transfer.qty || 0) > maxTransferQty) {
+        validationErrors.qty = t(`الكمية أكبر من المتاح للتحويل (${formatNumber(maxTransferQty)})`);
+      }
+    } else {
+      const transferableLines = inventory.filter(
+        (line) => Number(line.warehouseId) === Number(transfer.fromWarehouseId) && Number(line.available || 0) > 0
       );
-      setTransferLog((items) => [
-        {
-          id: `TR-${Date.now()}`,
-          type: "product",
-          fromWarehouseId: transfer.fromWarehouseId,
-          toWarehouseId: transfer.toWarehouseId,
-          productName: fromLine?.name || fromLine?.productName || "—",
-          qty,
-          unit: fromLine?.unit || "وحدة",
-          at: now,
-          user: "المستخدم الحالي",
-          reason: transfer.reason,
-        },
-        ...items,
-      ]);
-      closeTransfer();
-      return;
+      if (!transferableLines.length) validationErrors._global = t("لا توجد كميات متاحة للتحويل من هذا المستودع");
     }
 
-    const transferableLines = stockLines.filter(
-      (line) =>
-        line.warehouseId === transfer.fromWarehouseId &&
-        Math.max(0, Number(line.onHand || 0) - Number(line.reserved || 0)) > 0
-    );
-    if (!transferableLines.length) return;
+    setTransferErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
 
-    let nextLines = stockLines;
-    const movedItems = [];
-    transferableLines.forEach((line) => {
-      const qty = Math.max(0, Number(line.onHand || 0) - Number(line.reserved || 0));
-      nextLines = moveLineQty(nextLines, line.productId, transfer.fromWarehouseId, transfer.toWarehouseId, qty);
-      movedItems.push(`${line.name || line.productName || line.productId}: ${formatNumber(qty)} ${line.unit || ""}`);
+    setTransferSaving(true);
+    try {
+      if (transferMode === "product") {
+        await inventoryApi.transfer({
+          productId: Number(transfer.productId),
+          fromWarehouseId: Number(transfer.fromWarehouseId),
+          toWarehouseId: Number(transfer.toWarehouseId),
+          qty: Number(transfer.qty),
+          notes: transfer.reason || null,
+        });
+      } else {
+        const transferableLines = inventory.filter(
+          (line) => Number(line.warehouseId) === Number(transfer.fromWarehouseId) && Number(line.available || 0) > 0
+        );
+        for (const line of transferableLines) {
+          await inventoryApi.transfer({
+            productId: Number(line.productId),
+            fromWarehouseId: Number(transfer.fromWarehouseId),
+            toWarehouseId: Number(transfer.toWarehouseId),
+            qty: Number(line.available),
+            notes: transfer.reason || "تحويل مستودع كامل",
+          });
+        }
+      }
+      await loadInventoryData();
+      closeTransfer();
+    } catch (error) {
+      applyApiErrors(error, setTransferErrors, "فشل تنفيذ التحويل");
+    } finally {
+      setTransferSaving(false);
+    }
+  };
+
+  const openAdjustment = (defaults = {}) => {
+    setAdjustment({
+      ...emptyAdjustment,
+      warehouseId: selectedWarehouse !== "all" ? selectedWarehouse : "",
+      ...defaults,
     });
+    setAdjustmentErrors({});
+    setAdjustmentOpen(true);
+  };
 
-    setStockLines(nextLines);
-    setTransferLog((items) => [
-      {
-        id: `TR-${Date.now()}`,
-        type: "warehouse",
-        fromWarehouseId: transfer.fromWarehouseId,
-        toWarehouseId: transfer.toWarehouseId,
-        productName: "تحويل مستودع كامل",
-        qty: transferableLines.length,
-        unit: "سطر",
-        at: now,
-        user: "المستخدم الحالي",
-        reason: transfer.reason,
-        details: movedItems.join(" | "),
-      },
-      ...items,
-    ]);
-    closeTransfer();
+  const closeAdjustment = () => {
+    setAdjustmentOpen(false);
+    setAdjustment(emptyAdjustment);
+    setAdjustmentErrors({});
+  };
+
+  const setAdjustmentField = (field) => (event) => {
+    const value = event.target.value;
+    setAdjustment((current) => ({ ...current, [field]: value }));
+    if (adjustmentErrors[field] || adjustmentErrors._global) {
+      setAdjustmentErrors((current) => ({ ...current, [field]: "", _global: "" }));
+    }
+  };
+
+  const saveAdjustment = async () => {
+    const validationErrors = {};
+    if (!adjustment.productId) validationErrors.productId = t("الصنف مطلوب");
+    if (!adjustment.warehouseId) validationErrors.warehouseId = t("المستودع مطلوب");
+    if (!isPositiveNumber(adjustment.qty)) validationErrors.qty = t("الكمية يجب أن تكون أكبر من صفر");
+
+    setAdjustmentErrors(validationErrors);
+    if (hasErrors(validationErrors)) return;
+
+    setAdjustmentSaving(true);
+    try {
+      await inventoryApi.adjust({
+        productId: Number(adjustment.productId),
+        warehouseId: Number(adjustment.warehouseId),
+        qty: Number(adjustment.qty),
+        type: adjustment.type,
+        notes: adjustment.notes || null,
+      });
+      await loadInventoryData();
+      closeAdjustment();
+    } catch (error) {
+      applyApiErrors(error, setAdjustmentErrors, "فشل حفظ تسوية المخزون");
+    } finally {
+      setAdjustmentSaving(false);
+    }
   };
 
   const openWarehouseDialog = (warehouse = null) => {
@@ -346,9 +460,9 @@ function Inventory() {
     setWarehouseForm({
       code: warehouse?.code || "",
       name: warehouse?.name || "",
-      type: warehouse?.type || warehouse?.warehouseType || "تشغيلي",
+      type: warehouse?.warehouseType || "operational",
       city: warehouse?.city || "",
-      manager: warehouse?.manager || "",
+      manager: warehouse?.managerName || warehouse?.manager || "",
       capacity: warehouse?.capacity ?? warehouse?.capacityQty ?? 1000,
       isDefault: Boolean(warehouse?.isDefault),
     });
@@ -394,14 +508,14 @@ function Inventory() {
     setWarehouseSaving(true);
     apiCall
       .then((r) => {
-        const saved = r.data;
+        const saved = normalizeWarehouse(r.data);
         setWarehouses((current) => {
-          const exists = current.some((w) => w.id === saved.id);
+          const exists = current.some((w) => Number(w.id) === Number(saved.id));
           const updated = exists
-            ? current.map((w) => (w.id === saved.id ? saved : w))
+            ? current.map((w) => (Number(w.id) === Number(saved.id) ? saved : w))
             : [...current, saved];
           return saved.isDefault
-            ? updated.map((w) => ({ ...w, isDefault: w.id === saved.id }))
+            ? updated.map((w) => ({ ...w, isDefault: Number(w.id) === Number(saved.id) }))
             : updated;
         });
         setWarehouseErrors({});
@@ -412,7 +526,7 @@ function Inventory() {
   };
 
   const warehouseRows = warehouses.map((warehouse) => {
-    const lines = inventory.filter((line) => line.warehouseId === warehouse.id);
+    const lines = inventory.filter((line) => Number(line.warehouseId) === Number(warehouse.id));
     const onHand = lines.reduce((sum, line) => sum + Number(line.onHand || 0), 0);
     const reserved = lines.reduce((sum, line) => sum + Number(line.reserved || 0), 0);
     const available = lines.reduce((sum, line) => sum + Number(line.available || 0), 0);
@@ -435,6 +549,15 @@ function Inventory() {
           <SoftBox display="flex" gap={1} flexWrap="wrap">
             <SoftButton
               variant="outlined"
+              color="success"
+              size="small"
+              startIcon={<TrendingUpIcon />}
+              onClick={() => openAdjustment()}
+            >
+              تسوية مخزون
+            </SoftButton>
+            <SoftButton
+              variant="outlined"
               color="info"
               size="small"
               startIcon={<SwapHorizIcon />}
@@ -450,6 +573,15 @@ function Inventory() {
               onClick={() => openTransfer("warehouse")}
             >
               تحويل مستودع كامل
+            </SoftButton>
+            <SoftButton
+              variant="text"
+              color="secondary"
+              size="small"
+              disabled={dataLoading}
+              onClick={loadInventoryData}
+            >
+              تحديث
             </SoftButton>
           </SoftBox>
         </SoftBox>
@@ -488,7 +620,7 @@ function Inventory() {
               {[
                 "أرصدة المستودعات",
                 "إدارة المستودعات",
-                "تحويلات المخزون",
+                "حركات المخزون",
               ].map((label) => (
                 <Tab
                   key={label}
@@ -583,7 +715,7 @@ function Inventory() {
                           style={{
                             borderBottom: "1px solid #f0f2f5",
                             background:
-                              item.onHand === 0
+                              status.color === "error"
                                 ? "#fff5f5"
                                 : status.color === "warning"
                                   ? "#fffbeb"
@@ -673,8 +805,18 @@ function Inventory() {
                                   <SwapHorizIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="تعديل حد التنبيه">
-                                <IconButton size="small" sx={{ border: "1px solid #e0e0e0", p: 0.4 }}>
+                              <Tooltip title="تسوية هذا الصنف">
+                                <IconButton
+                                  size="small"
+                                  sx={{ border: "1px solid #e0e0e0", p: 0.4 }}
+                                  onClick={() =>
+                                    openAdjustment({
+                                      productId: item.productId,
+                                      warehouseId: item.warehouseId,
+                                      type: "IN",
+                                    })
+                                  }
+                                >
                                   <EditIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
@@ -770,12 +912,15 @@ function Inventory() {
             <SoftBox p={2}>
               <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2} gap={2} flexWrap="wrap">
                 <SoftBox>
-                  <SoftTypography variant="h6" fontWeight="bold">سجل تحويلات المخزون</SoftTypography>
+                  <SoftTypography variant="h6" fontWeight="bold">سجل حركات المخزون</SoftTypography>
                   <SoftTypography variant="caption" color="secondary">
-                    التحويل ينقص المستودع المصدر ويزيد المستودع الوجهة دون المساس بالكميات المحجوزة.
+                    كل دخول وخروج وتحويل يتم تسجيله من الباك مع الرصيد قبل وبعد الحركة.
                   </SoftTypography>
                 </SoftBox>
                 <SoftBox display="flex" gap={1} flexWrap="wrap">
+                  <SoftButton variant="outlined" color="success" size="small" startIcon={<TrendingUpIcon />} onClick={() => openAdjustment()}>
+                    تسوية مخزون
+                  </SoftButton>
                   <SoftButton variant="outlined" color="info" size="small" startIcon={<SwapHorizIcon />} onClick={() => openTransfer("product")}>
                     تحويل صنف
                   </SoftButton>
@@ -788,7 +933,7 @@ function Inventory() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#f8f9fa" }}>
-                      {["رقم", "النوع", "من", "إلى", "الصنف/النطاق", "الكمية", "المستخدم", "الوقت", "ملاحظات"].map((header) => (
+                      {["رقم", "النوع", "المستودع", "الصنف", "الكمية", "قبل", "بعد", "المستخدم", "الوقت", "ملاحظات"].map((header) => (
                         <th key={header} style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                           <SoftTypography variant="caption" fontWeight="bold" color="secondary">{header}</SoftTypography>
                         </th>
@@ -796,22 +941,35 @@ function Inventory() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transferLog.map((item) => (
+                    {movements.length === 0 && (
+                      <tr>
+                        <td colSpan={10} style={{ padding: 28, textAlign: "center" }}>
+                          <SoftTypography variant="body2" color="secondary">لا توجد حركات مخزون بعد</SoftTypography>
+                        </td>
+                      </tr>
+                    )}
+                    {movements.map((item) => (
                       <tr key={item.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
                         <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption" color="info" fontWeight="bold">{item.id}</SoftTypography></td>
                         <td style={{ padding: "10px 12px" }}>
-                          <SoftBadge variant="gradient" color={item.type === "warehouse" ? "warning" : "info"} size="xs" badgeContent={item.type === "warehouse" ? "مستودع كامل" : "صنف"} container />
+                          <SoftBadge
+                            variant="gradient"
+                            color={String(item.movementType || "").includes("OUT") ? "warning" : "info"}
+                            size="xs"
+                            badgeContent={movementTypeLabels[item.movementType] || item.movementType}
+                            container
+                          />
                         </td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{getWarehouseName(item.fromWarehouseId, warehouses)}</SoftTypography></td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{getWarehouseName(item.toWarehouseId, warehouses)}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{item.warehouseName || getWarehouseName(item.warehouseId, warehouses)}</SoftTypography></td>
                         <td style={{ padding: "10px 12px" }}>
-                          <SoftTypography variant="caption" fontWeight="bold">{item.productName}</SoftTypography>
-                          {item.details && <SoftTypography variant="caption" color="secondary" display="block">{item.details}</SoftTypography>}
+                          <SoftTypography variant="caption" fontWeight="bold">{item.productName || "—"}</SoftTypography>
                         </td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{formatNumber(item.qty)} {item.unit}</SoftTypography></td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{item.user}</SoftTypography></td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption" color="secondary">{item.at}</SoftTypography></td>
-                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption" color="text">{item.reason || "—"}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{formatNumber(item.qty)}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{formatNumber(item.balanceBefore)}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{formatNumber(item.balanceAfter)}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption">{item.performedByName || "—"}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption" color="secondary">{item.createdAt ? item.createdAt.slice(0, 16).replace("T", " ") : "—"}</SoftTypography></td>
+                        <td style={{ padding: "10px 12px" }}><SoftTypography variant="caption" color="text">{item.notes || "—"}</SoftTypography></td>
                       </tr>
                     ))}
                   </tbody>
@@ -830,6 +988,11 @@ function Inventory() {
         </DialogTitle>
         <DialogContent dividers>
           <Grid container spacing={2}>
+            {transferErrors._global && (
+              <Grid item xs={12}>
+                <Alert severity="error">{transferErrors._global}</Alert>
+              </Grid>
+            )}
             <Grid item xs={12} md={6}>
               <FormControl fullWidth size="small">
                 <InputLabel>من مستودع</InputLabel>
@@ -844,7 +1007,7 @@ function Inventory() {
               <FormControl fullWidth size="small">
                 <InputLabel>إلى مستودع</InputLabel>
                 <Select value={transfer.toWarehouseId} label="إلى مستودع" onChange={setTransferField("toWarehouseId")}>
-                  {warehouses.filter((warehouse) => warehouse.id !== transfer.fromWarehouseId).map((warehouse) => (
+                  {warehouses.filter((warehouse) => Number(warehouse.id) !== Number(transfer.fromWarehouseId)).map((warehouse) => (
                     <MenuItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</MenuItem>
                   ))}
                 </Select>
@@ -854,16 +1017,23 @@ function Inventory() {
             {transferMode === "product" && (
               <>
                 <Grid item xs={12} md={7}>
-                  <FormControl fullWidth size="small">
+                  <FormControl fullWidth size="small" error={!!transferErrors.productId}>
                     <InputLabel>الصنف</InputLabel>
                     <Select value={transfer.productId} label="الصنف" onChange={setTransferField("productId")}>
-                      {[...new Map(stockLines.map((s) => [s.productId ?? s.product_id, s])).values()].map((s) => (
-                        <MenuItem key={s.productId ?? s.product_id} value={s.productId ?? s.product_id}>
+                      {[...new Map(
+                        inventory
+                          .filter((s) => !transfer.fromWarehouseId || Number(s.warehouseId) === Number(transfer.fromWarehouseId))
+                          .map((s) => [s.productId, s])
+                      ).values()].map((s) => (
+                        <MenuItem key={s.productId} value={s.productId}>
                           {s.name || s.productName || "—"} - {s.code || s.productSku || ""}
                         </MenuItem>
                       ))}
                     </Select>
                   </FormControl>
+                  {transferErrors.productId && (
+                    <SoftTypography variant="caption" color="error">{transferErrors.productId}</SoftTypography>
+                  )}
                 </Grid>
                 <Grid item xs={12} md={5}>
                   <TextField
@@ -873,8 +1043,9 @@ function Inventory() {
                     label="الكمية"
                     value={transfer.qty}
                     onChange={setTransferField("qty")}
+                    error={!!transferErrors.qty}
                     inputProps={{ min: 0, max: maxTransferQty }}
-                    helperText={`المتاح للتحويل: ${formatNumber(maxTransferQty)} ${fromLine?.unit || "وحدة"}`}
+                    helperText={transferErrors.qty || `المتاح للتحويل: ${formatNumber(maxTransferQty)} ${fromLine?.unit || "وحدة"}`}
                   />
                 </Grid>
               </>
@@ -909,12 +1080,97 @@ function Inventory() {
             variant="gradient"
             color="info"
             disabled={
-              transfer.fromWarehouseId === transfer.toWarehouseId ||
+              transferSaving ||
+              Number(transfer.fromWarehouseId) === Number(transfer.toWarehouseId) ||
               (transferMode === "product" && (!Number(transfer.qty || 0) || maxTransferQty <= 0))
             }
             onClick={handleTransfer}
           >
-            تنفيذ التحويل
+            {transferSaving ? "جارٍ التنفيذ..." : "تنفيذ التحويل"}
+          </SoftButton>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={adjustmentOpen} onClose={closeAdjustment} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <SoftTypography variant="h6" fontWeight="bold">تسوية مخزون</SoftTypography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2}>
+            {adjustmentErrors._global && (
+              <Grid item xs={12}>
+                <Alert severity="error">{adjustmentErrors._global}</Alert>
+              </Grid>
+            )}
+            <Grid item xs={12} md={7}>
+              <FormControl fullWidth size="small" error={!!adjustmentErrors.productId}>
+                <InputLabel>الصنف</InputLabel>
+                <Select value={adjustment.productId} label="الصنف" onChange={setAdjustmentField("productId")}>
+                  {products.map((product) => (
+                    <MenuItem key={product.id} value={product.id}>
+                      {product.name} - {product.code}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {adjustmentErrors.productId && (
+                <SoftTypography variant="caption" color="error">{adjustmentErrors.productId}</SoftTypography>
+              )}
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <FormControl fullWidth size="small" error={!!adjustmentErrors.warehouseId}>
+                <InputLabel>المستودع</InputLabel>
+                <Select value={adjustment.warehouseId} label="المستودع" onChange={setAdjustmentField("warehouseId")}>
+                  {warehouses.map((warehouse) => (
+                    <MenuItem key={warehouse.id} value={warehouse.id}>{warehouse.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {adjustmentErrors.warehouseId && (
+                <SoftTypography variant="caption" color="error">{adjustmentErrors.warehouseId}</SoftTypography>
+              )}
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <FormControl fullWidth size="small">
+                <InputLabel>نوع الحركة</InputLabel>
+                <Select value={adjustment.type} label="نوع الحركة" onChange={setAdjustmentField("type")}>
+                  <MenuItem value="IN">إدخال / زيادة</MenuItem>
+                  <MenuItem value="OUT">إخراج / نقص</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={7}>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                label="الكمية"
+                value={adjustment.qty}
+                onChange={setAdjustmentField("qty")}
+                error={!!adjustmentErrors.qty}
+                helperText={adjustmentErrors.qty}
+                inputProps={{ min: 0, step: "0.001" }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                size="small"
+                label="ملاحظات"
+                value={adjustment.notes}
+                onChange={setAdjustmentField("notes")}
+                multiline
+                minRows={2}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={closeAdjustment}>
+            إلغاء
+          </SoftButton>
+          <SoftButton variant="gradient" color="success" size="small" disabled={adjustmentSaving} onClick={saveAdjustment}>
+            {adjustmentSaving ? "جارٍ الحفظ..." : "حفظ التسوية"}
           </SoftButton>
         </DialogActions>
       </Dialog>
@@ -960,10 +1216,9 @@ function Inventory() {
               <FormControl size="small" fullWidth>
                 <InputLabel>النوع</InputLabel>
                 <Select value={warehouseForm.type} label="النوع" onChange={setWarehouseField("type")}>
-                  <MenuItem value="مركزي">مركزي</MenuItem>
-                  <MenuItem value="تشغيلي">تشغيلي</MenuItem>
-                  <MenuItem value="حجر/مرتجع">حجر/مرتجع</MenuItem>
-                  <MenuItem value="افتراضي">افتراضي</MenuItem>
+                  {warehouseTypeOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>
@@ -983,6 +1238,8 @@ function Inventory() {
                 label="المسؤول"
                 value={warehouseForm.manager}
                 onChange={setWarehouseField("manager")}
+                disabled
+                helperText="تعيين المسؤول يتم لاحقاً من إدارة المستخدمين"
               />
             </Grid>
             <Grid item xs={12} sm={6}>

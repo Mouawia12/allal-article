@@ -25,7 +25,10 @@ ownerClient.interceptors.response.use(
   },
   (err) => {
     const url = err.config?.url ?? "";
-    if (err.response?.status === 401 && !url.includes("/auth/login")) {
+    const status = err.response?.status;
+    const staleOwnerSession =
+      status === 401 || (status === 403 && url.startsWith("/api/platform/"));
+    if (staleOwnerSession && !url.includes("/auth/login")) {
       localStorage.removeItem("owner_token");
       localStorage.removeItem("owner_user");
       window.location.href = "/owner/login";

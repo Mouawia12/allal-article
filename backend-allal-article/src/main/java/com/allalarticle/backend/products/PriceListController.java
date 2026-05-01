@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -42,11 +43,12 @@ public class PriceListController {
     public ResponseEntity<ApiResponse<Void>> upsertItem(
             @PathVariable Long listId,
             @PathVariable Long productId,
-            @RequestBody Map<String, Object> body) {
+            @RequestBody Map<String, Object> body,
+            Authentication auth) {
         Object priceVal = body.get("unitPrice");
         BigDecimal price = priceVal != null && !priceVal.toString().isBlank()
                 ? new BigDecimal(priceVal.toString()) : BigDecimal.ZERO;
-        priceListService.upsertItem(listId, productId, price);
+        priceListService.upsertItem(listId, productId, price, auth);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }

@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -34,72 +34,54 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import useProductFavorites from "hooks/useProductFavorites";
-import { productsApi } from "services";
+import { inventoryApi, productsApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
-import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
-import demoToolsImage from "assets/images/products/demo-tools.jpg";
-import demoCablesImage from "assets/images/products/demo-cables.jpg";
-import demoBuildingSuppliesImage from "assets/images/products/demo-building-supplies.jpg";
+import {
+  formatCatalogDate,
+  formatCatalogPrice,
+  normalizeCatalogProducts,
+} from "utils/productCatalog";
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const categories = ["الكل", "مسامير وبراغي", "أدوات", "كهرباء", "سباكة", "دهانات", "مواد عزل", "معدات"];
 const favoriteCategory = "المفضلة";
-const categoryFilters = ["الكل", favoriteCategory, ...categories.filter((cat) => cat !== "الكل")];
-
-const products = [
-  { id: 1,  name: "برغي M10 × 50mm",    code: "BRG-010-50", category: "مسامير وبراغي", onHand: 850,  reserved: 200, pending: 100, unit: "قطعة", color: "#FF6B6B", price: 650,  lastPriceUpdatedAt: "2024-01-22", image: demoBoltsImage },
-  { id: 2,  name: "برغي M8 × 30mm",     code: "BRG-008-30", category: "مسامير وبراغي", onHand: 1200, reserved: 300, pending: 200, unit: "قطعة", color: "#FF6B6B", price: 900,  lastPriceUpdatedAt: "2024-01-19", image: demoBoltsImage },
-  { id: 3,  name: "صامولة M10",          code: "SAM-010",    category: "مسامير وبراغي", onHand: 600,  reserved: 150, pending: 80,  unit: "قطعة", color: "#FF8E53", price: 450,  lastPriceUpdatedAt: "2024-01-18", image: demoBoltsImage },
-  { id: 4,  name: "مفتاح ربط 17mm",     code: "MFT-017",    category: "أدوات",          onHand: 45,   reserved: 10,  pending: 5,   unit: "قطعة", color: "#4ECDC4", price: 35,   lastPriceUpdatedAt: "2024-01-15", image: demoToolsImage },
-  { id: 5,  name: "مفتاح ربط 22mm",     code: "MFT-022",    category: "أدوات",          onHand: 30,   reserved: 5,   pending: 10,  unit: "قطعة", color: "#4ECDC4", price: 25,   lastPriceUpdatedAt: "2024-01-14", image: demoToolsImage },
-  { id: 6,  name: "كماشة عالمية",        code: "KMA-UNI",    category: "أدوات",          onHand: 0,    reserved: 0,   pending: 5,   unit: "قطعة", color: "#4ECDC4", price: 0,    lastPriceUpdatedAt: "2024-01-10", image: demoToolsImage },
-  { id: 7,  name: "كابل كهربائي 2.5mm", code: "KBL-25",     category: "كهرباء",         onHand: 500,  reserved: 100, pending: 200, unit: "متر",  color: "#FFE66D", price: 400,  lastPriceUpdatedAt: "2024-01-21", image: demoCablesImage },
-  { id: 8,  name: "كابل كهربائي 1.5mm", code: "KBL-15",     category: "كهرباء",         onHand: 800,  reserved: 150, pending: 100, unit: "متر",  color: "#FFE66D", price: 650,  lastPriceUpdatedAt: "2024-01-16", image: demoCablesImage },
-  { id: 9,  name: "شريط عازل كهربائي",  code: "SHR-EL",     category: "كهرباء",         onHand: 200,  reserved: 30,  pending: 20,  unit: "لفة",  color: "#F7DC6F", price: 170,  lastPriceUpdatedAt: "2024-01-13", image: demoCablesImage },
-  { id: 10, name: "أنبوب PVC 2 بوصة",  code: "ANB-PVC-2",  category: "سباكة",          onHand: 100,  reserved: 40,  pending: 30,  unit: "متر",  color: "#A8E6CF", price: 60,   lastPriceUpdatedAt: "2024-01-20", image: demoBuildingSuppliesImage },
-  { id: 11, name: "أنبوب PVC 1 بوصة",  code: "ANB-PVC-1",  category: "سباكة",          onHand: 150,  reserved: 20,  pending: 10,  unit: "متر",  color: "#A8E6CF", price: 130,  lastPriceUpdatedAt: "2024-01-12", image: demoBuildingSuppliesImage },
-  { id: 12, name: "صنبور مياه",          code: "SNB-MYA",    category: "سباكة",          onHand: 25,   reserved: 5,   pending: 3,   unit: "قطعة", color: "#88D8B0", price: 20,   lastPriceUpdatedAt: "2024-01-11" },
-  { id: 13, name: "دهان أبيض 4L",       code: "DHN-WHT-4",  category: "دهانات",         onHand: 80,   reserved: 20,  pending: 10,  unit: "علبة", color: "#DDA0DD", price: 320,  lastPriceUpdatedAt: "2024-01-17", image: demoBuildingSuppliesImage },
-  { id: 14, name: "دهان رمادي 4L",      code: "DHN-GRY-4",  category: "دهانات",         onHand: 60,   reserved: 10,  pending: 5,   unit: "علبة", color: "#DA70D6", price: 305,  lastPriceUpdatedAt: "2024-01-09" },
-  { id: 15, name: "شريط عازل حراري",    code: "SHR-HRR",    category: "مواد عزل",       onHand: 120,  reserved: 30,  pending: 0,   unit: "لفة",  color: "#B0C4DE", price: 115,  lastPriceUpdatedAt: "2024-01-08" },
-  { id: 16, name: "لوح خشبي 2×4",      code: "LWH-2X4",    category: "معدات",          onHand: 200,  reserved: 50,  pending: 20,  unit: "قطعة", color: "#F4A460", price: 215,  lastPriceUpdatedAt: "2024-01-06" },
-];
 
 function getStockStatus(product) {
-  const available = product.onHand - product.reserved;
-  if (product.onHand === 0) return { label: "نفذ", color: "error" };
-  if (available < 20) return { label: "منخفض", color: "warning" };
+  const available = product.available ?? product.onHand - product.reserved;
+  if (product.onHand <= 0) return { label: "نفذ", color: "error" };
+  if (available <= 0) return { label: "محجوز", color: "warning" };
+  if (available <= product.minStockQty || available < 20) return { label: "منخفض", color: "warning" };
   return { label: "متوفر", color: "success" };
 }
 
-function formatPrice(value) {
-  return `${new Intl.NumberFormat("ar-DZ").format(value)} دج`;
+function extractContent(response) {
+  return response?.data?.content ?? response?.data ?? [];
 }
 
 // ─── Product Grid Card ────────────────────────────────────────────────────────
 function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit }) {
   const stock = getStockStatus(product);
-  const available = product.onHand - product.reserved;
-  const usedPercent = product.onHand > 0 ? Math.round((product.reserved / product.onHand) * 100) : 0;
+  const available = product.available ?? product.onHand - product.reserved;
+  const usedPercent = product.onHand > 0
+    ? Math.min(100, Math.round((product.reserved / product.onHand) * 100))
+    : 0;
 
   return (
     <Card
       sx={{
-        p: 2,
+        p: 1.75,
         height: "100%",
+        minHeight: 350,
         display: "flex",
         flexDirection: "column",
+        border: "1px solid #edf2f7",
         transition: "all 0.2s",
         "&:hover": { boxShadow: "0 4px 20px rgba(0,0,0,0.1)", transform: "translateY(-2px)" },
       }}
     >
-      {/* Color Block */}
       <SoftBox
         sx={{
           width: "100%",
-          aspectRatio: "1 / 1",
-          minHeight: 0,
-          borderRadius: 2,
+          height: 126,
+          borderRadius: 1.5,
           background: `linear-gradient(135deg, ${product.color}66, ${product.color})`,
           display: "flex",
           alignItems: "center",
@@ -147,11 +129,23 @@ function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit
         </Tooltip>
       </SoftBox>
 
-      <SoftTypography variant="button" fontWeight="bold" lineHeight={1.3} mb={0.3}>
+      <SoftTypography
+        variant="button"
+        fontWeight="bold"
+        lineHeight={1.3}
+        mb={0.3}
+        sx={{
+          minHeight: 36,
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
         {product.name}
       </SoftTypography>
       <SoftBox display="flex" alignItems="center" gap={0.75} mb={1} flexWrap="wrap">
-        <SoftTypography variant="caption" color="secondary">
+        <SoftTypography variant="caption" color="secondary" sx={{ wordBreak: "break-word" }}>
           {product.code} · {product.category}
         </SoftTypography>
         {isFavorite && (
@@ -169,19 +163,39 @@ function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit
         <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
           <SoftTypography variant="caption" color="secondary">السعر الحالي</SoftTypography>
           <SoftTypography variant="button" fontWeight="bold" color="info">
-            {formatPrice(product.price)}
+            {formatCatalogPrice(product.price)}
           </SoftTypography>
         </SoftBox>
         <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1} mt={0.5}>
           <SoftTypography variant="caption" color="secondary">آخر تعديل سعر</SoftTypography>
           <SoftTypography variant="caption" fontWeight="bold" color="text">
-            {product.lastPriceUpdatedAt}
+            {formatCatalogDate(product.lastPriceUpdatedAt)}
           </SoftTypography>
         </SoftBox>
       </SoftBox>
 
-      {/* Stock Progress */}
       <SoftBox mb={1}>
+        <SoftBox
+          display="grid"
+          gridTemplateColumns="repeat(3, minmax(0, 1fr))"
+          gap={0.75}
+          mb={1}
+        >
+          {[
+            { label: "فعلي", value: product.onHand, color: "text" },
+            { label: "محجوز", value: product.reserved, color: "warning" },
+            { label: "متاح", value: available, color: available <= 0 ? "error" : "success" },
+          ].map((item) => (
+            <SoftBox key={item.label} textAlign="center" sx={{ background: "#f8f9fa", borderRadius: 1, p: 0.75 }}>
+              <SoftTypography variant="caption" color={item.color} fontWeight="bold" display="block">
+                {item.value}
+              </SoftTypography>
+              <SoftTypography variant="caption" color="secondary">
+                {item.label}
+              </SoftTypography>
+            </SoftBox>
+          ))}
+        </SoftBox>
         <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
           <SoftTypography variant="caption" color="text">متاح: {available} {product.unit}</SoftTypography>
           <SoftTypography variant="caption" color="secondary">محجوز: {product.reserved}</SoftTypography>
@@ -212,8 +226,8 @@ function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit
 // ─── Product List Row ─────────────────────────────────────────────────────────
 function ProductListRow({ product, index, isFavorite, onToggleFavorite, onView, onEdit }) {
   const stock = getStockStatus(product);
-  const available = product.onHand - product.reserved;
-  const projected = available - product.pending;
+  const available = product.available ?? product.onHand - product.reserved;
+  const projected = product.projected ?? available - product.pending;
 
   return (
     <tr
@@ -255,7 +269,7 @@ function ProductListRow({ product, index, isFavorite, onToggleFavorite, onView, 
             <SoftTypography variant="button" fontWeight="medium">{product.name}</SoftTypography>
             <SoftTypography variant="caption" color="secondary" display="block">{product.code}</SoftTypography>
             <SoftTypography variant="caption" color="text" display="block">
-              {formatPrice(product.price)} · آخر تعديل سعر: {product.lastPriceUpdatedAt}
+              {formatCatalogPrice(product.price)} · آخر تعديل سعر: {formatCatalogDate(product.lastPriceUpdatedAt)}
             </SoftTypography>
           </SoftBox>
         </SoftBox>
@@ -326,29 +340,50 @@ function Products({
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   useEffect(() => {
+    let cancelled = false;
     setLoadError("");
-    productsApi.list()
-      .then((r) => setProducts((r.data?.content ?? r.data ?? []).map((p) => ({
-        onHand: 0, reserved: 0, pending: 0, unit: "قطعة", color: "#17c1e8", image: null,
-        ...p,
-      }))))
+    Promise.all([
+      productsApi.list({ size: 500 }),
+      inventoryApi.listStock({ size: 1000 }),
+    ])
+      .then(([productsResponse, stockResponse]) => {
+        if (cancelled) return;
+        setProducts(normalizeCatalogProducts(extractContent(productsResponse), extractContent(stockResponse)));
+      })
       .catch((error) => {
+        if (cancelled) return;
         setLoadError(getApiErrorMessage(error, "تعذر تحميل الأصناف"));
         setProducts([]);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const categoryFilters = useMemo(() => {
+    const realCategories = [...new Set(products.map((p) => p.category).filter(Boolean))];
+    return ["الكل", favoriteCategory, ...realCategories.filter((cat) => cat !== "الكل")];
+  }, [products]);
 
   const filtered = products.filter((p) => {
     const matchCat =
       category === "الكل" ||
       (category === favoriteCategory && isFavorite(p.id)) ||
       p.category === category;
-    const matchSearch = p.name.includes(search) || p.code.toLowerCase().includes(search.toLowerCase());
+    const query = search.trim().toLowerCase();
+    const matchSearch =
+      !query ||
+      p.name.toLowerCase().includes(query) ||
+      p.code.toLowerCase().includes(query);
     return matchCat && matchSearch;
   });
 
   const outOfStock = products.filter(p => p.onHand === 0).length;
-  const lowStock = products.filter(p => p.onHand > 0 && (p.onHand - p.reserved) < 20).length;
+  const availableCount = products.filter(p => (p.available ?? p.onHand - p.reserved) > 0).length;
+  const lowStock = products.filter((p) => {
+    const available = p.available ?? p.onHand - p.reserved;
+    return available > 0 && available < 20;
+  }).length;
 
   return (
     <DashboardLayout>
@@ -390,7 +425,7 @@ function Products({
           {[
             { label: "إجمالي الأصناف",   value: products.length, color: "info" },
             { label: "المفضلة",           value: favoriteCount, color: "warning" },
-            { label: "متوفرة",            value: products.filter(p => p.onHand > 0).length, color: "success" },
+            { label: "متوفرة",            value: availableCount, color: "success" },
             { label: "مخزون منخفض",       value: lowStock, color: "warning" },
             { label: "نفذت من المخزون",   value: outOfStock, color: "error" },
           ].map((s) => (
@@ -403,8 +438,8 @@ function Products({
           ))}
         </Grid>
 
-        <Card>
-          <SoftBox p={2}>
+        <SoftBox>
+          <SoftBox pb={2}>
             {/* Filters Row */}
             <SoftBox display="flex" gap={2} alignItems="center" mb={2} flexWrap="wrap">
               <TextField
@@ -455,7 +490,7 @@ function Products({
                   </Grid>
                 ) : (
                   filtered.map((p) => (
-                    <Grid item xs={6} sm={4} md={3} lg={2} key={p.id}>
+                    <Grid item xs={12} sm={6} md={4} lg={3} xl={3} key={p.id}>
                       <ProductGridCard
                         product={p}
                         isFavorite={isFavorite(p.id)}
@@ -509,7 +544,7 @@ function Products({
               </SoftBox>
             )}
           </SoftBox>
-        </Card>
+        </SoftBox>
       </SoftBox>
       <Footer />
     </DashboardLayout>

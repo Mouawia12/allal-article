@@ -34,12 +34,16 @@ import Footer from "examples/Footer";
 import { calcLineTotal, formatDZD } from "./mockData";
 const getPriceListsFor = () => [];
 const priceSourceLabels = {};
-const resolveProductPrice = (product) => ({ finalPrice: product?.price || product?.purchasePrice || 0, listName: "—" });
 const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
 const resolveSupplierLink = () => ({ isLinked: false });
 const supplierMatchLabels = {};
 import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isPositiveNumber } from "utils/formErrors";
+import {
+  extractArray,
+  normalizeProductsForOrder,
+  resolveProductPrice,
+} from "utils/orderProductData";
 import { useI18n } from "i18n";
 
 let lineId = 1;
@@ -198,9 +202,8 @@ export default function PurchaseForm() {
     suppliersApi.list()
       .then((r) => setSupplierOptions(r.data?.content ?? r.data ?? []))
       .catch((error) => appendLoadError(error, "تعذر تحميل الموردين"));
-    productsApi.list().then((r) => {
-      const all = r.data?.content ?? r.data ?? [];
-      setProductOptions(all.map((p) => ({ ...p, name: p.name ?? p.nameAr, unit: p.unit ?? "وحدة", taxRate: p.taxRate ?? 19 })));
+    productsApi.list({ size: 500 }).then((r) => {
+      setProductOptions(normalizeProductsForOrder(extractArray(r.data)));
     }).catch((error) => appendLoadError(error, "تعذر تحميل الأصناف"));
     inventoryApi.listWarehouses().then((r) => {
       const whs = r.data?.content ?? r.data ?? [];

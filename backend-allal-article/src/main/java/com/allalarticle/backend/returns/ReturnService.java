@@ -1,5 +1,6 @@
 package com.allalarticle.backend.returns;
 
+import com.allalarticle.backend.audit.AuditLogService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.PageResponse;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.Year;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
@@ -41,6 +43,7 @@ public class ReturnService {
     private final WarehouseRepository warehouseRepo;
     private final ProductStockRepository stockRepo;
     private final StockMovementRepository movementRepo;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public PageResponse<ReturnResponse> list(String status, Long customerId, Pageable pageable) {
@@ -88,7 +91,11 @@ public class ReturnService {
             saved.getItems().add(item);
         }
 
-        return ReturnResponse.from(returnRepo.save(saved));
+        var finalSaved = returnRepo.save(saved);
+        auditLogService.log(userId, "return", finalSaved.getId(), "create_return",
+                "إنشاء مرتجع" + customerSuffix(finalSaved), finalSaved.getReturnNumber(), "إدارة",
+                returnDetails(finalSaved));
+        return ReturnResponse.from(finalSaved);
     }
 
     @Transactional
@@ -143,14 +150,22 @@ public class ReturnService {
 
         ret.setStatus("accepted");
         ret.setReceivedById(userId);
-        return ReturnResponse.from(returnRepo.save(ret));
+        var saved = returnRepo.save(ret);
+        auditLogService.log(userId, "return", saved.getId(), "accept_return",
+                "قبول مرتجع" + customerSuffix(saved), saved.getReturnNumber(), "إدارة",
+                returnDetails(saved));
+        return ReturnResponse.from(saved);
     }
 
     @Transactional
     public ReturnResponse reject(Long id, Authentication auth) {
         var ret = requireStatus(id, "pending");
         ret.setStatus("rejected");
-        return ReturnResponse.from(returnRepo.save(ret));
+        var saved = returnRepo.save(ret);
+        auditLogService.log(extractUserId(auth), "return", saved.getId(), "reject_return",
+                "رفض مرتجع" + customerSuffix(saved), saved.getReturnNumber(), "إدارة",
+                returnDetails(saved));
+        return ReturnResponse.from(saved);
     }
 
     private Return requireStatus(Long id, String... allowed) {
@@ -165,5 +180,30 @@ public class ReturnService {
         if (auth instanceof UsernamePasswordAuthenticationToken t
                 && t.getDetails() instanceof Claims c) return c.get("userId", Long.class);
         return null;
+    }
+
+    private String customerSuffix(Return ret) {
+        return ret.getCustomer() != null ? " — " + ret.getCustomer().getName() : "";
+    }
+
+    private Map<String, Object> returnDetails(Return ret) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("returnNumber", ret.getReturnNumber());
+        details.put("status", ret.getStatus());
+        details.put("returnDate", ret.getReturnDate() != null ? ret.getReturnDate().toString() : "");
+        details.put("itemsCount", ret.getItems().size());
+        details.put("totalReturnedQty", ret.getItems().stream()
+                .map(ReturnItem::getReturnedQty)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        details.put("acceptedQty", ret.getItems().stream()
+                .map(ReturnItem::getAcceptedQty)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        if (ret.getCustomer() != null) {
+            details.put("customerId", ret.getCustomer().getId());
+            details.put("customerName", ret.getCustomer().getName());
+        }
+        if (ret.getOrder() != null) details.put("orderId", ret.getOrder().getId());
+        if (ret.getNotes() != null) details.put("notes", ret.getNotes());
+        return details;
     }
 }
