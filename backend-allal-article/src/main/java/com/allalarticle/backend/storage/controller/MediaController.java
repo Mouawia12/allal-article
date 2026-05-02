@@ -52,6 +52,18 @@ public class MediaController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @GetMapping("/{id}/content")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<byte[]> content(@PathVariable Long id) {
+        var content = storageService.loadContent(id);
+        MediaType mediaType = content.contentType() != null
+                ? MediaType.parseMediaType(content.contentType())
+                : MediaType.APPLICATION_OCTET_STREAM;
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .body(content.bytes());
+    }
+
     private Long extractUserId(Authentication auth) {
         if (auth instanceof UsernamePasswordAuthenticationToken t && t.getDetails() instanceof Claims claims) {
             return claims.get("userId", Long.class);

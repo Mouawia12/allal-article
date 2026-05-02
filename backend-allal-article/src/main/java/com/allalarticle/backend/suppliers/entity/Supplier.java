@@ -64,6 +64,9 @@ public class Supplier {
     @Builder.Default
     private BigDecimal openingBalance = BigDecimal.ZERO;
 
+    @Column(name = "price_list_id")
+    private Long priceListId;
+
     @Column(name = "linked_partner_uuid")
     private UUID linkedPartnerUuid;
 

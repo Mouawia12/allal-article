@@ -10,12 +10,14 @@ import com.allalarticle.backend.products.dto.ProductRequest;
 import com.allalarticle.backend.products.dto.ProductResponse;
 import com.allalarticle.backend.products.entity.Product;
 import com.allalarticle.backend.products.entity.ProductPriceHistory;
+import com.allalarticle.backend.tenant.TenantContext;
 import com.allalarticle.backend.users.TenantUserRepository;
 import com.allalarticle.backend.users.entity.TenantUser;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ public class ProductService {
     private final TenantUserRepository userRepo;
     private final AuditLogService auditLogService;
     private final EmailNotificationService emailNotificationService;
+    private final JdbcTemplate jdbc;
 
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> list(String q, Long categoryId, Pageable pageable) {
@@ -47,14 +50,20 @@ public class ProductService {
                 : (categoryId != null)
                     ? productRepo.findByCategory(categoryId, pageable)
                     : productRepo.findByDeletedAtIsNull(pageable);
-        return PageResponse.from(page.map(ProductResponse::from));
+        return PageResponse.from(page.map(p -> {
+            PrimaryImage image = primaryImage(p.getId());
+            return ProductResponse.from(p, image.url(), image.mediaId());
+        }));
     }
 
     @Transactional(readOnly = true)
     public ProductResponse getById(Long id) {
         return productRepo.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
-                .map(ProductResponse::from)
+                .map(p -> {
+                    PrimaryImage image = primaryImage(p.getId());
+                    return ProductResponse.from(p, image.url(), image.mediaId());
+                })
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Product not found", HttpStatus.NOT_FOUND));
     }
 
@@ -123,7 +132,8 @@ public class ProductService {
                         "price", saved.getCurrentPriceAmount() != null ? saved.getCurrentPriceAmount() : BigDecimal.ZERO
                 ));
         notifySafely(() -> emailNotificationService.onProductCreated(saved, actorName(auth)));
-        return ProductResponse.from(saved);
+        PrimaryImage image = primaryImage(saved.getId());
+        return ProductResponse.from(saved, image.url(), image.mediaId());
     }
 
     @Transactional
@@ -178,7 +188,8 @@ public class ProductService {
             BigDecimal next = saved.getCurrentPriceAmount();
             notifySafely(() -> emailNotificationService.onProductPriceChanged(saved, prev, next, actorName(auth)));
         }
-        return ProductResponse.from(saved);
+        PrimaryImage image = primaryImage(saved.getId());
+        return ProductResponse.from(saved, image.url(), image.mediaId());
     }
 
     private void notifySafely(Runnable r) {
@@ -298,10 +309,34 @@ public class ProductService {
         var saved = productRepo.save(builder.build());
         recordPriceHistory(saved, null, saved.getCurrentPriceAmount(),
                 "سعر ابتدائي عند إنشاء الصنف (استيراد)", "product_bulk_import", saved.getId(), auth);
-        return ProductResponse.from(saved);
+        PrimaryImage image = primaryImage(saved.getId());
+        return ProductResponse.from(saved, image.url(), image.mediaId());
     }
 
     private String safeStr(String s) { return s != null ? s : ""; }
+
+    private PrimaryImage primaryImage(Long productId) {
+        String schema = TenantContext.get();
+        if (!TenantContext.isValidSchema(schema) || productId == null) return PrimaryImage.empty();
+        try {
+            List<PrimaryImage> images = jdbc.query(String.format("""
+                SELECT ma.id, ma.public_url
+                FROM "%s".product_images pi
+                JOIN "%s".media_assets ma ON ma.id = pi.media_asset_id
+                WHERE pi.product_id = ? AND ma.deleted_at IS NULL
+                ORDER BY pi.is_primary DESC, pi.sort_order ASC, pi.id ASC
+                LIMIT 1
+                """, schema, schema), (rs, rowNum) -> new PrimaryImage(rs.getLong("id"), rs.getString("public_url")),
+                productId);
+            return images.isEmpty() ? PrimaryImage.empty() : images.get(0);
+        } catch (Exception e) {
+            return PrimaryImage.empty();
+        }
+    }
+
+    private record PrimaryImage(Long mediaId, String url) {
+        static PrimaryImage empty() { return new PrimaryImage(null, null); }
+    }
 
     @Transactional
     public void delete(Long id) {

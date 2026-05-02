@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -34,7 +34,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import useProductFavorites from "hooks/useProductFavorites";
-import { inventoryApi, productsApi } from "services";
+import { inventoryApi, productsApi, mediaApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 import {
   formatCatalogDate,
@@ -80,15 +80,16 @@ function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit
       <SoftBox
         sx={{
           width: "100%",
-          height: 126,
+          aspectRatio: "1 / 1",
           borderRadius: 1.5,
-          background: `linear-gradient(135deg, ${product.color}66, ${product.color})`,
+          background: product.image ? "#f8fafc" : `linear-gradient(135deg, ${product.color}66, ${product.color})`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           mb: 1.5,
           position: "relative",
           overflow: "hidden",
+          border: product.image ? "1px solid #edf2f7" : "none",
         }}
       >
         {product.image ? (
@@ -96,7 +97,7 @@ function ProductGridCard({ product, isFavorite, onToggleFavorite, onView, onEdit
             component="img"
             src={product.image}
             alt={product.name}
-            sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+            sx={{ width: "100%", height: "100%", objectFit: "contain", p: 1 }}
           />
         ) : (
           <Inventory2Icon sx={{ color: "#fff", fontSize: 32, opacity: 0.8 }} />
@@ -246,12 +247,13 @@ function ProductListRow({ product, index, isFavorite, onToggleFavorite, onView, 
               width: 36,
               height: 36,
               borderRadius: 1.5,
-              background: `linear-gradient(135deg, ${product.color}66, ${product.color})`,
+              background: product.image ? "#f8fafc" : `linear-gradient(135deg, ${product.color}66, ${product.color})`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
               overflow: "hidden",
+              border: product.image ? "1px solid #edf2f7" : "none",
             }}
           >
             {product.image ? (
@@ -259,7 +261,7 @@ function ProductListRow({ product, index, isFavorite, onToggleFavorite, onView, 
                 component="img"
                 src={product.image}
                 alt={product.name}
-                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+                sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.35 }}
               />
             ) : (
               <Inventory2Icon sx={{ color: "#fff", fontSize: 18 }} />
@@ -337,7 +339,13 @@ function Products({
   const [category, setCategory] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const [loadError, setLoadError] = useState("");
+  const productImageUrls = useRef([]);
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
+
+  useEffect(() => () => {
+    productImageUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    productImageUrls.current = [];
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -346,9 +354,28 @@ function Products({
       productsApi.list({ size: 500 }),
       inventoryApi.listStock({ size: 1000 }),
     ])
-      .then(([productsResponse, stockResponse]) => {
+      .then(async ([productsResponse, stockResponse]) => {
         if (cancelled) return;
-        setProducts(normalizeCatalogProducts(extractContent(productsResponse), extractContent(stockResponse)));
+        const normalized = normalizeCatalogProducts(extractContent(productsResponse), extractContent(stockResponse));
+        const nextImageUrls = [];
+        const withImages = await Promise.all(normalized.map(async (product) => {
+          if (!product.primaryImageMediaId) return product;
+          try {
+            const response = await mediaApi.content(product.primaryImageMediaId);
+            const imageUrl = URL.createObjectURL(response.data);
+            nextImageUrls.push(imageUrl);
+            return { ...product, image: imageUrl };
+          } catch {
+            return product;
+          }
+        }));
+        if (cancelled) {
+          nextImageUrls.forEach((url) => URL.revokeObjectURL(url));
+          return;
+        }
+        productImageUrls.current.forEach((url) => URL.revokeObjectURL(url));
+        productImageUrls.current = nextImageUrls;
+        setProducts(withImages);
       })
       .catch((error) => {
         if (cancelled) return;

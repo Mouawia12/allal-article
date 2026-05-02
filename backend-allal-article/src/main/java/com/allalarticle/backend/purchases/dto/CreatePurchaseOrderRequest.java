@@ -9,6 +9,7 @@ import java.util.List;
 
 public record CreatePurchaseOrderRequest(
         @NotNull Long supplierId,
+        String priceListId,
         LocalDate expectedDate,
         String notes,
         @NotEmpty @Valid List<PurchaseItemRequest> items

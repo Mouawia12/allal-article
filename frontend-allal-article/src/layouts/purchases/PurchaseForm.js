@@ -32,7 +32,6 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { calcLineTotal, formatDZD } from "./mockData";
-const getPriceListsFor = () => [];
 const priceSourceLabels = {};
 const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
 const resolveSupplierLink = (supplier) => ({
@@ -47,19 +46,24 @@ const supplierMatchLabels = {
   auto: "تطابق تلقائي",
   manual: "ربط يدوي",
 };
-import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
+import { purchasesApi, productsApi, suppliersApi, inventoryApi, priceListsApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isPositiveNumber } from "utils/formErrors";
 import {
+  attachPriceListPrices,
+  buildPriceListPricesByProduct,
   extractArray,
+  normalizePriceListId,
+  normalizePriceListsForKind,
   normalizeProductsForOrder,
   resolveProductPrice,
+  samePriceListId,
 } from "utils/orderProductData";
 import { useI18n } from "i18n";
 
 let lineId = 1;
 
 function createLine(product = null) {
-  const priceInfo = product ? resolveProductPrice(product, "MAIN", "purchase") : null;
+  const priceInfo = product ? resolveProductPrice(product, "PURCHASE_MAIN", "purchase") : null;
 
   return {
     id: lineId++,
@@ -184,9 +188,19 @@ export default function PurchaseForm() {
   const isEdit = Boolean(id);
   const { t } = useI18n();
 
-  const purchasePriceLists = getPriceListsFor("purchase");
   const [supplierOptions, setSupplierOptions] = useState([]);
-  const [productOptions, setProductOptions] = useState([]);
+  const [baseProducts, setBaseProducts] = useState([]);
+  const [priceLists, setPriceLists] = useState([]);
+  const [priceListItemsByListId, setPriceListItemsByListId] = useState({});
+  const purchasePriceLists = useMemo(() => normalizePriceListsForKind(priceLists, "purchase"), [priceLists]);
+  const priceListPricesByProduct = useMemo(
+    () => buildPriceListPricesByProduct(purchasePriceLists, priceListItemsByListId),
+    [priceListItemsByListId, purchasePriceLists]
+  );
+  const productOptions = useMemo(
+    () => attachPriceListPrices(baseProducts, priceListPricesByProduct),
+    [baseProducts, priceListPricesByProduct]
+  );
   const [warehouses, setWarehouses] = useState([]);
   const [supplier, setSupplier] = useState(null);
   const [selectedPriceListId, setSelectedPriceListId] = useState("PURCHASE_MAIN");
@@ -213,8 +227,25 @@ export default function PurchaseForm() {
       .then((r) => setSupplierOptions(r.data?.content ?? r.data ?? []))
       .catch((error) => appendLoadError(error, "تعذر تحميل الموردين"));
     productsApi.list({ size: 500 }).then((r) => {
-      setProductOptions(normalizeProductsForOrder(extractArray(r.data)));
+      setBaseProducts(normalizeProductsForOrder(extractArray(r.data)));
     }).catch((error) => appendLoadError(error, "تعذر تحميل الأصناف"));
+    priceListsApi.list().then((r) => {
+      const lists = normalizePriceListsForKind(extractArray(r.data), "purchase")
+        .filter((list) => list.id !== "PURCHASE_MAIN");
+      setPriceLists(lists);
+      return Promise.all(
+        lists.map((list) =>
+          priceListsApi.getItems(list.id)
+            .then((itemsResponse) => [String(list.id), extractArray(itemsResponse.data)])
+            .catch((error) => {
+              appendLoadError(error, `تعذر تحميل أسعار ${list.name}`);
+              return [String(list.id), []];
+            })
+        )
+      );
+    }).then((entries) => {
+      if (entries) setPriceListItemsByListId(Object.fromEntries(entries));
+    }).catch((error) => appendLoadError(error, "تعذر تحميل قوائم الأسعار"));
     inventoryApi.listWarehouses().then((r) => {
       const whs = r.data?.content ?? r.data ?? [];
       setWarehouses(whs);
@@ -226,6 +257,7 @@ export default function PurchaseForm() {
         const p = r.data;
         setExpectedDate(p.expectedDate || "");
         setNotes(p.notes || "");
+        setSelectedPriceListId(normalizePriceListId(p.priceListId, "PURCHASE_MAIN"));
         if (p.supplierId) setSupplier({ id: p.supplierId, name: p.supplierName || "" });
         if (p.items?.length) {
           setLines(p.items.map((l) => ({
@@ -251,12 +283,17 @@ export default function PurchaseForm() {
   useEffect(() => {
     setLines((items) =>
       items.map((line) => {
-        if (!line.product || line.pricingSource === "manual_override") return line;
-        const priceInfo = resolveProductPrice(line.product, selectedPriceListId, "purchase");
-        return { ...line, unitPrice: priceInfo.unitPrice, pricingSource: priceInfo.source };
+        const enrichedProduct = line.product
+          ? productOptions.find((product) => String(product.id) === String(line.product.id)) || line.product
+          : null;
+        if (!enrichedProduct || line.pricingSource === "manual_override") {
+          return { ...line, product: enrichedProduct };
+        }
+        const priceInfo = resolveProductPrice(enrichedProduct, selectedPriceListId, "purchase");
+        return { ...line, product: enrichedProduct, unitPrice: priceInfo.unitPrice, pricingSource: priceInfo.source };
       })
     );
-  }, [selectedPriceListId]);
+  }, [productOptions, selectedPriceListId]);
 
   const totals = useMemo(() => {
     const validLines = lines.filter((line) => line.product && Number(line.qty) > 0);
@@ -314,6 +351,7 @@ export default function PurchaseForm() {
 
     const payload = {
       supplierId,
+      priceListId: selectedPriceListId,
       expectedDate: expectedDate || null,
       notes: notes || null,
       items: totals.validLines.map((l) => ({
@@ -385,7 +423,10 @@ export default function PurchaseForm() {
                     size="small"
                     options={supplierOptions}
                     value={supplier}
-                    onChange={(_, value) => setSupplier(value)}
+                    onChange={(_, value) => {
+                      setSupplier(value);
+                      setSelectedPriceListId(normalizePriceListId(value?.defaultPriceListId, "PURCHASE_MAIN"));
+                    }}
                     getOptionLabel={getSupplierName}
                     isOptionEqualToValue={(option, value) => {
                       if (!option || !value) return false;
@@ -539,7 +580,7 @@ export default function PurchaseForm() {
               <SoftBox display="flex" justifyContent="space-between" mb={1}>
                 <SoftTypography variant="caption" color="secondary">قائمة الأسعار</SoftTypography>
                 <SoftTypography variant="caption" fontWeight="bold">
-                  {purchasePriceLists.find((list) => list.id === selectedPriceListId)?.name || "—"}
+                  {purchasePriceLists.find((list) => samePriceListId(list.id, selectedPriceListId))?.name || "—"}
                 </SoftTypography>
               </SoftBox>
               <SoftBox display="flex" justifyContent="space-between" mb={1}>

@@ -53,6 +53,9 @@ public class Customer {
     @JoinColumn(name = "salesperson_id")
     private TenantUser salesperson;
 
+    @Column(name = "price_list_id")
+    private Long priceListId;
+
     @Column(nullable = false, length = 30)
     @Builder.Default
     private String status = "active";

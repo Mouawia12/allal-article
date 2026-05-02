@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -44,7 +44,6 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import { WILAYAS } from "data/wilayas";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const getPriceListsFor = () => [];
 const ORDER_LINES_TABLE_MIN_WIDTH = 1240;
 const PRODUCT_SELECTOR_WIDTH = 320;
 const PRODUCT_SELECTOR_POPPER_WIDTH = "min(440px, calc(100vw - 32px))";
@@ -52,15 +51,20 @@ import {
   CustomerInfoDialog,
   emptyNewCustomerForm,
 } from "./NewOrder";
-import { ordersApi, customersApi, productsApi, inventoryApi } from "services";
+import { ordersApi, customersApi, productsApi, inventoryApi, priceListsApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 import {
+  attachPriceListPrices,
+  buildPriceListPricesByProduct,
   clampSalesQty,
   extractArray,
   getAvailableStock,
   isOutOfStock,
+  normalizePriceListId,
+  normalizePriceListsForKind,
   normalizeProductsForOrder,
   resolveProductPrice,
+  samePriceListId,
   validateSalesQuantity,
 } from "utils/orderProductData";
 import { useI18n } from "i18n";
@@ -328,12 +332,22 @@ export default function AdminNewOrder() {
   const location = useLocation();
   const [customer, setCustomer] = useState(null);
   const [customers, setCustomers] = useState([]);
-  const [apiProducts, setApiProducts] = useState([]);
+  const [baseProducts, setBaseProducts] = useState([]);
+  const [priceLists, setPriceLists] = useState([]);
+  const [priceListItemsByListId, setPriceListItemsByListId] = useState({});
+  const salesPriceLists = useMemo(() => normalizePriceListsForKind(priceLists, "sales"), [priceLists]);
+  const priceListPricesByProduct = useMemo(
+    () => buildPriceListPricesByProduct(salesPriceLists, priceListItemsByListId),
+    [priceListItemsByListId, salesPriceLists]
+  );
+  const apiProducts = useMemo(
+    () => attachPriceListPrices(baseProducts, priceListPricesByProduct),
+    [baseProducts, priceListPricesByProduct]
+  );
   const [customerInfoOpen, setCustomerInfoOpen] = useState(false);
   const [newCustomerDialog, setNewCustomerDialog] = useState(false);
   const [newCustomerForm, setNewCustomerForm] = useState({ ...emptyNewCustomerForm });
   const [notes, setNotes] = useState("");
-  const salesPriceLists = getPriceListsFor("sales");
   const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
@@ -342,13 +356,20 @@ export default function AdminNewOrder() {
   const [newCustomerErrors, setNewCustomerErrors] = useState({});
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const selectedPriceList = salesPriceLists.find((l) => l.id === selectedPriceListId) || salesPriceLists[0];
+  const selectedPriceList = salesPriceLists.find((l) => samePriceListId(l.id, selectedPriceListId)) || salesPriceLists[0];
   const nextId = useRef(2);
   const [rows, setRows] = useState([newRow(1)]);
   const qtyRefs = useRef({});
   const customerDebt = getCustomerDebt(customer);
 
   useEffect(() => {
+    const appendLoadError = (error, fallback) => {
+      setLoadError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+
     setLoadError("");
     customersApi.list().then((r) => {
       const list = (r.data?.content ?? r.data ?? []).map(normalizeCustomer);
@@ -357,30 +378,41 @@ export default function AdminNewOrder() {
       if (preselected) {
         const match = list.find((c) => c.id === preselected.id) ?? preselected;
         setCustomer(match);
+        setSelectedPriceListId(normalizePriceListId(match?.defaultPriceListId, "MAIN"));
       }
     }).catch((error) => {
-      setLoadError((current) =>
-        current || getApiErrorMessage(error, "تعذر تحميل الزبائن")
-      );
+      appendLoadError(error, "تعذر تحميل الزبائن");
     });
     Promise.all([
       productsApi.list({ size: 500 }),
       inventoryApi.listStock({ size: 1000 }).catch((error) => {
-        setLoadError((current) => {
-          const message = getApiErrorMessage(error, "تعذر تحميل المخزون");
-          return current ? `${current}؛ ${message}` : message;
-        });
+        appendLoadError(error, "تعذر تحميل المخزون");
         return { data: [] };
       }),
     ]).then(([productsResponse, stockResponse]) => {
       const products = extractArray(productsResponse.data);
       const stockRows = extractArray(stockResponse.data);
-      setApiProducts(normalizeProductsForOrder(products, stockRows));
+      setBaseProducts(normalizeProductsForOrder(products, stockRows));
     }).catch((error) => {
-      setLoadError((current) => {
-        const message = getApiErrorMessage(error, "تعذر تحميل الأصناف");
-        return current ? `${current}؛ ${message}` : message;
-      });
+      appendLoadError(error, "تعذر تحميل الأصناف");
+    });
+    priceListsApi.list().then((r) => {
+      const lists = normalizePriceListsForKind(extractArray(r.data), "sales").filter((list) => list.id !== "MAIN");
+      setPriceLists(lists);
+      return Promise.all(
+        lists.map((list) =>
+          priceListsApi.getItems(list.id)
+            .then((itemsResponse) => [String(list.id), extractArray(itemsResponse.data)])
+            .catch((error) => {
+              appendLoadError(error, `تعذر تحميل أسعار ${list.name}`);
+              return [String(list.id), []];
+            })
+        )
+      );
+    }).then((entries) => {
+      if (entries) setPriceListItemsByListId(Object.fromEntries(entries));
+    }).catch((error) => {
+      appendLoadError(error, "تعذر تحميل قوائم الأسعار");
     });
   }, []);
 
@@ -396,6 +428,22 @@ export default function AdminNewOrder() {
       setRows((prev) => [...prev, newRow(nextId.current++)]);
     }
   }, [rows]);
+
+  useEffect(() => {
+    if (!apiProducts.length) return;
+    setRows((current) => {
+      let changed = false;
+      const next = current.map((row) => {
+        const enrichedProduct = row.product
+          ? apiProducts.find((product) => String(product.id) === String(row.product.id))
+          : null;
+        if (!enrichedProduct || enrichedProduct === row.product) return row;
+        changed = true;
+        return { ...row, product: enrichedProduct };
+      });
+      return changed ? next : current;
+    });
+  }, [apiProducts]);
 
   const handleChange = useCallback((rowId, field, value) => {
     setOrderErrors((current) => {
@@ -610,7 +658,7 @@ export default function AdminNewOrder() {
                     setCustomerInfoOpen(false);
                     setOrderErrors((current) => ({ ...current, _global: "" }));
                     // auto-apply customer's linked price list, fallback to MAIN
-                    setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
+                    setSelectedPriceListId(normalizePriceListId(v?.defaultPriceListId, "MAIN"));
                   }}
                   getOptionLabel={(o) => o.name}
                   filterOptions={(opts, { inputValue }) => {
@@ -628,7 +676,7 @@ export default function AdminNewOrder() {
                             </SoftTypography>
                             {option.defaultPriceListId && (
                               <Chip
-                                label={salesPriceLists.find((l) => l.id === option.defaultPriceListId)?.name || option.defaultPriceListId}
+                                label={salesPriceLists.find((l) => samePriceListId(l.id, option.defaultPriceListId))?.name || option.defaultPriceListId}
                                 size="small"
                                 color="info"
                                 sx={{ height: 16, fontSize: 9, "& .MuiChip-label": { px: 0.5 } }}
@@ -724,7 +772,7 @@ export default function AdminNewOrder() {
                     variant={selectedPriceListId !== "MAIN" ? "filled" : "outlined"}
                     sx={{ height: 18, fontSize: 9, "& .MuiChip-label": { px: 0.75 } }}
                   />
-                  {customer?.defaultPriceListId && customer.defaultPriceListId === selectedPriceListId && (
+                  {customer?.defaultPriceListId && samePriceListId(customer.defaultPriceListId, selectedPriceListId) && (
                     <SoftTypography variant="caption" color="success" sx={{ fontSize: 9 }}>تلقائي</SoftTypography>
                   )}
                 </SoftBox>
@@ -810,7 +858,7 @@ export default function AdminNewOrder() {
                       </SoftTypography>
                       {customer.defaultPriceListId ? (
                         <SoftTypography variant="caption" color="success">
-                          مربوط تلقائياً بـ «{salesPriceLists.find((l) => l.id === customer.defaultPriceListId)?.name}»
+                          مربوط تلقائياً بـ «{salesPriceLists.find((l) => samePriceListId(l.id, customer.defaultPriceListId))?.name}»
                         </SoftTypography>
                       ) : (
                         <SoftTypography variant="caption" color="secondary">

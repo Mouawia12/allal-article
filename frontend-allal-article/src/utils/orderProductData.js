@@ -11,6 +11,77 @@ export function toNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+export function normalizePriceListId(value, fallback = "MAIN") {
+  if (value == null || value === "") return fallback;
+  return String(value);
+}
+
+export function samePriceListId(left, right) {
+  return String(left ?? "") === String(right ?? "");
+}
+
+function priceListType(list) {
+  return list?.type ?? list?.priceListType ?? list?.price_list_type ?? "";
+}
+
+function isPriceListActive(list) {
+  return list?.isActive ?? list?.is_active ?? true;
+}
+
+export function normalizePriceListsForKind(priceLists = [], kind = "sales") {
+  const fallback =
+    kind === "purchase"
+      ? { id: "PURCHASE_MAIN", name: "السعر الرئيسي", description: "أسعار الشراء الرئيسية" }
+      : { id: "MAIN", name: "السعر الرئيسي", description: "أسعار البيع الرئيسية" };
+
+  const typedLists = priceLists
+    .filter((list) => {
+      const type = priceListType(list);
+      return isPriceListActive(list) && (type === kind || type === "both");
+    })
+    .map((list) => ({
+      ...list,
+      id: normalizePriceListId(list.id),
+      type: priceListType(list),
+      name: list.name || list.code || `#${list.id}`,
+    }));
+
+  return [fallback, ...typedLists];
+}
+
+export function buildPriceListPricesByProduct(priceLists = [], itemsByListId = {}) {
+  const listNames = new Map(priceLists.map((list) => [normalizePriceListId(list.id, ""), list.name || list.code || "قائمة أسعار"]));
+
+  return Object.entries(itemsByListId).reduce((byProduct, [listId, rows]) => {
+    const normalizedListId = normalizePriceListId(listId, "");
+    (rows || []).forEach((row) => {
+      const productId = row.product_id ?? row.productId;
+      const unitPrice = toNumber(row.unit_price_amount ?? row.unitPrice, 0);
+      if (productId == null || unitPrice <= 0) return;
+
+      const productKey = String(productId);
+      byProduct[productKey] = {
+        ...(byProduct[productKey] || {}),
+        [normalizedListId]: {
+          unitPrice,
+          listName: listNames.get(normalizedListId) || "قائمة أسعار",
+        },
+      };
+    });
+    return byProduct;
+  }, {});
+}
+
+export function attachPriceListPrices(products = [], pricesByProduct = {}) {
+  return products.map((product) => ({
+    ...product,
+    priceListPrices: {
+      ...(product.priceListPrices || {}),
+      ...(pricesByProduct[String(product.id)] || {}),
+    },
+  }));
+}
+
 export function buildStockByProduct(stockRows = []) {
   return stockRows.reduce((map, row) => {
     const productId = row.productId ?? row.product?.id;
@@ -31,14 +102,28 @@ export function buildStockByProduct(stockRows = []) {
   }, new Map());
 }
 
-export function resolveProductPrice(product) {
+export function resolveProductPrice(product, priceListId = "MAIN") {
   const unitPrice = toNumber(
     product?.currentPriceAmount ?? product?.sellingPrice ?? product?.purchasePrice ?? product?.price
   );
+  const priceListPrice = product?.priceListPrices?.[normalizePriceListId(priceListId, "")];
+  const listUnitPrice = toNumber(priceListPrice?.unitPrice, 0);
+
+  if (priceListPrice && listUnitPrice > 0) {
+    return {
+      unitPrice: listUnitPrice,
+      finalPrice: listUnitPrice,
+      basePrice: unitPrice,
+      source: "price_list",
+      sourceLabel: priceListPrice.listName || "قائمة الأسعار",
+      listName: priceListPrice.listName || "قائمة الأسعار",
+    };
+  }
 
   return {
     unitPrice,
     finalPrice: unitPrice,
+    basePrice: unitPrice,
     source: "product_default",
     sourceLabel: "السعر الرئيسي",
     listName: "السعر الرئيسي",

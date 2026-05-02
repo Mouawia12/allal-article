@@ -57,6 +57,15 @@ public class OrderItem {
     @Builder.Default
     private BigDecimal cancelledQty = BigDecimal.ZERO;
 
+    @Column(name = "price_list_id")
+    private Long priceListId;
+
+    @Column(name = "price_list_item_id")
+    private Long priceListItemId;
+
+    @Column(name = "price_list_name_snapshot", length = 160)
+    private String priceListNameSnapshot;
+
     @Column(name = "pricing_source", nullable = false, length = 40)
     @Builder.Default
     private String pricingSource = "product_default";

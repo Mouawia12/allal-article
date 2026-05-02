@@ -17,6 +17,9 @@ public record OrderItemResponse(
         BigDecimal approvedQty,
         BigDecimal shippedQty,
         BigDecimal cancelledQty,
+        Long priceListId,
+        Long priceListItemId,
+        String priceListName,
         BigDecimal unitPrice,
         BigDecimal lineSubtotal,
         String pricingSource,
@@ -28,7 +31,8 @@ public record OrderItemResponse(
                 i.getId(), i.getPublicId(), i.getLineNumber(), i.getLineStatus(),
                 p.getId(), p.getName(), p.getSku(),
                 i.getRequestedQty(), i.getApprovedQty(), i.getShippedQty(),
-                i.getCancelledQty(), i.getUnitPrice(), i.getLineSubtotal(),
+                i.getCancelledQty(), i.getPriceListId(), i.getPriceListItemId(),
+                i.getPriceListNameSnapshot(), i.getUnitPrice(), i.getLineSubtotal(),
                 i.getPricingSource(), i.getCustomerNote()
         );
     }

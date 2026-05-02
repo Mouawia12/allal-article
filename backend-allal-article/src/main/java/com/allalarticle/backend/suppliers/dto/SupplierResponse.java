@@ -11,7 +11,8 @@ public record SupplierResponse(
         String phone, String email, String taxNumber, String commercialRegister,
         Long wilayaId, String wilayaNameAr,
         String address, String category, String status, String paymentTerms,
-        BigDecimal openingBalance, UUID linkedPartnerUuid, UUID linkedPartnershipPublicId,
+        BigDecimal openingBalance, Long defaultPriceListId,
+        UUID linkedPartnerUuid, UUID linkedPartnershipPublicId,
         String linkMatchMethod, String linkMatchStatus,
         String notes, OffsetDateTime createdAt
 ) {
@@ -21,7 +22,8 @@ public record SupplierResponse(
                 s.getPhone(), s.getEmail(), s.getTaxNumber(), s.getCommercialRegister(),
                 w != null ? w.getId() : null, w != null ? w.getNameAr() : null,
                 s.getAddress(), s.getCategory(), s.getStatus(), s.getPaymentTerms(),
-                s.getOpeningBalance(), s.getLinkedPartnerUuid(), s.getLinkedPartnershipPublicId(),
+                s.getOpeningBalance(), s.getPriceListId(),
+                s.getLinkedPartnerUuid(), s.getLinkedPartnershipPublicId(),
                 s.getLinkMatchMethod(), s.getLinkMatchStatus(),
                 s.getNotes(), s.getCreatedAt());
     }

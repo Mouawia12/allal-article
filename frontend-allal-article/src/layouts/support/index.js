@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Badge from "@mui/material/Badge";
 import Box from "@mui/material/Box";
@@ -40,6 +41,13 @@ import SoftTypography from "components/SoftTypography";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
+import useSupportAudioRecorder from "hooks/useSupportAudioRecorder";
+import { readSupportState, subscribeSupportState, updateSupportState } from "services";
+import {
+  audioBlobToSupportAttachment,
+  imageFileToSupportAttachment,
+} from "utils/supportAttachments";
+
 const ticketStatusConfig = {
   open: { label: "مفتوحة", color: "#17c1e8", bg: "#e3f8fd" },
   waiting_owner: { label: "بانتظار الدعم", color: "#fb8c00", bg: "#fff3e0" },
@@ -74,38 +82,82 @@ const priorityBorder = { urgent: "#ea0606", high: "#fb8c00", normal: "#17c1e8", 
 
 function formatTime(str) { return str; }
 
+const categoryOptions = {
+  orders: "الطلبيات",
+  subscription: "الاشتراك",
+  printing: "الطباعة",
+  accounting: "المحاسبة",
+  inventory: "المخزون",
+};
+
+function nextTicketId(tickets) {
+  const next = tickets.reduce((max, ticket) => {
+    const number = Number(String(ticket.id).match(/(\d+)$/)?.[1] || 0);
+    return Math.max(max, number);
+  }, 0) + 1;
+
+  return `TCK-2026-${String(next).padStart(3, "0")}`;
+}
+
 // ─── Attachment bubble ────────────────────────────────────────────────────────
 function Attachment({ attachment, mine }) {
   if (attachment.type === "audio") {
     return (
-      <Box sx={{
-        display: "inline-flex", alignItems: "center", gap: 1,
-        border: `1px solid ${mine ? "rgba(255,255,255,0.35)" : "#e2e8f0"}`,
-        borderRadius: 3, px: 1.5, py: 0.8,
-        background: mine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
-      }}>
-        <Box sx={{ width: 28, height: 28, borderRadius: "50%", background: mine ? "rgba(255,255,255,0.25)" : "#17c1e822", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <VolumeUpIcon sx={{ fontSize: 14, color: mine ? "#fff" : "#17c1e8" }} />
-        </Box>
-        <Box>
-          <Box sx={{ fontSize: 11, fontWeight: 700, color: mine ? "#fff" : "#334155" }}>{attachment.name}</Box>
+      <Box
+        sx={{
+          display: "inline-flex", alignItems: "center", gap: 1,
+          border: `1px solid ${mine ? "rgba(255,255,255,0.35)" : "#e2e8f0"}`,
+          borderRadius: 3, px: 1.5, py: 0.8,
+          background: mine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
+          maxWidth: 280,
+        }}
+      >
+        {!attachment.dataUrl && (
+          <Box sx={{ width: 28, height: 28, borderRadius: "50%", background: mine ? "rgba(255,255,255,0.25)" : "#17c1e822", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <VolumeUpIcon sx={{ fontSize: 14, color: mine ? "#fff" : "#17c1e8" }} />
+          </Box>
+        )}
+        <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ fontSize: 11, fontWeight: 700, color: mine ? "#fff" : "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.name}</Box>
+          {attachment.dataUrl && (
+            <Box
+              component="audio"
+              controls
+              src={attachment.dataUrl}
+              aria-label={`تشغيل ${attachment.name}`}
+              sx={{ width: 240, display: "block", mt: 0.5 }}
+            />
+          )}
           <Box sx={{ fontSize: 10, color: mine ? "rgba(255,255,255,0.7)" : "#94a3b8" }}>{attachment.size}</Box>
         </Box>
       </Box>
     );
   }
   return (
-    <Box sx={{
-      display: "inline-flex", alignItems: "center", gap: 1,
-      border: `1px solid ${mine ? "rgba(255,255,255,0.35)" : "#e2e8f0"}`,
-      borderRadius: 3, px: 1.5, py: 0.8,
-      background: mine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
-    }}>
-      <Box sx={{ width: 28, height: 28, borderRadius: 1.5, background: mine ? "rgba(255,255,255,0.25)" : "#17c1e822", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <ImageIcon sx={{ fontSize: 14, color: mine ? "#fff" : "#17c1e8" }} />
-      </Box>
-      <Box>
-        <Box sx={{ fontSize: 11, fontWeight: 700, color: mine ? "#fff" : "#334155" }}>{attachment.name}</Box>
+    <Box
+      sx={{
+        display: "inline-flex", flexDirection: attachment.dataUrl ? "column" : "row",
+        alignItems: attachment.dataUrl ? "stretch" : "center", gap: 1,
+        border: `1px solid ${mine ? "rgba(255,255,255,0.35)" : "#e2e8f0"}`,
+        borderRadius: 3, px: 1.2, py: 1,
+        background: mine ? "rgba(255,255,255,0.15)" : "#f1f5f9",
+        maxWidth: 280,
+      }}
+    >
+      {attachment.dataUrl ? (
+        <Box
+          component="img"
+          src={attachment.dataUrl}
+          alt={attachment.name}
+          sx={{ width: 240, maxWidth: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 2 }}
+        />
+      ) : (
+        <Box sx={{ width: 28, height: 28, borderRadius: 1.5, background: mine ? "rgba(255,255,255,0.25)" : "#17c1e822", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <ImageIcon sx={{ fontSize: 14, color: mine ? "#fff" : "#17c1e8" }} />
+        </Box>
+      )}
+      <Box sx={{ minWidth: 0 }}>
+        <Box sx={{ fontSize: 11, fontWeight: 700, color: mine ? "#fff" : "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.name}</Box>
         <Box sx={{ fontSize: 10, color: mine ? "rgba(255,255,255,0.7)" : "#94a3b8" }}>{attachment.size}</Box>
       </Box>
     </Box>
@@ -253,12 +305,75 @@ function ChatMessage({ message }) {
 }
 
 // ─── New ticket dialog ────────────────────────────────────────────────────────
-function NewTicketDialog({ open, onClose }) {
+function NewTicketDialog({ open, onClose, onCreate }) {
+  const imageInputRef = useRef(null);
+  const [subject, setSubject] = useState("");
+  const [details, setDetails] = useState("");
   const [category, setCategory] = useState("orders");
   const [priority, setPriority] = useState("normal");
+  const [attachments, setAttachments] = useState([]);
+  const [mediaError, setMediaError] = useState("");
+
+  const appendAttachment = (attachment) => {
+    setAttachments((current) => [...current, attachment]);
+    setMediaError("");
+  };
+
+  const handleAudioComplete = async (blob, durationSeconds) => {
+    appendAttachment(await audioBlobToSupportAttachment(blob, "ticket", durationSeconds));
+  };
+
+  const ticketRecorder = useSupportAudioRecorder({
+    onComplete: handleAudioComplete,
+    onError: setMediaError,
+  });
+
+  const addImageFromFile = async (file) => {
+    try {
+      appendAttachment(await imageFileToSupportAttachment(file, "ticket"));
+    } catch (error) {
+      setMediaError(error.message || "تعذر إرفاق الصورة");
+    }
+  };
+
+  const handleImageInput = (event) => {
+    const file = event.target.files?.[0];
+    if (file) addImageFromFile(file);
+    event.target.value = "";
+  };
+
+  const resetAndClose = () => {
+    if (ticketRecorder.isRecording) ticketRecorder.stop({ discard: true });
+    setSubject("");
+    setDetails("");
+    setCategory("orders");
+    setPriority("normal");
+    setAttachments([]);
+    setMediaError("");
+    onClose();
+  };
+
+  const handleCreate = () => {
+    const cleanSubject = subject.trim();
+    const cleanDetails = details.trim();
+    if (!cleanSubject || !cleanDetails) return;
+
+    try {
+      onCreate({
+        subject: cleanSubject,
+        body: cleanDetails,
+        category: categoryOptions[category] || "التقنية",
+        priority,
+        attachments,
+      });
+      resetAndClose();
+    } catch (error) {
+      setMediaError(error.message || "تعذر فتح التذكرة");
+    }
+  };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+    <Dialog open={open} onClose={resetAndClose} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
       <DialogTitle sx={{ pb: 1 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
@@ -270,7 +385,7 @@ function NewTicketDialog({ open, onClose }) {
               <Box sx={{ fontSize: 11, color: "#94a3b8" }}>سيتم الرد خلال 24 ساعة</Box>
             </Box>
           </Box>
-          <IconButton size="small" onClick={onClose} sx={{ background: "#f1f5f9" }}><CloseIcon fontSize="small" /></IconButton>
+          <IconButton size="small" onClick={resetAndClose} sx={{ background: "#f1f5f9" }} aria-label="إغلاق نافذة التذكرة"><CloseIcon fontSize="small" /></IconButton>
         </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
@@ -278,6 +393,8 @@ function NewTicketDialog({ open, onClose }) {
           <TextField
             size="small" label="عنوان المشكلة" fullWidth
             placeholder="اكتب وصفاً مختصراً للمشكلة..."
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
             InputProps={{ sx: { borderRadius: 2 } }}
           />
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
@@ -304,29 +421,67 @@ function NewTicketDialog({ open, onClose }) {
           <TextField
             size="small" label="تفاصيل المشكلة" fullWidth multiline rows={4}
             placeholder="اشرح المشكلة بالتفصيل حتى نتمكن من مساعدتك بشكل أسرع..."
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
             InputProps={{ sx: { borderRadius: 2 } }}
           />
+          {mediaError && (
+            <Alert severity="error" onClose={() => setMediaError("")}>
+              {mediaError}
+            </Alert>
+          )}
           <Box sx={{ display: "flex", gap: 1 }}>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              aria-label="اختيار صورة للتذكرة"
+              hidden
+              onChange={handleImageInput}
+            />
             <Chip
               icon={<ImageIcon sx={{ fontSize: "14px !important" }} />}
               label="إرفاق صورة"
               variant="outlined"
               clickable
+              onClick={() => imageInputRef.current?.click()}
               sx={{ fontSize: 11, borderRadius: 2, borderColor: "#e2e8f0", color: "#64748b" }}
             />
             <Chip
               icon={<MicIcon sx={{ fontSize: "14px !important" }} />}
-              label="تسجيل صوتي"
+              label={ticketRecorder.isRecording ? "إيقاف وإرسال" : "تسجيل صوتي"}
               variant="outlined"
               clickable
-              sx={{ fontSize: 11, borderRadius: 2, borderColor: "#e2e8f0", color: "#64748b" }}
+              aria-label={ticketRecorder.isRecording ? "إيقاف تسجيل صوت للتذكرة وإرساله" : "بدء تسجيل صوت للتذكرة"}
+              onClick={ticketRecorder.toggle}
+              color={ticketRecorder.isRecording ? "error" : "default"}
+              sx={{
+                fontSize: 11,
+                borderRadius: 2,
+                borderColor: ticketRecorder.isRecording ? "#ea0606" : "#e2e8f0",
+                color: ticketRecorder.isRecording ? "#ea0606" : "#64748b",
+              }}
             />
           </Box>
+          {attachments.length > 0 && (
+            <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+              {attachments.map((attachment) => (
+                <Chip
+                  key={attachment.id}
+                  label={attachment.name}
+                  size="small"
+                  onDelete={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}
+                  sx={{ maxWidth: 220, borderRadius: 2 }}
+                />
+              ))}
+            </Box>
+          )}
         </Box>
       </DialogContent>
       <DialogActions sx={{ p: 2.5, gap: 1, borderTop: "1px solid #f1f5f9" }}>
-        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
-        <SoftButton variant="gradient" color="info" size="small" onClick={onClose}
+        <SoftButton variant="outlined" color="secondary" size="small" onClick={resetAndClose}>إلغاء</SoftButton>
+        <SoftButton variant="gradient" color="info" size="small" onClick={handleCreate}
+          disabled={!subject.trim() || !details.trim()}
           sx={{ px: 3, borderRadius: 2, background: "linear-gradient(135deg, #17c1e8, #0ea5c9)" }}>
           فتح التذكرة
         </SoftButton>
@@ -337,13 +492,15 @@ function NewTicketDialog({ open, onClose }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function SupportCenter() {
-  const [tickets, setTickets] = useState([]);
-  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [tickets, setTickets] = useState(() => readSupportState().tickets);
+  const [selectedTicketId, setSelectedTicketId] = useState(() => readSupportState().tickets[0]?.id || null);
   const [composer, setComposer] = useState("");
-  const [messagesByTicket, setMessagesByTicket] = useState({});
+  const [messagesByTicket, setMessagesByTicket] = useState(() => readSupportState().messagesByTicket);
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [ticketSearch, setTicketSearch] = useState("");
+  const [mediaError, setMediaError] = useState("");
 
+  const imageInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   const selectedTicket = tickets.find((t) => t.id === selectedTicketId) ?? null;
@@ -363,49 +520,116 @@ export default function SupportCenter() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const addSystemMessage = (body) => {
-    setMessagesByTicket((cur) => ({
-      ...cur,
-      [selectedTicketId]: [
-        ...(cur[selectedTicketId] || []),
-        { id: `sys-${Date.now()}`, senderType: "system", senderName: "النظام", body, createdAt: "الآن", attachments: [] },
-      ],
-    }));
-  };
+  useEffect(() => subscribeSupportState((state) => {
+    setTickets(state.tickets);
+    setMessagesByTicket(state.messagesByTicket);
+    setSelectedTicketId((current) =>
+      state.tickets.some((ticket) => ticket.id === current)
+        ? current
+        : state.tickets[0]?.id || null
+    );
+  }), []);
 
   const changeTicketStatus = (status) => {
+    if (!selectedTicketId) return;
     const label = ticketStatusConfig[status]?.label || status;
-    setTickets((cur) => cur.map((t) =>
-      t.id === selectedTicketId
-        ? { ...t, status, lastMessageAt: "الآن", unreadOwner: status === "open" ? t.unreadOwner + 1 : t.unreadOwner }
-        : t
-    ));
-    addSystemMessage(`تم تغيير حالة التذكرة إلى: ${label}`);
+    updateSupportState((state) => ({
+      tickets: state.tickets.map((t) =>
+        t.id === selectedTicketId
+          ? { ...t, status, lastMessageAt: "الآن", unreadOwner: status === "open" ? (t.unreadOwner || 0) + 1 : t.unreadOwner }
+          : t
+      ),
+      messagesByTicket: {
+        ...state.messagesByTicket,
+        [selectedTicketId]: [
+          ...(state.messagesByTicket[selectedTicketId] || []),
+          { id: `sys-${Date.now()}`, senderType: "system", senderName: "النظام", body: `تم تغيير حالة التذكرة إلى: ${label}`, createdAt: "الآن", attachments: [] },
+        ],
+      },
+    }));
   };
 
-  const addMessage = (attachmentType = null) => {
-    const text = composer.trim() || (attachmentType === "audio" ? "تسجيل صوتي جديد" : attachmentType === "image" ? "صورة مرفقة" : "");
-    if (!text || isClosed) return;
-    const attachment = attachmentType ? {
-      id: `att-${Date.now()}`,
-      type: attachmentType,
-      name: attachmentType === "audio" ? "voice-note.m4a" : "support-image.png",
-      size: attachmentType === "audio" ? "00:18" : "310 KB",
-    } : null;
+  const addMessage = ({ attachment = null, fallbackBody = "" } = {}) => {
+    const text = composer.trim() || fallbackBody;
+    if (!text || isClosed || !selectedTicketId) return;
 
-    setMessagesByTicket((cur) => ({
-      ...cur,
-      [selectedTicketId]: [
-        ...(cur[selectedTicketId] || []),
-        { id: `msg-${Date.now()}`, senderType: "tenant", senderName: "أنت", body: text, createdAt: "الآن", attachments: attachment ? [attachment] : [] },
-      ],
+    try {
+      updateSupportState((state) => ({
+        tickets: state.tickets.map((t) =>
+          t.id === selectedTicketId
+            ? { ...t, status: "waiting_owner", lastMessageAt: "الآن", unreadOwner: (t.unreadOwner || 0) + 1 }
+            : t
+        ),
+        messagesByTicket: {
+          ...state.messagesByTicket,
+          [selectedTicketId]: [
+            ...(state.messagesByTicket[selectedTicketId] || []),
+            { id: `msg-${Date.now()}`, senderType: "tenant", senderName: "أنت", body: text, createdAt: "الآن", attachments: attachment ? [attachment] : [] },
+          ],
+        },
+      }));
+      setComposer("");
+      setMediaError("");
+    } catch (error) {
+      setMediaError(error.message || "تعذر حفظ الرسالة");
+    }
+  };
+
+  const sendImageFile = async (file) => {
+    if (!file || isClosed || !selectedTicketId) return;
+    try {
+      const attachment = await imageFileToSupportAttachment(file, "tenant");
+      addMessage({ attachment, fallbackBody: "صورة مرفقة" });
+    } catch (error) {
+      setMediaError(error.message || "تعذر إرسال الصورة");
+    }
+  };
+
+  const handleComposerImageInput = (event) => {
+    const file = event.target.files?.[0];
+    if (file) sendImageFile(file);
+    event.target.value = "";
+  };
+
+  const tenantRecorder = useSupportAudioRecorder({
+    onComplete: async (blob, durationSeconds) => {
+      const attachment = await audioBlobToSupportAttachment(blob, "tenant", durationSeconds);
+      addMessage({ attachment, fallbackBody: "تسجيل صوتي جديد" });
+    },
+    onError: setMediaError,
+  });
+
+  const createTicket = ({ subject, body, category, priority, attachments = [] }) => {
+    const currentState = readSupportState();
+    const id = nextTicketId(currentState.tickets);
+    const ticket = {
+      id,
+      tenantName: "مؤسستك",
+      subject,
+      category,
+      priority,
+      status: "waiting_owner",
+      openedBy: "أنت",
+      assignedTo: "فريق الدعم",
+      createdAt: "الآن",
+      lastMessageAt: "الآن",
+      unreadOwner: 1,
+      unreadTenant: 0,
+    };
+    const firstMessage = {
+      id: `msg-${Date.now()}`,
+      senderType: "tenant",
+      senderName: "أنت",
+      body,
+      createdAt: "الآن",
+      attachments,
+    };
+
+    updateSupportState((state) => ({
+      tickets: [ticket, ...state.tickets],
+      messagesByTicket: { ...state.messagesByTicket, [id]: [firstMessage] },
     }));
-    setTickets((cur) => cur.map((t) =>
-      t.id === selectedTicketId
-        ? { ...t, status: "waiting_owner", lastMessageAt: "الآن", unreadOwner: t.unreadOwner + 1 }
-        : t
-    ));
-    setComposer("");
+    setSelectedTicketId(id);
   };
 
   const statusCfg = ticketStatusConfig[selectedTicket?.status] || ticketStatusConfig.open;
@@ -449,10 +673,24 @@ export default function SupportCenter() {
         </Box>
 
         {/* ── Main layout ── */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "320px 1fr" }, gap: 2, minHeight: 620 }}>
+        <Box sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", lg: "320px 1fr" },
+          gap: 2,
+          height: { xs: "auto", lg: "calc(100vh - 280px)" },
+          minHeight: { lg: 620 },
+          minWidth: 0,
+        }}>
 
           {/* ── Left: Ticket list ── */}
-          <Card sx={{ overflow: "hidden", display: "flex", flexDirection: "column", borderRadius: 3 }}>
+          <Card sx={{
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 3,
+            height: { xs: 420, lg: "100%" },
+            minHeight: 0,
+          }}>
             {/* Search */}
             <Box sx={{ p: 1.5, borderBottom: "1px solid #f1f5f9" }}>
               <TextField
@@ -467,7 +705,7 @@ export default function SupportCenter() {
             </Box>
 
             {/* List */}
-            <Box sx={{ flex: 1, overflowY: "auto" }}>
+            <Box sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
               {filteredTickets.map((ticket) => (
                 <TicketCard
                   key={ticket.id}
@@ -485,7 +723,14 @@ export default function SupportCenter() {
           </Card>
 
           {/* ── Right: Chat panel ── */}
-          <Card sx={{ display: "flex", flexDirection: "column", overflow: "hidden", borderRadius: 3 }}>
+          <Card sx={{
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            borderRadius: 3,
+            height: { xs: 620, lg: "100%" },
+            minHeight: 0,
+          }}>
 
             {/* Chat header */}
             <Box sx={{
@@ -532,9 +777,12 @@ export default function SupportCenter() {
 
             {/* Messages area */}
             <Box sx={{
-              flex: 1, overflowY: "auto", p: 2,
+              flex: "1 1 auto",
+              minHeight: 0,
+              overflowY: "auto",
+              overscrollBehavior: "contain",
+              p: 2,
               background: "radial-gradient(circle at 1px 1px, #e2e8f022 1px, transparent 0) 0 0 / 20px 20px, #f8fafc",
-              minHeight: 400,
             }}>
               {/* Date separator */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
@@ -562,76 +810,97 @@ export default function SupportCenter() {
             </Box>
 
             {/* Composer */}
-            <Box sx={{
-              p: 1.5, borderTop: "1px solid #f1f5f9",
-              background: "#fff",
-              display: "flex", alignItems: "flex-end", gap: 1,
-            }}>
-              {/* Attach buttons */}
-              <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "إرفاق صورة"}>
-                <span>
-                  <IconButton
-                    size="small" disabled={isClosed}
-                    onClick={() => addMessage("image")}
-                    sx={{ color: "#94a3b8", "&:hover": { color: "#17c1e8", background: "#e3f8fd" } }}
-                  >
-                    <ImageIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "تسجيل صوتي"}>
-                <span>
-                  <IconButton
-                    size="small" disabled={isClosed}
-                    onClick={() => addMessage("audio")}
-                    sx={{ color: "#94a3b8", "&:hover": { color: "#17c1e8", background: "#e3f8fd" } }}
-                  >
-                    <MicIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
+            <Box sx={{ p: 1.5, borderTop: "1px solid #f1f5f9", background: "#fff" }}>
+              {mediaError && (
+                <Alert severity="error" onClose={() => setMediaError("")} sx={{ mb: 1 }}>
+                  {mediaError}
+                </Alert>
+              )}
+              <Box sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  aria-label="اختيار صورة من جهاز المشترك"
+                  hidden
+                  onChange={handleComposerImageInput}
+                />
+                {/* Attach buttons */}
+                <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : "إرفاق صورة من الجهاز"}>
+                  <span>
+                    <IconButton
+                      size="small" disabled={isClosed}
+                      aria-label="إرفاق صورة من جهاز المشترك"
+                      onClick={() => imageInputRef.current?.click()}
+                      sx={{ color: "#94a3b8", "&:hover": { color: "#17c1e8", background: "#e3f8fd" } }}
+                    >
+                      <ImageIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title={isClosed ? "أعد فتح التذكرة أولاً" : tenantRecorder.isRecording ? "إيقاف وإرسال التسجيل" : "تسجيل صوتي"}>
+                  <span>
+                    <IconButton
+                      size="small" disabled={isClosed}
+                      aria-label={tenantRecorder.isRecording ? "إيقاف تسجيل صوت من المشترك وإرساله" : "بدء تسجيل صوت من المشترك"}
+                      onClick={tenantRecorder.toggle}
+                      sx={{
+                        color: tenantRecorder.isRecording ? "#ea0606" : "#94a3b8",
+                        background: tenantRecorder.isRecording ? "#ffeaea" : "transparent",
+                        "&:hover": {
+                          color: tenantRecorder.isRecording ? "#ea0606" : "#17c1e8",
+                          background: tenantRecorder.isRecording ? "#ffdede" : "#e3f8fd",
+                        },
+                      }}
+                    >
+                      <MicIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
 
-              {/* Text input */}
-              <TextField
-                size="small" fullWidth multiline maxRows={4}
-                disabled={isClosed}
-                placeholder={isClosed ? "التذكرة مغلقة..." : "اكتب رسالتك هنا..."}
-                value={composer}
-                onChange={(e) => setComposer(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage(); } }}
-                InputProps={{
-                  sx: {
-                    borderRadius: 3,
-                    background: "#f8fafc",
-                    "& fieldset": { border: "1px solid #e2e8f0" },
-                    "&:hover fieldset": { borderColor: "#17c1e8" },
-                    "&.Mui-focused fieldset": { borderColor: "#17c1e8" },
-                  },
-                }}
-              />
+                {/* Text input */}
+                <TextField
+                  size="small" fullWidth multiline maxRows={4}
+                  disabled={isClosed}
+                  placeholder={isClosed ? "التذكرة مغلقة..." : "اكتب رسالتك هنا..."}
+                  value={composer}
+                  onChange={(e) => setComposer(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addMessage(); } }}
+                  InputProps={{
+                    sx: {
+                      borderRadius: 3,
+                      background: "#f8fafc",
+                      "& fieldset": { border: "1px solid #e2e8f0" },
+                      "&:hover fieldset": { borderColor: "#17c1e8" },
+                      "&.Mui-focused fieldset": { borderColor: "#17c1e8" },
+                    },
+                  }}
+                />
 
-              {/* Send button */}
-              <IconButton
-                disabled={isClosed}
-                onClick={() => addMessage()}
-                sx={{
-                  width: 38, height: 38, flexShrink: 0,
-                  background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #17c1e8, #0ea5c9)",
-                  color: isClosed ? "#94a3b8" : "#fff",
-                  borderRadius: 2.5,
-                  "&:hover": { background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #0ea5c9, #0284a8)", transform: isClosed ? "none" : "scale(1.05)" },
-                  transition: "all 0.2s",
-                  boxShadow: isClosed ? "none" : "0 4px 12px rgba(23,193,232,0.35)",
-                }}
-              >
-                <SendIcon sx={{ fontSize: 17 }} />
-              </IconButton>
+                {/* Send button */}
+                <IconButton
+                  disabled={isClosed}
+                  aria-label="إرسال رسالة من المشترك"
+                  onClick={() => addMessage()}
+                  sx={{
+                    width: 38, height: 38, flexShrink: 0,
+                    background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #17c1e8, #0ea5c9)",
+                    color: isClosed ? "#94a3b8" : "#fff",
+                    borderRadius: 2.5,
+                    "&:hover": { background: isClosed ? "#e2e8f0" : "linear-gradient(135deg, #0ea5c9, #0284a8)", transform: isClosed ? "none" : "scale(1.05)" },
+                    transition: "all 0.2s",
+                    boxShadow: isClosed ? "none" : "0 4px 12px rgba(23,193,232,0.35)",
+                  }}
+                >
+                  <SendIcon sx={{ fontSize: 17 }} />
+                </IconButton>
+              </Box>
             </Box>
           </Card>
         </Box>
       </SoftBox>
 
-      <NewTicketDialog open={newTicketOpen} onClose={() => setNewTicketOpen(false)} />
+      <NewTicketDialog open={newTicketOpen} onClose={() => setNewTicketOpen(false)} onCreate={createTicket} />
       <Footer />
     </DashboardLayout>
   );

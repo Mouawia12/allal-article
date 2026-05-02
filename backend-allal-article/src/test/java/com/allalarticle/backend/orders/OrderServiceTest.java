@@ -12,6 +12,7 @@ import com.allalarticle.backend.orders.dto.CreateOrderRequest;
 import com.allalarticle.backend.orders.dto.OrderItemRequest;
 import com.allalarticle.backend.orders.entity.Order;
 import com.allalarticle.backend.orders.entity.OrderItem;
+import com.allalarticle.backend.products.PriceListPricingService;
 import com.allalarticle.backend.products.ProductRepository;
 import com.allalarticle.backend.products.entity.Product;
 import com.allalarticle.backend.users.TenantUserRepository;
@@ -44,6 +45,7 @@ class OrderServiceTest {
     @Mock StockMovementRepository  movementRepo;
     @Mock StockReservationRepository reservationRepo;
     @Mock AuditLogService          auditLogService;
+    @Mock PriceListPricingService  pricingService;
 
     @InjectMocks OrderService service;
 
@@ -55,6 +57,7 @@ class OrderServiceTest {
         testProduct = new Product();
         testProduct.setId(1L);
         testProduct.setCurrentPriceAmount(new BigDecimal("1000"));
+        testProduct.setPriceCurrency("DZD");
 
         testCustomer = new Customer();
         testCustomer.setId(1L);
@@ -88,6 +91,14 @@ class OrderServiceTest {
         return order;
     }
 
+    private void stubDefaultPricing() {
+        var defaultPricing = PriceListPricingService.PriceResolution.productDefault(new BigDecimal("1000"), "DZD");
+        when(pricingService.resolvePrice(any(), eq("sales"), eq(1L), any(), any(), any()))
+                .thenReturn(defaultPricing);
+        when(pricingService.applyManualOverrideIfNeeded(any(), any(), any(), any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+    }
+
     // ── CREATE ────────────────────────────────────────────────────────────────
 
     @Test
@@ -103,24 +114,91 @@ class OrderServiceTest {
             return o;
         });
         when(eventRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        stubDefaultPricing();
 
-        var req = new CreateOrderRequest(1L, null, null, null,
-                List.of(new OrderItemRequest(1L, new BigDecimal("5"), null)));
+        var req = new CreateOrderRequest(1L, null, null, null, null,
+                List.of(new OrderItemRequest(1L, new BigDecimal("5"), null, null)));
 
         var resp = service.create(req, null);
 
         assertThat(resp).isNotNull();
         assertThat(resp.orderNumber()).startsWith("ORD-");
+        assertThat(resp.totalAmount()).isEqualByComparingTo("5000");
+        assertThat(resp.items().get(0).unitPrice()).isEqualByComparingTo("1000");
+        assertThat(resp.items().get(0).pricingSource()).isEqualTo("product_default");
         verify(customerRepo).findById(1L);
         verify(productRepo).findById(1L);
+    }
+
+    @Test
+    void create_withSalesPriceList_usesResolvedListPrice() {
+        var listPricing = new PriceListPricingService.PriceResolution(
+                7L, "أسعار الجملة", "DZD", 70L,
+                new BigDecimal("1000"), new BigDecimal("850"), "price_list");
+
+        when(customerRepo.findById(1L)).thenReturn(Optional.of(testCustomer));
+        when(productRepo.findById(1L)).thenReturn(Optional.of(testProduct));
+        when(orderRepo.save(any())).thenAnswer(inv -> {
+            Order o = inv.getArgument(0);
+            o.setId(1L);
+            return o;
+        });
+        when(eventRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(pricingService.resolvePrice(eq("7"), eq("sales"), eq(1L), any(), any(), eq("DZD")))
+                .thenReturn(listPricing);
+        when(pricingService.applyManualOverrideIfNeeded(any(), any(), any(), any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var req = new CreateOrderRequest(1L, null, "7", null, null,
+                List.of(new OrderItemRequest(1L, new BigDecimal("4"), null, null)));
+
+        var resp = service.create(req, null);
+
+        assertThat(resp.priceListId()).isEqualTo(7L);
+        assertThat(resp.priceListName()).isEqualTo("أسعار الجملة");
+        assertThat(resp.totalAmount()).isEqualByComparingTo("3400");
+        assertThat(resp.items().get(0).priceListItemId()).isEqualTo(70L);
+        assertThat(resp.items().get(0).unitPrice()).isEqualByComparingTo("850");
+        assertThat(resp.items().get(0).pricingSource()).isEqualTo("price_list");
+    }
+
+    @Test
+    void create_withMainRequest_usesCustomerDefaultPriceList() {
+        testCustomer.setPriceListId(7L);
+        var listPricing = new PriceListPricingService.PriceResolution(
+                7L, "أسعار الجملة", "DZD", 70L,
+                new BigDecimal("1000"), new BigDecimal("850"), "price_list");
+
+        when(customerRepo.findById(1L)).thenReturn(Optional.of(testCustomer));
+        when(productRepo.findById(1L)).thenReturn(Optional.of(testProduct));
+        when(orderRepo.save(any())).thenAnswer(inv -> {
+            Order o = inv.getArgument(0);
+            o.setId(1L);
+            return o;
+        });
+        when(eventRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(pricingService.resolvePrice(eq("7"), eq("sales"), eq(1L), any(), any(), eq("DZD")))
+                .thenReturn(listPricing);
+        when(pricingService.applyManualOverrideIfNeeded(any(), any(), any(), any()))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var req = new CreateOrderRequest(1L, null, "MAIN", null, null,
+                List.of(new OrderItemRequest(1L, new BigDecimal("4"), null, null)));
+
+        var resp = service.create(req, null);
+
+        assertThat(resp.priceListId()).isEqualTo(7L);
+        assertThat(resp.priceListName()).isEqualTo("أسعار الجملة");
+        assertThat(resp.totalAmount()).isEqualByComparingTo("3400");
+        assertThat(resp.items().get(0).unitPrice()).isEqualByComparingTo("850");
     }
 
     @Test
     void create_withUnknownCustomer_throwsNotFound() {
         when(customerRepo.findById(99L)).thenReturn(Optional.empty());
 
-        var req = new CreateOrderRequest(99L, null, null, null,
-                List.of(new OrderItemRequest(1L, BigDecimal.ONE, null)));
+        var req = new CreateOrderRequest(99L, null, null, null, null,
+                List.of(new OrderItemRequest(1L, BigDecimal.ONE, null, null)));
 
         assertThatThrownBy(() -> service.create(req, null))
                 .isInstanceOf(AppException.class)
@@ -133,8 +211,8 @@ class OrderServiceTest {
         when(productRepo.findById(99L)).thenReturn(Optional.empty());
         when(orderRepo.save(any())).thenAnswer(inv -> { Order o = inv.getArgument(0); o.setId(1L); return o; });
 
-        var req = new CreateOrderRequest(1L, null, null, null,
-                List.of(new OrderItemRequest(99L, BigDecimal.ONE, null)));
+        var req = new CreateOrderRequest(1L, null, null, null, null,
+                List.of(new OrderItemRequest(99L, BigDecimal.ONE, null, null)));
 
         assertThatThrownBy(() -> service.create(req, null))
                 .isInstanceOf(AppException.class)

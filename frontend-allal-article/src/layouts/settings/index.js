@@ -16,10 +16,12 @@ import Avatar from "@mui/material/Avatar";
 import LinearProgress from "@mui/material/LinearProgress";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import CircularProgress from "@mui/material/CircularProgress";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import SettingsIcon from "@mui/icons-material/Settings";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import SecurityIcon from "@mui/icons-material/Security";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -42,7 +44,7 @@ import { useI18n } from "i18n";
 import { WILAYAS } from "data/wilayas";
 import { getUserPermissions, permissionsByModule, roleConfig } from "data/config/permissionsConfig";
 import { useAuth } from "context/AuthContext";
-import { customersApi } from "services";
+import { aiSettingsApi, customersApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 
 // ─── Section Header ───────────────────────────────────────────────────────────
@@ -71,6 +73,31 @@ function SettingRow({ label, description, children }) {
       <SoftBox flexShrink={0}>{children}</SoftBox>
     </SoftBox>
   );
+}
+
+const defaultTextModels = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-4o", "gpt-4o-mini"];
+const defaultImageModels = ["gpt-image-2", "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini", "dall-e-3"];
+
+function mergeModelIds(remote = [], fallback = [], selected = "") {
+  const ids = [];
+  remote.forEach((model) => {
+    const id = typeof model === "string" ? model : model?.id;
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  fallback.forEach((id) => {
+    if (id && !ids.includes(id)) ids.push(id);
+  });
+  if (selected && !ids.includes(selected)) ids.unshift(selected);
+  return ids;
+}
+
+function formatRefreshTime(value) {
+  if (!value) return "لم يتم التحديث بعد";
+  try {
+    return new Date(value).toLocaleString("ar-DZ", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return value;
+  }
 }
 
 // ─── General Settings Tab ─────────────────────────────────────────────────────
@@ -165,39 +192,183 @@ function GeneralSettings() {
 // ─── AI Settings Tab ──────────────────────────────────────────────────────────
 function AISettings() {
   const [showKey, setShowKey] = useState({});
-  const [provider, setProvider] = useState("openai");
-  const [model, setModel] = useState("gpt-4o");
-  const [imageModel, setImageModel] = useState("dall-e-3");
-  const [extractionEnabled, setExtractionEnabled] = useState(true);
-  const [imageProcessEnabled, setImageProcessEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [modelRefreshing, setModelRefreshing] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [settings, setSettings] = useState({
+    provider: "openai",
+    openAiApiKey: "",
+    model: "gpt-4o",
+    imageModel: "gpt-image-2",
+    extractionEnabled: true,
+    imageProcessEnabled: true,
+    imageProcessingPrompt: "Remove the background from this product image. Keep the product exactly as it appears - preserve all text, logos, colors, and fine details. Make the background pure white or transparent. Do not modify the product itself in any way.",
+    hasOpenAiApiKey: false,
+    maskedOpenAiApiKey: "",
+    openAiKeySource: "none",
+    availableTextModels: [],
+    availableImageModels: [],
+    modelsRefreshedAt: null,
+  });
 
   const toggleKey = (k) => setShowKey(prev => ({ ...prev, [k]: !prev[k] }));
 
   const models = {
-    openai:   ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+    openai:   defaultTextModels,
     deepseek: ["deepseek-chat", "deepseek-reasoner"],
   };
 
-  const imageModels = ["dall-e-3", "dall-e-2", "stable-diffusion"];
+  const openAiTextModels = mergeModelIds(settings.availableTextModels, defaultTextModels, settings.model);
+  const imageModels = mergeModelIds(settings.availableImageModels, defaultImageModels, settings.imageModel);
+  const keySourceLabels = {
+    environment: "متغير البيئة",
+    tenant: "إعدادات النظام",
+    none: "غير مضبوط",
+  };
+
+  useEffect(() => {
+    let active = true;
+    aiSettingsApi.get()
+      .then((r) => {
+        if (!active) return;
+        setSettings((prev) => ({ ...prev, ...r.data, openAiApiKey: "" }));
+      })
+      .catch((err) => {
+        if (!active) return;
+        setFeedback({
+          severity: "error",
+          message: getApiErrorMessage(err, "تعذر تحميل إعدادات الذكاء الاصطناعي"),
+        });
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const update = (patch) => setSettings((current) => ({ ...current, ...patch }));
+
+  const selectProvider = (nextProvider) => {
+    const nextModels = nextProvider === "openai" ? openAiTextModels : (models[nextProvider] || models.openai);
+    update({
+      provider: nextProvider,
+      model: nextModels.includes(settings.model) ? settings.model : nextModels[0],
+    });
+  };
+
+  const payload = (extra = {}) => ({
+    provider: settings.provider,
+    openAiApiKey: settings.openAiApiKey,
+    model: settings.model,
+    imageModel: settings.imageModel,
+    extractionEnabled: settings.extractionEnabled,
+    imageProcessEnabled: settings.imageProcessEnabled,
+    imageProcessingPrompt: settings.imageProcessingPrompt,
+    ...extra,
+  });
+
+  const save = (extra = {}) => {
+    setSaving(true);
+    setFeedback(null);
+    aiSettingsApi.save(payload(extra))
+      .then((r) => {
+        setSettings((prev) => ({ ...prev, ...r.data, openAiApiKey: "" }));
+        setFeedback({ severity: "success", message: "تم حفظ إعدادات AI بنجاح" });
+      })
+      .catch((err) => {
+        setFeedback({
+          severity: "error",
+          message: getApiErrorMessage(err, "تعذر حفظ إعدادات AI"),
+        });
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const testConnection = () => {
+    setTesting(true);
+    setFeedback(null);
+    aiSettingsApi.test({
+      provider: settings.provider,
+      openAiApiKey: settings.openAiApiKey,
+      model: settings.model,
+    })
+      .then((r) => {
+        setFeedback({
+          severity: "success",
+          message: r?.data?.message || "تم الاتصال بـ OpenAI بنجاح",
+        });
+      })
+      .catch((err) => {
+        setFeedback({
+          severity: "error",
+          message: getApiErrorMessage(err, "فشل اختبار الاتصال مع OpenAI"),
+        });
+      })
+      .finally(() => setTesting(false));
+  };
+
+  const refreshModels = () => {
+    setModelRefreshing(true);
+    setFeedback(null);
+    aiSettingsApi.refreshModels({ openAiApiKey: settings.openAiApiKey })
+      .then((r) => {
+        const textModels = r.data?.textModels || [];
+        const imageModelList = r.data?.imageModels || [];
+        const refreshedAt = r.data?.refreshedAt || new Date().toISOString();
+        setSettings((prev) => ({
+          ...prev,
+          availableTextModels: textModels,
+          availableImageModels: imageModelList,
+          modelsRefreshedAt: refreshedAt,
+          model: textModels.some((model) => model.id === prev.model) ? prev.model : (textModels[0]?.id || prev.model),
+          imageModel: imageModelList.some((model) => model.id === prev.imageModel) ? prev.imageModel : (imageModelList[0]?.id || prev.imageModel),
+          openAiApiKey: "",
+        }));
+        setFeedback({ severity: "success", message: "تم تحديث قائمة موديلات OpenAI" });
+      })
+      .catch((err) => {
+        setFeedback({
+          severity: "error",
+          message: getApiErrorMessage(err, "تعذر تحديث قائمة الموديلات"),
+        });
+      })
+      .finally(() => setModelRefreshing(false));
+  };
+
+  if (loading) {
+    return (
+      <SoftBox display="flex" justifyContent="center" alignItems="center" py={6}>
+        <CircularProgress size={28} />
+      </SoftBox>
+    );
+  }
 
   return (
     <SoftBox>
+      {feedback && (
+        <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
+          {feedback.message}
+        </Alert>
+      )}
+
       {/* Provider Selection */}
       <SectionHeader title="مزود الذكاء الاصطناعي" description="اختر المزود الرئيسي للذكاء الاصطناعي" />
       <Grid container spacing={2} mb={3}>
         {[
-          { key: "openai",   label: "OpenAI",   desc: "GPT-4o, DALL-E 3",     color: "#10a37f", active: true },
+          { key: "openai",   label: "OpenAI",   desc: "GPT-5.5, GPT Image",     color: "#10a37f", active: true },
           { key: "deepseek", label: "DeepSeek", desc: "DeepSeek Chat",          color: "#1e40af", active: false },
         ].map((p) => (
           <Grid item xs={12} sm={6} key={p.key}>
             <SoftBox
-              onClick={() => setProvider(p.key)}
+              onClick={() => selectProvider(p.key)}
               sx={{
                 p: 2,
                 borderRadius: 2,
-                border: `2px solid ${provider === p.key ? p.color : "#e9ecef"}`,
+                border: `2px solid ${settings.provider === p.key ? p.color : "#e9ecef"}`,
                 cursor: "pointer",
-                background: provider === p.key ? `${p.color}11` : "#fff",
+                background: settings.provider === p.key ? `${p.color}11` : "#fff",
                 transition: "all 0.2s",
               }}
             >
@@ -206,7 +377,7 @@ function AISettings() {
                   <SoftTypography variant="button" fontWeight="bold">{p.label}</SoftTypography>
                   <SoftTypography variant="caption" color="secondary" display="block">{p.desc}</SoftTypography>
                 </SoftBox>
-                {provider === p.key && <CheckCircleIcon sx={{ color: p.color }} />}
+                {settings.provider === p.key && <CheckCircleIcon sx={{ color: p.color }} />}
               </SoftBox>
             </SoftBox>
           </Grid>
@@ -222,7 +393,12 @@ function AISettings() {
             size="small"
             label="OpenAI API Key"
             type={showKey.openai ? "text" : "password"}
-            defaultValue="sk-proj-••••••••••••••••••••••••••••••••"
+            value={settings.openAiApiKey}
+            placeholder={settings.hasOpenAiApiKey ? `مفتاح محفوظ (${settings.maskedOpenAiApiKey})` : "sk-proj-..."}
+            helperText={settings.hasOpenAiApiKey
+              ? `المصدر الحالي: ${keySourceLabels[settings.openAiKeySource] || settings.openAiKeySource}`
+              : "لا يوجد مفتاح OpenAI مضبوط حالياً"}
+            onChange={(e) => update({ openAiApiKey: e.target.value })}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
@@ -257,16 +433,32 @@ function AISettings() {
 
       {/* Model Selection */}
       <SectionHeader title="اختيار الموديل" />
+      <SoftBox display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} mb={2}>
+        <SoftTypography variant="caption" color="secondary">
+          آخر تحديث لقائمة OpenAI: {formatRefreshTime(settings.modelsRefreshedAt)}
+        </SoftTypography>
+        <SoftButton
+          variant="outlined"
+          color="info"
+          size="small"
+          startIcon={<RefreshIcon />}
+          onClick={refreshModels}
+          disabled={modelRefreshing || settings.provider !== "openai"}
+        >
+          {modelRefreshing ? "جاري تحديث الموديلات..." : "تحديث موديلات OpenAI"}
+        </SoftButton>
+      </SoftBox>
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} sm={6}>
-          <TextField fullWidth select size="small" label="موديل استخراج البيانات" value={model}
-            onChange={(e) => setModel(e.target.value)}>
-            {models[provider].map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
+          <TextField fullWidth select size="small" label="موديل استخراج البيانات" value={settings.model}
+            onChange={(e) => update({ model: e.target.value })}>
+            {(settings.provider === "openai" ? openAiTextModels : (models[settings.provider] || models.openai))
+              .map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
           </TextField>
         </Grid>
         <Grid item xs={12} sm={6}>
-          <TextField fullWidth select size="small" label="موديل معالجة الصور" value={imageModel}
-            onChange={(e) => setImageModel(e.target.value)}>
+          <TextField fullWidth select size="small" label="موديل معالجة الصور" value={settings.imageModel}
+            onChange={(e) => update({ imageModel: e.target.value })}>
             {imageModels.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
           </TextField>
         </Grid>
@@ -275,14 +467,16 @@ function AISettings() {
       {/* Features */}
       <SectionHeader title="الميزات الذكية" />
       <SettingRow label="استخراج بيانات الأصناف" description="تحليل Excel/PDF/صور لاستخراج بيانات الأصناف">
-        <Switch checked={extractionEnabled} onChange={(e) => setExtractionEnabled(e.target.checked)} color="info" />
+        <Switch checked={settings.extractionEnabled}
+          onChange={(e) => update({ extractionEnabled: e.target.checked })} color="info" />
       </SettingRow>
       <SettingRow label="معالجة صور المنتجات" description="إزالة الخلفية وتحسين صور الأصناف">
-        <Switch checked={imageProcessEnabled} onChange={(e) => setImageProcessEnabled(e.target.checked)} color="info" />
+        <Switch checked={settings.imageProcessEnabled}
+          onChange={(e) => update({ imageProcessEnabled: e.target.checked })} color="info" />
       </SettingRow>
 
       {/* Image Processing Prompt */}
-      {imageProcessEnabled && (
+      {settings.imageProcessEnabled && (
         <SoftBox mb={3}>
           <SoftTypography variant="caption" fontWeight="bold" color="secondary" mb={0.5} display="block">
             برومبت معالجة الصور (قابل للتخصيص)
@@ -292,7 +486,8 @@ function AISettings() {
             multiline
             rows={4}
             size="small"
-            defaultValue="Remove the background from this product image. Keep the product exactly as it appears - preserve all text, logos, colors, and fine details. Make the background pure white or transparent. Do not modify the product itself in any way."
+            value={settings.imageProcessingPrompt}
+            onChange={(e) => update({ imageProcessingPrompt: e.target.value })}
           />
           <SoftTypography variant="caption" color="secondary" mt={0.5} display="block">
             * هذا البرومبت يُرسل مع كل صورة للمعالجة
@@ -300,41 +495,35 @@ function AISettings() {
         </SoftBox>
       )}
 
-      {/* Usage Stats */}
-      <SectionHeader title="استخدام API هذا الشهر" />
+      {/* Connection Status */}
+      <SectionHeader title="حالة الربط" />
       <Grid container spacing={2} mb={3}>
         {[
-          { label: "OpenAI Tokens",     used: 45000, max: 100000, color: "#10a37f" },
-          { label: "معالجة الصور",      used: 23,    max: 100,    color: "#7928ca", unit: "صورة" },
-          { label: "استخراج ملفات",     used: 8,     max: 50,     color: "#fb8c00", unit: "ملف" },
-        ].map((stat) => {
-          const pct = Math.round((stat.used / stat.max) * 100);
-          return (
-            <Grid item xs={12} sm={4} key={stat.label}>
-              <SoftBox>
-                <SoftBox display="flex" justifyContent="space-between" mb={0.5}>
-                  <SoftTypography variant="caption" fontWeight="bold">{stat.label}</SoftTypography>
-                  <SoftTypography variant="caption" color="secondary">
-                    {stat.used.toLocaleString()}{stat.unit ? " " + stat.unit : ""} / {stat.max.toLocaleString()}{stat.unit ? " " + stat.unit : ""}
-                  </SoftTypography>
-                </SoftBox>
-                <LinearProgress
-                  variant="determinate"
-                  value={pct}
-                  sx={{
-                    height: 6, borderRadius: 3, bgcolor: "#e9ecef",
-                    "& .MuiLinearProgress-bar": { background: stat.color },
-                  }}
-                />
-                <SoftTypography variant="caption" color="secondary">{pct}% مستخدم</SoftTypography>
-              </SoftBox>
-            </Grid>
-          );
-        })}
+          { label: "مزود", value: settings.provider === "openai" ? "OpenAI" : "DeepSeek" },
+          { label: "الموديل", value: settings.model },
+          { label: "المفتاح", value: settings.hasOpenAiApiKey ? "مضبوط" : "غير مضبوط" },
+        ].map((stat) => (
+          <Grid item xs={12} sm={4} key={stat.label}>
+            <SoftBox sx={{ border: "1px solid #e9ecef", borderRadius: 2, p: 1.5 }}>
+              <SoftTypography variant="caption" color="secondary" display="block">{stat.label}</SoftTypography>
+              <SoftTypography variant="button" fontWeight="bold">{stat.value}</SoftTypography>
+            </SoftBox>
+          </Grid>
+        ))}
       </Grid>
 
-      <SoftBox display="flex" justifyContent="flex-end">
-        <SoftButton variant="gradient" color="info" size="small">حفظ إعدادات AI</SoftButton>
+      <SoftBox display="flex" justifyContent="flex-end" gap={1}>
+        {settings.hasOpenAiApiKey && settings.openAiKeySource === "tenant" && (
+          <SoftButton variant="text" color="error" size="small" onClick={() => save({ clearOpenAiApiKey: true })} disabled={saving}>
+            حذف المفتاح المحفوظ
+          </SoftButton>
+        )}
+        <SoftButton variant="outlined" color="dark" size="small" onClick={testConnection} disabled={testing}>
+          {testing ? "جاري الاختبار..." : "اختبار الاتصال"}
+        </SoftButton>
+        <SoftButton variant="gradient" color="info" size="small" onClick={() => save()} disabled={saving}>
+          {saving ? "جارٍ الحفظ..." : "حفظ إعدادات AI"}
+        </SoftButton>
       </SoftBox>
     </SoftBox>
   );

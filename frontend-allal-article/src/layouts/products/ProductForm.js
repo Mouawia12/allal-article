@@ -26,6 +26,7 @@ import AddIcon from "@mui/icons-material/Add";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import InventoryIcon from "@mui/icons-material/Inventory2Outlined";
@@ -35,6 +36,8 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
 import ScaleIcon from "@mui/icons-material/ScaleOutlined";
 import SettingsIcon from "@mui/icons-material/Settings";
+import StarIcon from "@mui/icons-material/Star";
+import StarBorderIcon from "@mui/icons-material/StarBorder";
 import TuneIcon from "@mui/icons-material/Tune";
 import ViewModuleIcon from "@mui/icons-material/ViewModuleOutlined";
 
@@ -49,7 +52,7 @@ import {
   generateVariantCombinations,
   productSettings,
 } from "./mockProductData";
-import { productsApi, inventoryApi } from "services";
+import { productsApi, inventoryApi, mediaApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
 import { useI18n } from "i18n";
 
@@ -641,47 +644,190 @@ function AIPanel({ onAIFill }) {
 }
 
 // ─── Image Upload ─────────────────────────────────────────────────────────────
-function ImageUploadZone({ images, onAdd, onRemove }) {
+function ImageUploadZone({
+  images,
+  onAdd,
+  onRemove,
+  onGenerate,
+  onSetPrimary,
+  onSelect,
+  onProcess,
+  generating,
+  uploading,
+  processingImageId,
+  generateDisabled,
+  processDisabled,
+  selectedImageId,
+  removingImageId,
+  primaryUpdatingImageId,
+}) {
   return (
-    <SoftBox display="flex" gap={1.5} flexWrap="wrap">
-      {images.map((img, i) => (
-        <SoftBox
-          key={i}
-          sx={{
-            width: 84, height: 84, borderRadius: "10px",
-            background: img.color || "#e9ecef",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            position: "relative", border: "1px solid #e0e0e0",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          }}
+    <SoftBox>
+      <SoftBox display="flex" gap={1.2} mb={2} flexWrap="wrap">
+        <SoftButton
+          variant="gradient"
+          color="info"
+          size="small"
+          startIcon={<AutoAwesomeIcon />}
+          onClick={onGenerate}
+          disabled={generating || generateDisabled}
         >
-          <SoftTypography variant="caption" color="secondary" sx={{ fontSize: "10px" }}>صورة {i + 1}</SoftTypography>
-          <IconButton
-            size="small" onClick={() => onRemove(i)}
+          {generating ? "جاري التوليد..." : "توليد صورة بالذكاء الاصطناعي"}
+        </SoftButton>
+        <SoftButton
+          variant="outlined"
+          color="secondary"
+          size="small"
+          startIcon={<AddPhotoAlternateIcon />}
+          onClick={onAdd}
+          disabled={uploading || generateDisabled}
+        >
+          {uploading ? "جاري الرفع..." : "رفع صورة"}
+        </SoftButton>
+        <SoftButton
+          variant="outlined"
+          color="info"
+          size="small"
+          startIcon={<AutoFixHighIcon />}
+          onClick={onProcess}
+          disabled={processDisabled || !!processingImageId}
+        >
+          {processingImageId ? "جاري عزل الخلفية..." : "عزل الخلفية"}
+        </SoftButton>
+      </SoftBox>
+
+      <SoftBox display="flex" gap={1.5} flexWrap="wrap">
+        {images.map((img, i) => (
+          <SoftBox
+            key={img.id || img.media?.id || img.previewUrl || i}
+            onClick={() => onSelect?.(img)}
             sx={{
-              position: "absolute", top: -6, right: -6,
-              background: "#ea0606", color: "#fff", p: 0.2,
-              width: 18, height: 18,
-              "&:hover": { background: "#c62828" },
+              width: 110, height: 110, borderRadius: "10px",
+              background: img.previewUrl || img.publicUrl ? "#f8fafc" : img.color || "#e9ecef",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              position: "relative",
+              border: selectedImageId === img.id ? "2px solid #17c1e8" : "1px solid #e0e0e0",
+              boxShadow: selectedImageId === img.id
+                ? "0 0 0 3px #17c1e822, 0 6px 16px rgba(23,193,232,0.22)"
+                : "0 2px 8px rgba(0,0,0,0.08)",
+              overflow: "hidden",
+              cursor: img.id ? "pointer" : "default",
+              transition: "border-color 0.18s, box-shadow 0.18s",
             }}
           >
-            <DeleteOutlineIcon sx={{ fontSize: 11 }} />
-          </IconButton>
+            {img.previewUrl || img.publicUrl ? (
+              <SoftBox
+                component="img"
+                src={img.previewUrl || img.publicUrl}
+                alt={img.title || `صورة ${i + 1}`}
+                sx={{ width: "100%", height: "100%", objectFit: "contain", p: 0.75 }}
+              />
+            ) : (
+              <SoftTypography variant="caption" color="secondary" sx={{ fontSize: "10px" }}>
+                صورة {i + 1}
+              </SoftTypography>
+            )}
+            {img.generated && (
+              <Chip
+                label="AI"
+                size="small"
+                sx={{
+                  position: "absolute",
+                  bottom: 6,
+                  left: 6,
+                  height: 18,
+                  fontSize: 10,
+                  background: "#17c1e8",
+                  color: "#fff",
+                }}
+              />
+            )}
+            {img.processed && (
+              <Chip
+                label="معالجة"
+                size="small"
+                sx={{
+                  position: "absolute",
+                  top: 30,
+                  left: 6,
+                  height: 18,
+                  fontSize: 9,
+                  background: "#2dce89",
+                  color: "#fff",
+                }}
+              />
+            )}
+            {img.isPrimary && (
+              <Chip
+                label="رئيسية"
+                size="small"
+                sx={{
+                  position: "absolute",
+                  bottom: 6,
+                  right: 6,
+                  height: 18,
+                  fontSize: 10,
+                  background: "#fb8c00",
+                  color: "#fff",
+                }}
+              />
+            )}
+            <Tooltip title={img.isPrimary ? "الصورة الرئيسية" : "تعيين كصورة رئيسية"}>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSetPrimary(img);
+                  }}
+                  disabled={!img.id || img.isPrimary || primaryUpdatingImageId === img.id}
+                  sx={{
+                    position: "absolute", top: 4, left: 4,
+                    background: "#fff", color: img.isPrimary ? "#fb8c00" : "#8392ab", p: 0.2,
+                    width: 22, height: 22,
+                    "&:hover": { background: "#fff7e6", color: "#fb8c00" },
+                    "&.Mui-disabled": { background: "rgba(255,255,255,0.8)" },
+                  }}
+                >
+                  {img.isPrimary ? <StarIcon sx={{ fontSize: 13 }} /> : <StarBorderIcon sx={{ fontSize: 13 }} />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove(img, i);
+              }}
+              disabled={removingImageId === img.id}
+              sx={{
+                position: "absolute", top: 4, right: 4,
+                background: "rgba(234,6,6,0.92)", color: "#fff", p: 0.2,
+                width: 20, height: 20,
+                "&:hover": { background: "#c62828" },
+                "&.Mui-disabled": { background: "rgba(234,6,6,0.45)", color: "#fff" },
+              }}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 12 }} />
+            </IconButton>
+          </SoftBox>
+        ))}
+        <SoftBox
+          onClick={onAdd}
+          sx={{
+            width: 110, height: 110, borderRadius: "10px",
+            border: "2px dashed #17c1e8",
+            display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center",
+            cursor: "pointer", transition: "all 0.2s",
+            "&:hover": { background: "#f0f7ff", borderColor: "#0ea5c9" },
+          }}
+        >
+          <AddPhotoAlternateIcon sx={{ color: "#17c1e8", fontSize: 24 }} />
+          <SoftTypography variant="caption" sx={{ color: "#17c1e8", fontSize: "10px", mt: 0.3 }}>
+            إضافة
+          </SoftTypography>
         </SoftBox>
-      ))}
-      <SoftBox
-        onClick={onAdd}
-        sx={{
-          width: 84, height: 84, borderRadius: "10px",
-          border: "2px dashed #17c1e8",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          cursor: "pointer", transition: "all 0.2s",
-          "&:hover": { background: "#f0f7ff", borderColor: "#0ea5c9" },
-        }}
-      >
-        <AddPhotoAlternateIcon sx={{ color: "#17c1e8", fontSize: 22 }} />
-        <SoftTypography variant="caption" sx={{ color: "#17c1e8", fontSize: "10px", mt: 0.3 }}>إضافة</SoftTypography>
       </SoftBox>
     </SoftBox>
   );
@@ -703,7 +849,16 @@ export default function ProductForm() {
   const [hasVariants, setHasVariants] = useState(false);
   const [variantAttrs, setVariantAttrs] = useState([]);
   const [variants, setVariants] = useState([]);
-  const [images, setImages] = useState(isEdit ? [{ color: "#FF6B6B88" }] : []);
+  const [images, setImages] = useState([]);
+  const imageObjectUrls = useRef([]);
+  const imageFileInputRef = useRef(null);
+  const [imageGenerating, setImageGenerating] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageProcessingId, setImageProcessingId] = useState(null);
+  const [selectedImageId, setSelectedImageId] = useState(null);
+  const [imageError, setImageError] = useState("");
+  const [imageDeletingId, setImageDeletingId] = useState(null);
+  const [imagePrimaryUpdatingId, setImagePrimaryUpdatingId] = useState(null);
   const [touched, setTouched] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [catalogCategories, setCatalogCategories] = useState([]);
@@ -777,8 +932,215 @@ export default function ProductForm() {
       }));
     }
   };
-  const addImage    = () => setImages((p) => [...p, { color: ["#FF6B6B88","#4ECDC488","#FFE66D88","#A8E6CF88"][p.length % 4] }]);
-  const removeImage = (i) => setImages((p) => p.filter((_, idx) => idx !== i));
+  const rememberImageObjectUrl = (url) => {
+    imageObjectUrls.current.push(url);
+    return url;
+  };
+
+  const revokeImageUrl = (url) => {
+    if (url?.startsWith("blob:")) {
+      URL.revokeObjectURL(url);
+      imageObjectUrls.current = imageObjectUrls.current.filter((u) => u !== url);
+    }
+  };
+
+  const imageWithPreview = async (productImage, generated = false) => {
+    const media = productImage.media ?? productImage;
+    try {
+      const response = await mediaApi.content(media.id);
+      const previewUrl = rememberImageObjectUrl(URL.createObjectURL(response.data));
+      return {
+        ...productImage,
+        media,
+        publicUrl: media.publicUrl,
+        title: media.title,
+        previewUrl,
+        generated: generated || productImage.sourceType === "ai_generated" || media.title?.startsWith("AI"),
+        processed: productImage.sourceType === "ai_processed",
+      };
+    } catch {
+      return {
+        ...productImage,
+        media,
+        publicUrl: media.publicUrl,
+        title: media.title,
+        previewUrl: media.publicUrl,
+        generated: generated || productImage.sourceType === "ai_generated" || media.title?.startsWith("AI"),
+        processed: productImage.sourceType === "ai_processed",
+      };
+    }
+  };
+
+  const refreshProductImages = async (preferredImageId = null) => {
+    const refreshed = await productsApi.listImages(id);
+    const list = Array.isArray(refreshed.data) ? refreshed.data : [];
+    const withPreviews = await Promise.all(list.map((media) => imageWithPreview(media)));
+    setImages((current) => {
+      current.forEach((image) => revokeImageUrl(image.previewUrl));
+      return withPreviews;
+    });
+    setSelectedImageId((current) => {
+      if (preferredImageId && withPreviews.some((image) => image.id === preferredImageId)) return preferredImageId;
+      if (current && withPreviews.some((image) => image.id === current)) return current;
+      return withPreviews.find((image) => image.isPrimary)?.id ?? withPreviews[0]?.id ?? null;
+    });
+    return withPreviews;
+  };
+
+  const addImage = () => {
+    if (!isEdit) {
+      setImageError("احفظ الصنف أولاً ثم افتحه لرفع صور مرتبطة به.");
+      return;
+    }
+    imageFileInputRef.current?.click();
+  };
+
+  const handleUploadProductImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type?.startsWith("image/")) {
+      setImageError("اختر ملف صورة بصيغة PNG أو JPG أو WEBP.");
+      return;
+    }
+    setImageUploading(true);
+    setImageError("");
+    try {
+      const response = await productsApi.uploadImage(id, file);
+      await refreshProductImages(response.data?.id);
+    } catch (error) {
+      setImageError(getApiErrorMessage(error, "تعذر رفع صورة الصنف"));
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const removeImage = async (image, i) => {
+    if (!image?.id) {
+      setImages((p) => {
+        const target = p[i];
+        revokeImageUrl(target?.previewUrl);
+        return p.filter((_, idx) => idx !== i);
+      });
+      if (selectedImageId === image?.id) setSelectedImageId(null);
+      return;
+    }
+    setImageDeletingId(image.id);
+    setImageError("");
+    try {
+      await productsApi.deleteImage(id, image.id);
+      setImages((p) => {
+        revokeImageUrl(image.previewUrl);
+        const next = p.filter((item) => item.id !== image.id);
+        if (image.isPrimary && next.length > 0 && !next.some((item) => item.isPrimary)) {
+          return next.map((item, idx) => ({ ...item, isPrimary: idx === 0 }));
+        }
+        return next;
+      });
+      setSelectedImageId((current) => {
+        if (current !== image.id) return current;
+        const next = images.filter((item) => item.id !== image.id);
+        return next.find((item) => item.isPrimary)?.id ?? next[0]?.id ?? null;
+      });
+    } catch (error) {
+      setImageError(getApiErrorMessage(error, "تعذر حذف صورة الصنف"));
+    } finally {
+      setImageDeletingId(null);
+    }
+  };
+
+  const setPrimaryImage = async (image) => {
+    if (!image?.id || image.isPrimary) return;
+    setImagePrimaryUpdatingId(image.id);
+    setImageError("");
+    try {
+      const response = await productsApi.setPrimaryImage(id, image.id);
+      const primaryId = response.data?.id ?? image.id;
+      setImages((p) => p.map((item) => ({ ...item, isPrimary: item.id === primaryId })));
+      setSelectedImageId(primaryId);
+    } catch (error) {
+      setImageError(getApiErrorMessage(error, "تعذر تعيين الصورة الرئيسية"));
+    } finally {
+      setImagePrimaryUpdatingId(null);
+    }
+  };
+
+  const handleProcessSelectedImage = async () => {
+    if (!isEdit) {
+      setImageError("احفظ الصنف أولاً ثم افتحه لمعالجة الصور.");
+      return;
+    }
+    const selectedImage = images.find((image) => image.id === selectedImageId)
+      ?? images.find((image) => image.isPrimary)
+      ?? images[0];
+    if (!selectedImage?.id) {
+      setImageError("اختر صورة من صور الصنف أولاً ثم اضغط عزل الخلفية.");
+      return;
+    }
+
+    setImageProcessingId(selectedImage.id);
+    setImageError("");
+    try {
+      const response = await productsApi.processImage(id, selectedImage.id);
+      await refreshProductImages(response.data?.id);
+    } catch (error) {
+      setImageError(getApiErrorMessage(error, "تعذر معالجة صورة الصنف"));
+    } finally {
+      setImageProcessingId(null);
+    }
+  };
+
+  useEffect(() => () => {
+    imageObjectUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    imageObjectUrls.current = [];
+  }, []);
+
+  useEffect(() => {
+    setSelectedImageId((current) => {
+      if (current && images.some((image) => image.id === current)) return current;
+      return images.find((image) => image.isPrimary)?.id ?? images[0]?.id ?? null;
+    });
+  }, [images]);
+
+  useEffect(() => {
+    if (!isEdit) return undefined;
+    let active = true;
+    setImageError("");
+    refreshProductImages()
+      .then(() => {})
+      .catch((error) => {
+        if (active) setImageError(getApiErrorMessage(error, "تعذر تحميل صور الصنف"));
+      });
+    return () => { active = false; };
+  }, [id, isEdit]);
+
+  const handleGenerateProductImage = async () => {
+    if (!isEdit) {
+      setImageError("احفظ الصنف أولاً ثم افتحه لتوليد صور مرتبطة به.");
+      return;
+    }
+    if (!form.name.trim()) {
+      setImageError("اسم الصنف مطلوب قبل توليد الصورة.");
+      return;
+    }
+    setImageGenerating(true);
+    setImageError("");
+    try {
+      await productsApi.generateImage(id, {
+        name: form.name,
+        sku: form.code,
+        description: form.description,
+        category: form.category,
+        baseUnit: form.baseUnit,
+        packageUnit: form.packageUnit,
+      });
+      await refreshProductImages();
+    } catch (error) {
+      setImageError(getApiErrorMessage(error, "تعذر توليد صورة الصنف بالذكاء الاصطناعي"));
+    } finally {
+      setImageGenerating(false);
+    }
+  };
 
   useEffect(() => {
     setUnits((prev) => prev.map((u) => (u.isBase ? { ...u, unit: form.baseUnit } : u)));
@@ -1128,13 +1490,55 @@ export default function ProductForm() {
             <SectionCard
               icon={<AddPhotoAlternateIcon sx={{ fontSize: 18, color: "#8392ab" }} />}
               title="صور الصنف"
-              subtitle="أضف صوراً للصنف لتسهيل التعرف عليه"
+              subtitle="ولّد صوراً للصنف من الاسم والوصف أو أضفها يدوياً"
               accentColor="#8392ab"
             >
-              <ImageUploadZone images={images} onAdd={addImage} onRemove={removeImage} />
+              {imageError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setImageError("")}>
+                  {imageError}
+                </Alert>
+              )}
+              <input
+                ref={imageFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+                onChange={handleUploadProductImage}
+              />
+              <ImageUploadZone
+                images={images}
+                onAdd={addImage}
+                onRemove={removeImage}
+                onGenerate={handleGenerateProductImage}
+                onSetPrimary={setPrimaryImage}
+                onSelect={(image) => image?.id && setSelectedImageId(image.id)}
+                onProcess={handleProcessSelectedImage}
+                generating={imageGenerating}
+                uploading={imageUploading}
+                processingImageId={imageProcessingId}
+                generateDisabled={!isEdit}
+                processDisabled={!isEdit || imageUploading || imageGenerating || !images.some((image) => image.id === selectedImageId)}
+                selectedImageId={selectedImageId}
+                removingImageId={imageDeletingId}
+                primaryUpdatingImageId={imagePrimaryUpdatingId}
+              />
+              {(imageGenerating || imageUploading || imageProcessingId) && (
+                <SoftBox mt={1.5}>
+                  <LinearProgress sx={{ height: 5, borderRadius: 3 }} />
+                  <SoftTypography variant="caption" color="secondary">
+                    {imageGenerating
+                      ? "يتم توليد صورة جديدة من بيانات الصنف الحالية..."
+                      : imageUploading
+                        ? "يتم رفع الصورة وربطها بالصنف..."
+                        : "يتم عزل الخلفية وحفظ نسخة معالجة كصورة رئيسية..."}
+                  </SoftTypography>
+                </SoftBox>
+              )}
               {images.length === 0 && (
                 <SoftBox mt={1}>
-                  <SoftTypography variant="caption" color="secondary">لم تُضف صور بعد — انقر على زر الإضافة</SoftTypography>
+                  <SoftTypography variant="caption" color="secondary">
+                    لم تُضف صور بعد — احفظ الصنف ثم اضغط توليد صورة بالذكاء الاصطناعي أو أضف صورة يدوياً
+                  </SoftTypography>
                 </SoftBox>
               )}
             </SectionCard>

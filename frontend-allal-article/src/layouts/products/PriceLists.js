@@ -2,6 +2,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 
 import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
 import Avatar from "@mui/material/Avatar";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -21,6 +22,7 @@ import Tooltip from "@mui/material/Tooltip";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteIcon from "@mui/icons-material/Delete";
 import GroupIcon from "@mui/icons-material/Group";
 import PriceChangeIcon from "@mui/icons-material/PriceChange";
 import SearchIcon from "@mui/icons-material/Search";
@@ -32,7 +34,7 @@ import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
-import { priceListsApi, suppliersApi, customersApi } from "services";
+import { priceListsApi, productsApi, suppliersApi, customersApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
 import { useI18n } from "i18n";
 
@@ -46,8 +48,33 @@ function getInitials(name = "") {
   return (name || "").split(" ").slice(0, 2).map((w) => w[0] || "").join("");
 }
 
+function extractCollection(data) {
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
+function productBasePrice(product) {
+  return Number(product?.currentPriceAmount ?? product?.price ?? 0);
+}
+
+function productUnit(product) {
+  return product?.baseUnitSymbol || product?.baseUnitName || "وحدة";
+}
+
+function normalizeAssignedIds(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+function assignmentEntityType(priceList) {
+  return priceList?.type === "purchase" ? "supplier" : "customer";
+}
+
 // ─── Assign Entities Dialog ───────────────────────────────────────────────────
-function AssignEntitiesDialog({ open, onClose, priceList, onSave, suppliers = [], customers = [] }) {
+function AssignEntitiesDialog({ open, onClose, priceList, onSave, saving = false, suppliers = [], customers = [] }) {
   const isPurchase = priceList?.type === "purchase";
   const entities = isPurchase ? suppliers : customers;
 
@@ -149,10 +176,11 @@ function AssignEntitiesDialog({ open, onClose, priceList, onSave, suppliers = []
         <SoftTypography variant="caption" color="secondary" flex={1}>
           {selected.length} {isPurchase ? "مورد" : "زبون"} محدد
         </SoftTypography>
-        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose}>إلغاء</SoftButton>
+        <SoftButton variant="outlined" color="secondary" size="small" onClick={onClose} disabled={saving}>إلغاء</SoftButton>
         <SoftButton variant="gradient" color="info" size="small"
-          onClick={() => { onSave(selected); onClose(); }}>
-          حفظ التحديد
+          disabled={saving}
+          onClick={() => onSave(selected)}>
+          {saving ? "جاري الحفظ..." : "حفظ التحديد"}
         </SoftButton>
       </DialogActions>
     </Dialog>
@@ -175,9 +203,17 @@ function PriceLists() {
   const [listForm, setListForm] = useState({ name: "", type: "sales", code: "" });
   const [listErrors, setListErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [productsError, setProductsError] = useState("");
+  const [addProduct, setAddProduct] = useState(null);
+  const [addPrice, setAddPrice] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
+  const [removingProductId, setRemovingProductId] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [assignedMap, setAssignedMap] = useState({});
+  const [savingAssignments, setSavingAssignments] = useState(false);
   const [snack, setSnack] = useState("");
 
   // Load price lists
@@ -188,6 +224,12 @@ function PriceLists() {
       .then((r) => {
         const data = Array.isArray(r.data) ? r.data : (r.data?.content ?? []);
         setLists(data);
+        setAssignedMap(Object.fromEntries(
+          data.map((list) => [
+            list.id,
+            normalizeAssignedIds(list.assignedIds ?? list.assigned_ids),
+          ])
+        ));
         if (data.length > 0 && !selectedId) setSelectedId(data[0].id);
       })
       .catch((error) => {
@@ -204,14 +246,35 @@ function PriceLists() {
     if (!selectedId) return;
     setLoadingItems(true);
     setItemsError("");
+    setAddProduct(null);
+    setAddPrice("");
     priceListsApi.getItems(selectedId)
-      .then((r) => setItems(Array.isArray(r.data) ? r.data : (r.data?.content ?? [])))
+      .then((r) => {
+        const nextItems = extractCollection(r.data);
+        setItems(nextItems);
+        setLists((prev) => prev.map((list) =>
+          list.id === selectedId ? { ...list, items_count: nextItems.length } : list
+        ));
+      })
       .catch((error) => {
         setItemsError(getApiErrorMessage(error, "تعذر تحميل أصناف قائمة الأسعار"));
         setItems([]);
       })
       .finally(() => setLoadingItems(false));
   }, [selectedId]);
+
+  // Load products for adding items to a list
+  useEffect(() => {
+    setLoadingProducts(true);
+    setProductsError("");
+    productsApi.list({ size: 1000 })
+      .then((r) => setProducts(extractCollection(r.data)))
+      .catch((error) => {
+        setProductsError(getApiErrorMessage(error, "تعذر تحميل الأصناف"));
+        setProducts([]);
+      })
+      .finally(() => setLoadingProducts(false));
+  }, []);
 
   // Load suppliers + customers for assign dialog
   useEffect(() => {
@@ -247,10 +310,43 @@ function PriceLists() {
     );
   }, [items, search]);
 
+  const availableProducts = useMemo(() => {
+    const existingIds = new Set(items.map((item) => String(item.product_id)));
+    return products.filter((product) => !existingIds.has(String(product.id)));
+  }, [items, products]);
+
+  const addSelectedProduct = useCallback(() => {
+    if (!selectedId) return;
+    if (!addProduct) {
+      setSnack("اختر صنفاً أولاً");
+      return;
+    }
+    const price = addPrice === "" ? 0 : Number(addPrice);
+    if (!Number.isFinite(price) || price < 0) {
+      setSnack("السعر يجب أن يكون رقماً موجباً أو 0");
+      return;
+    }
+    setAddingItem(true);
+    priceListsApi.upsertItem(selectedId, addProduct.id, price)
+      .then(() => priceListsApi.getItems(selectedId))
+      .then((r) => {
+        const nextItems = extractCollection(r.data);
+        setItems(nextItems);
+        setLists((prev) => prev.map((list) =>
+          list.id === selectedId ? { ...list, items_count: nextItems.length } : list
+        ));
+        setAddProduct(null);
+        setAddPrice("");
+        setSnack("تمت إضافة الصنف إلى القائمة");
+      })
+      .catch((error) => setSnack(getApiErrorMessage(error, "فشل إضافة الصنف")))
+      .finally(() => setAddingItem(false));
+  }, [addPrice, addProduct, selectedId]);
+
   const setProductPrice = useCallback((item, value) => {
     const rawPrice = Number(value || 0);
     if (!Number.isFinite(rawPrice) || rawPrice < 0) {
-      setSnack("السعر يجب أن يكون رقماً موجباً");
+      setSnack("السعر يجب أن يكون رقماً موجباً أو 0");
       return;
     }
     const price = Math.max(0, rawPrice);
@@ -262,8 +358,24 @@ function PriceLists() {
             : i)
         );
       })
-      .catch(() => setSnack("فشل حفظ السعر"));
+      .catch((error) => setSnack(getApiErrorMessage(error, "فشل حفظ السعر")));
   }, [selectedId]);
+
+  const removeProductFromList = useCallback((item) => {
+    if (!selectedId || !item?.product_id) return;
+    setRemovingProductId(item.product_id);
+    priceListsApi.removeItem(selectedId, item.product_id)
+      .then(() => {
+        const nextItems = items.filter((row) => String(row.product_id) !== String(item.product_id));
+        setItems(nextItems);
+        setLists((prev) => prev.map((list) =>
+          list.id === selectedId ? { ...list, items_count: nextItems.length } : list
+        ));
+        setSnack("تم حذف الصنف من القائمة");
+      })
+      .catch((error) => setSnack(getApiErrorMessage(error, "فشل حذف الصنف")))
+      .finally(() => setRemovingProductId(null));
+  }, [items, selectedId]);
 
   const setListField = (field, value) => {
     setListForm((current) => ({ ...current, [field]: value }));
@@ -290,6 +402,7 @@ function PriceLists() {
       .then((r) => {
         const newList = r.data;
         setLists((prev) => [newList, ...prev]);
+        setAssignedMap((prev) => ({ ...prev, [newList.id]: [] }));
         setSelectedId(newList.id);
         setDialogOpen(false);
         setSnack("تم إنشاء قائمة الأسعار");
@@ -302,7 +415,23 @@ function PriceLists() {
   };
 
   const saveAssignedIds = (ids) => {
-    setAssignedMap((prev) => ({ ...prev, [selectedId]: ids }));
+    if (!selectedList) return;
+    const entityType = assignmentEntityType(selectedList);
+    setSavingAssignments(true);
+    priceListsApi.saveAssignments(selectedList.id, entityType, ids)
+      .then((r) => {
+        const assignedIds = normalizeAssignedIds(r.data?.assignedIds ?? ids);
+        setAssignedMap((prev) => ({ ...prev, [selectedList.id]: assignedIds }));
+        setLists((prev) => prev.map((list) =>
+          list.id === selectedList.id
+            ? { ...list, assignedIds, assigned_count: assignedIds.length }
+            : list
+        ));
+        setAssignDialog(false);
+        setSnack("تم حفظ ربط قائمة الأسعار");
+      })
+      .catch((error) => setSnack(getApiErrorMessage(error, "فشل حفظ ربط قائمة الأسعار")))
+      .finally(() => setSavingAssignments(false));
   };
 
   const customCount = items.filter((i) => Number(i.unit_price_amount || 0) > 0).length;
@@ -396,7 +525,7 @@ function PriceLists() {
                           <SoftBox minWidth={0}>
                             <SoftTypography variant="button" fontWeight="bold">{list.name}</SoftTypography>
                             <SoftTypography variant="caption" color="secondary" display="block">
-                              {list.code} · {typeLabels[list.type] || list.type}
+                              {list.code} · {typeLabels[list.type] || list.type} · {Number(list.items_count || 0)} صنف
                             </SoftTypography>
                           </SoftBox>
                           <SoftBox display="flex" flexDirection="column" alignItems="flex-end" gap={0.5} flexShrink={0}>
@@ -453,6 +582,83 @@ function PriceLists() {
                   </SoftBox>
                 </SoftBox>
 
+                <SoftBox
+                  mb={2}
+                  p={1.5}
+                  sx={{ border: "1px solid #e9ecef", borderRadius: 2, background: "#f8f9fa" }}
+                >
+                  {productsError && (
+                    <Alert severity="error" sx={{ mb: 1.5 }} onClose={() => setProductsError("")}>
+                      {productsError}
+                    </Alert>
+                  )}
+                  <Grid container spacing={1.5} alignItems="center">
+                    <Grid item xs={12} md={6}>
+                      <Autocomplete
+                        size="small"
+                        options={availableProducts}
+                        loading={loadingProducts}
+                        value={addProduct}
+                        onChange={(_, product) => {
+                          setAddProduct(product);
+                          setAddPrice("");
+                        }}
+                        isOptionEqualToValue={(option, value) => option.id === value.id}
+                        getOptionLabel={(option) =>
+                          option ? `${option.sku || option.id} - ${option.name}` : ""
+                        }
+                        noOptionsText={loadingProducts ? "جاري تحميل الأصناف..." : "كل الأصناف مضافة أو لا توجد أصناف"}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="الصنف"
+                            placeholder="ابحث بالكود أو الاسم..."
+                            InputProps={{
+                              ...params.InputProps,
+                              endAdornment: (
+                                <>
+                                  {loadingProducts ? <CircularProgress color="inherit" size={16} /> : null}
+                                  {params.InputProps.endAdornment}
+                                </>
+                              ),
+                            }}
+                          />
+                        )}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="number"
+                        label="سعر القائمة"
+                        value={addPrice}
+                        onChange={(event) => setAddPrice(event.target.value)}
+                        placeholder={addProduct ? `الرئيسي ${formatDZD(productBasePrice(addProduct))}` : "0 = رئيسي"}
+                        inputProps={{ min: 0, step: "0.01" }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                      <SoftButton
+                        fullWidth
+                        variant="gradient"
+                        color="info"
+                        size="small"
+                        startIcon={<AddIcon />}
+                        disabled={!addProduct || addingItem}
+                        onClick={addSelectedProduct}
+                      >
+                        {addingItem ? "جاري الإضافة..." : "إضافة صنف"}
+                      </SoftButton>
+                    </Grid>
+                  </Grid>
+                  {addProduct && (
+                    <SoftTypography variant="caption" color="secondary" display="block" mt={1}>
+                      الوحدة: {productUnit(addProduct)} · السعر الرئيسي: {formatDZD(productBasePrice(addProduct))}
+                    </SoftTypography>
+                  )}
+                </SoftBox>
+
                 {loadingItems ? (
                   <SoftBox display="flex" justifyContent="center" py={6}><CircularProgress /></SoftBox>
                 ) : itemsError ? (
@@ -463,7 +669,7 @@ function PriceLists() {
                   <SoftBox textAlign="center" py={6}>
                     <SoftTypography variant="body2" color="secondary">
                       {items.length === 0
-                        ? "لا توجد أصناف في هذه القائمة بعد. أضف أصنافاً من صفحة المنتجات."
+                        ? "لا توجد أصناف في هذه القائمة بعد. أضف صنفاً من الحقل أعلاه."
                         : "لا توجد نتائج للبحث"}
                     </SoftTypography>
                   </SoftBox>
@@ -472,7 +678,7 @@ function PriceLists() {
                     <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr style={{ background: "#f8f9fa" }}>
-                          {["الصنف", "السعر الرئيسي", "سعر القائمة", "الوحدة"].map((h) => (
+                          {["الصنف", "السعر الرئيسي", "سعر القائمة", "الوحدة", "إجراء"].map((h) => (
                             <th key={h} style={{ padding: "10px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
                               <SoftTypography variant="caption" color="secondary" fontWeight="bold">{h}</SoftTypography>
                             </th>
@@ -481,7 +687,7 @@ function PriceLists() {
                       </thead>
                       <tbody>
                         {filteredItems.map((item) => (
-                          <tr key={item.product_id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                          <tr key={`${selectedId}-${item.product_id}`} style={{ borderBottom: "1px solid #f0f2f5" }}>
                             <td style={{ padding: "10px 12px" }}>
                               <SoftTypography variant="caption" fontWeight="bold">{item.product_name}</SoftTypography>
                               <SoftTypography variant="caption" color="secondary" display="block">{item.product_code}</SoftTypography>
@@ -500,6 +706,20 @@ function PriceLists() {
                             </td>
                             <td style={{ padding: "10px 12px" }}>
                               <SoftTypography variant="caption" color="secondary">{item.unit || "—"}</SoftTypography>
+                            </td>
+                            <td style={{ padding: "10px 12px", width: 70 }}>
+                              <Tooltip title="حذف من القائمة">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    disabled={String(removingProductId) === String(item.product_id)}
+                                    onClick={() => removeProductFromList(item)}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
                             </td>
                           </tr>
                         ))}
@@ -565,6 +785,7 @@ function PriceLists() {
           onClose={() => setAssignDialog(false)}
           priceList={{ ...selectedList, assignedIds }}
           onSave={saveAssignedIds}
+          saving={savingAssignments}
           suppliers={suppliers}
           customers={customers}
         />

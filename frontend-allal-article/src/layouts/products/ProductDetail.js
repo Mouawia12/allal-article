@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Alert from "@mui/material/Alert";
 import CircularProgress from "@mui/material/CircularProgress";
-import { productsApi, inventoryApi, ordersApi, priceListsApi } from "services";
+import { productsApi, inventoryApi, ordersApi, priceListsApi, mediaApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 import {
   calculateProductStockMetrics,
@@ -100,7 +100,13 @@ function ProductDetail() {
   const [relatedOrdersError, setRelatedOrdersError] = useState("");
   const [priceHistoryError, setPriceHistoryError] = useState("");
   const [priceListError, setPriceListError] = useState("");
+  const productImageUrl = useRef(null);
   const { isFavorite, toggleFavorite } = useProductFavorites();
+
+  useEffect(() => () => {
+    if (productImageUrl.current) URL.revokeObjectURL(productImageUrl.current);
+    productImageUrl.current = null;
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -125,8 +131,19 @@ function ProductDetail() {
         return { data: [] };
       }),
     ])
-      .then(([pRes, sRes, mRes, plRes, oRes, phRes]) => {
+      .then(async ([pRes, sRes, mRes, plRes, oRes, phRes]) => {
         const p = pRes.data;
+        let imageUrl = null;
+        if (p.primaryImageMediaId) {
+          try {
+            const imageResponse = await mediaApi.content(p.primaryImageMediaId);
+            imageUrl = URL.createObjectURL(imageResponse.data);
+          } catch {
+            imageUrl = null;
+          }
+        }
+        if (productImageUrl.current) URL.revokeObjectURL(productImageUrl.current);
+        productImageUrl.current = imageUrl;
         const historyRows = extractPageContent(phRes.data).map((h) => ({
           id: h.id,
           previousPrice: h.previousPriceAmount == null ? null : Number(h.previousPriceAmount),
@@ -148,7 +165,7 @@ function ProductDetail() {
           unit: p.baseUnitName ?? p.baseUnitSymbol ?? "وحدة",
           description: p.description ?? "",
           color: "#17c1e8",
-          image: null,
+          image: imageUrl,
           price: Number(p.currentPriceAmount ?? 0),
           lastPriceUpdatedAt: latestPriceChange?.date || (p.createdAt ? p.createdAt.slice(0, 10) : "—"),
           lastPriceUpdatedBy: latestPriceChange?.changedBy || "—",
@@ -300,13 +317,14 @@ function ProductDetail() {
 	                  aspectRatio: "1 / 1",
 	                  mx: "auto",
 	                  borderRadius: 3,
-	                  background: `linear-gradient(135deg, ${product.color}55, ${product.color})`,
+	                  background: product.image ? "#f8fafc" : `linear-gradient(135deg, ${product.color}55, ${product.color})`,
 	                  display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   mb: 3,
                   position: "relative",
                   overflow: "hidden",
+                  border: product.image ? "1px solid #edf2f7" : "none",
                 }}
               >
                 {product.image ? (
@@ -314,7 +332,7 @@ function ProductDetail() {
                     component="img"
                     src={product.image}
                     alt={product.name}
-                    sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    sx={{ width: "100%", height: "100%", objectFit: "contain", p: 2 }}
                   />
                 ) : (
                   <Inventory2Icon sx={{ color: "#fff", fontSize: 64, opacity: 0.8 }} />

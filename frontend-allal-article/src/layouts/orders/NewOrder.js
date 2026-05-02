@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
@@ -60,15 +60,19 @@ import { CustomerDetailDialog } from "layouts/customers";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 import { useI18n } from "i18n";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const getPriceListsFor = () => [];
-import { ordersApi, customersApi, productsApi, usersApi, inventoryApi } from "services";
+import { ordersApi, customersApi, productsApi, usersApi, inventoryApi, priceListsApi } from "services";
 import {
+  attachPriceListPrices,
+  buildPriceListPricesByProduct,
   clampSalesQty,
   extractArray,
   getAvailableStock,
   isOutOfStock,
+  normalizePriceListId,
+  normalizePriceListsForKind,
   normalizeProductsForOrder,
   resolveProductPrice,
+  samePriceListId,
   validateSalesQuantity,
 } from "utils/orderProductData";
 import demoBoltsImage from "assets/images/products/demo-bolts.jpg";
@@ -534,10 +538,20 @@ function NewOrder() {
   const [view, setView] = useState("grid");
   const [category, setCategory] = useState("الكل");
   const [search, setSearch] = useState("");
-  const salesPriceLists = getPriceListsFor("sales");
+  const [priceLists, setPriceLists] = useState([]);
+  const [priceListItemsByListId, setPriceListItemsByListId] = useState({});
+  const salesPriceLists = useMemo(() => normalizePriceListsForKind(priceLists, "sales"), [priceLists]);
   const [selectedPriceListId, setSelectedPriceListId] = useState("MAIN");
   const [cart, setCart] = useState({}); // { productId: { product, qty, willShip } }
-  const [apiProducts, setApiProducts] = useState([]);
+  const [baseProducts, setBaseProducts] = useState([]);
+  const priceListPricesByProduct = useMemo(
+    () => buildPriceListPricesByProduct(salesPriceLists, priceListItemsByListId),
+    [priceListItemsByListId, salesPriceLists]
+  );
+  const apiProducts = useMemo(
+    () => attachPriceListPrices(baseProducts, priceListPricesByProduct),
+    [baseProducts, priceListPricesByProduct]
+  );
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [qtyDialog, setQtyDialog] = useState(null); // { product, qty }
   const [qtyInput, setQtyInput] = useState("1");
@@ -559,14 +573,18 @@ function NewOrder() {
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
   useEffect(() => {
+    const appendLoadError = (error, fallback) => {
+      setLoadError((current) => {
+        const message = getApiErrorMessage(error, fallback);
+        return current ? `${current}؛ ${message}` : message;
+      });
+    };
+
     setLoadError("");
     Promise.all([
       productsApi.list({ size: 500 }),
       inventoryApi.listStock({ size: 1000 }).catch((error) => {
-        setLoadError((current) => {
-          const message = getApiErrorMessage(error, "تعذر تحميل المخزون");
-          return current ? `${current}؛ ${message}` : message;
-        });
+        appendLoadError(error, "تعذر تحميل المخزون");
         return { data: [] };
       }),
     ]).then(([productsResponse, stockResponse]) => {
@@ -574,12 +592,28 @@ function NewOrder() {
         extractArray(productsResponse.data),
         extractArray(stockResponse.data)
       );
-      setApiProducts(mapped);
+      setBaseProducts(mapped);
       if (mapped.length) setSelectedProductId(mapped[0].id);
     }).catch((error) => {
-      setLoadError((current) =>
-        current || getApiErrorMessage(error, "تعذر تحميل الأصناف")
+      appendLoadError(error, "تعذر تحميل الأصناف");
+    });
+    priceListsApi.list().then((r) => {
+      const lists = normalizePriceListsForKind(extractArray(r.data), "sales").filter((list) => list.id !== "MAIN");
+      setPriceLists(lists);
+      return Promise.all(
+        lists.map((list) =>
+          priceListsApi.getItems(list.id)
+            .then((itemsResponse) => [String(list.id), extractArray(itemsResponse.data)])
+            .catch((error) => {
+              appendLoadError(error, `تعذر تحميل أسعار ${list.name}`);
+              return [String(list.id), []];
+            })
+        )
       );
+    }).then((entries) => {
+      if (entries) setPriceListItemsByListId(Object.fromEntries(entries));
+    }).catch((error) => {
+      appendLoadError(error, "تعذر تحميل قوائم الأسعار");
     });
     customersApi.list().then((r) => {
       const list = (r.data?.content ?? r.data ?? []).map((c) => ({
@@ -594,12 +628,10 @@ function NewOrder() {
       if (preselected) {
         const match = list.find((c) => c.id === preselected.id) ?? preselected;
         setCustomer(match);
+        setSelectedPriceListId(normalizePriceListId(match?.defaultPriceListId, "MAIN"));
       }
     }).catch((error) => {
-      setLoadError((current) => {
-        const message = getApiErrorMessage(error, "تعذر تحميل الزبائن");
-        return current ? `${current}؛ ${message}` : message;
-      });
+      appendLoadError(error, "تعذر تحميل الزبائن");
     });
   }, []);
 
@@ -633,9 +665,23 @@ function NewOrder() {
     return matchCat && matchSearch;
   });
 
+  useEffect(() => {
+    if (!apiProducts.length) return;
+    setCart((current) => {
+      let changed = false;
+      const next = Object.fromEntries(Object.entries(current).map(([key, item]) => {
+        const enrichedProduct = apiProducts.find((product) => String(product.id) === String(item.product?.id));
+        if (!enrichedProduct || enrichedProduct === item.product) return [key, item];
+        changed = true;
+        return [key, { ...item, product: enrichedProduct }];
+      }));
+      return changed ? next : current;
+    });
+  }, [apiProducts]);
+
   const cartItems = Object.values(cart);
   const cartCount = cartItems.length;
-  const selectedPriceList = salesPriceLists.find((list) => list.id === selectedPriceListId) || salesPriceLists[0];
+  const selectedPriceList = salesPriceLists.find((list) => samePriceListId(list.id, selectedPriceListId)) || salesPriceLists[0];
   const cartAmount = cartItems.reduce((sum, item) => {
     const priceInfo = resolveProductPrice(item.product, selectedPriceListId, "sales");
     return sum + Number(item.qty || 0) * priceInfo.unitPrice;
@@ -824,6 +870,7 @@ function NewOrder() {
 
     const payload = {
       customerId: customer?.id ?? null,
+      priceListId: selectedPriceListId,
       notes: notes || null,
       items: cartItems.map((item) => ({
         productId: item.product.id,
@@ -1236,7 +1283,7 @@ function NewOrder() {
                       setCustomer(v);
                       setOrderErrors((current) => ({ ...current, _global: "" }));
                       // auto-apply customer's linked price list, fallback to MAIN
-                      setSelectedPriceListId(v?.defaultPriceListId || "MAIN");
+                      setSelectedPriceListId(normalizePriceListId(v?.defaultPriceListId, "MAIN"));
                     }}
                     renderInput={(params) => (
                       <TextField {...params} size="small" label="الزبون *" placeholder="اختر الزبون..." />
@@ -1287,7 +1334,7 @@ function NewOrder() {
                     variant={selectedPriceListId !== "MAIN" ? "filled" : "outlined"}
                     sx={{ height: 18, fontSize: 9, "& .MuiChip-label": { px: 0.75 } }}
                   />
-                  {customer?.defaultPriceListId && customer.defaultPriceListId === selectedPriceListId && (
+                  {customer?.defaultPriceListId && samePriceListId(customer.defaultPriceListId, selectedPriceListId) && (
                     <SoftTypography variant="caption" color="success" sx={{ fontSize: 9 }}>
                       · تلقائي
                     </SoftTypography>
@@ -1377,7 +1424,7 @@ function NewOrder() {
                         </SoftTypography>
                         {customer.defaultPriceListId ? (
                           <SoftTypography variant="caption" color="success">
-                            مربوط تلقائياً بـ «{salesPriceLists.find(l => l.id === customer.defaultPriceListId)?.name}»
+                            مربوط تلقائياً بـ «{salesPriceLists.find((l) => samePriceListId(l.id, customer.defaultPriceListId))?.name}»
                           </SoftTypography>
                         ) : (
                           <SoftTypography variant="caption" color="secondary">

@@ -17,6 +17,12 @@ import { buildCustomerShipments } from "utils/customerShipments";
 import { formatCatalogPrice, normalizeCatalogProducts } from "utils/productCatalog";
 import { calculateProductStockMetrics, getProductOrderQty } from "utils/productStockMetrics";
 import { getOrderFormVariant } from "utils/roles";
+import {
+  attachPriceListPrices,
+  buildPriceListPricesByProduct,
+  normalizePriceListsForKind,
+  resolveProductPrice,
+} from "utils/orderProductData";
 
 // Test that apiClient unwraps ApiResponse correctly
 test("apiClient interceptor unwraps ApiResponse envelope", () => {
@@ -69,6 +75,29 @@ test("PriceLists selectedList guard — no crash when lists empty", () => {
   expect(selectedList).toBeNull();
   expect(selectedList?.type).toBeUndefined();
   expect(selectedList?.items).toBeUndefined();
+});
+
+test("order product pricing resolves active API price-list rows", () => {
+  const priceLists = normalizePriceListsForKind([
+    { id: 7, name: "قائمة تجريبية", type: "sales", is_active: true },
+    { id: 8, name: "قائمة شراء", type: "purchase", is_active: true },
+  ], "sales");
+  const pricesByProduct = buildPriceListPricesByProduct(priceLists, {
+    7: [{ product_id: 10, unit_price_amount: "300" }],
+  });
+  const [product] = attachPriceListPrices([{ id: 10, currentPriceAmount: "850" }], pricesByProduct);
+
+  expect(priceLists.map((list) => list.id)).toEqual(["MAIN", "7"]);
+  expect(resolveProductPrice(product, "7", "sales")).toMatchObject({
+    unitPrice: 300,
+    basePrice: 850,
+    source: "price_list",
+    sourceLabel: "قائمة تجريبية",
+  });
+  expect(resolveProductPrice(product, "MAIN", "sales")).toMatchObject({
+    unitPrice: 850,
+    source: "product_default",
+  });
 });
 
 test("inventory hydrateStockLines normalizes API field names", () => {

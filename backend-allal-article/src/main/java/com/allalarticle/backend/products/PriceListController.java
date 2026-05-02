@@ -31,6 +31,14 @@ public class PriceListController {
         return ResponseEntity.ok(ApiResponse.ok(priceListService.listItems(id)));
     }
 
+    @GetMapping("/{id}/assignments")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.view')")
+    public ResponseEntity<ApiResponse<List<Long>>> assignments(
+            @PathVariable Long id,
+            @RequestParam String entityType) {
+        return ResponseEntity.ok(ApiResponse.ok(priceListService.listAssignedIds(id, entityType)));
+    }
+
     @PostMapping
     @PreAuthorize("@permChecker.hasPermission(authentication, 'products.create')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> create(@RequestBody Map<String, Object> body) {
@@ -50,5 +58,32 @@ public class PriceListController {
                 ? new BigDecimal(priceVal.toString()) : BigDecimal.ZERO;
         priceListService.upsertItem(listId, productId, price, auth);
         return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @DeleteMapping("/{listId}/items/{productId}")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.edit')")
+    public ResponseEntity<ApiResponse<Void>> removeItem(
+            @PathVariable Long listId,
+            @PathVariable Long productId) {
+        priceListService.removeItem(listId, productId);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    @PutMapping("/{id}/assignments")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.edit')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> saveAssignments(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        String entityType = String.valueOf(body.getOrDefault("entityType", ""));
+        Object rawIds = body.get("entityIds");
+        List<Long> entityIds = rawIds instanceof List<?> values
+                ? values.stream()
+                    .filter(v -> v != null && !v.toString().isBlank())
+                    .map(v -> Long.valueOf(v.toString()))
+                    .toList()
+                : List.of();
+        return ResponseEntity.ok(ApiResponse.ok(
+                "Price list assignments saved",
+                priceListService.saveAssignments(id, entityType, entityIds)));
     }
 }

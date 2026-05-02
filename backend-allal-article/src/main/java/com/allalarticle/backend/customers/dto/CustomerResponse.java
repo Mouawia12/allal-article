@@ -20,6 +20,7 @@ public record CustomerResponse(
         BigDecimal openingBalance,
         Long salespersonId,
         String salespersonName,
+        Long defaultPriceListId,
         String status,
         String notes,
         OffsetDateTime createdAt,
@@ -37,6 +38,7 @@ public record CustomerResponse(
                 c.getAddress(), c.getShippingRoute(), c.getOpeningBalance(),
                 sales != null ? sales.getId()   : null,
                 sales != null ? sales.getName() : null,
+                c.getPriceListId(),
                 c.getStatus(), c.getNotes(), c.getCreatedAt(),
                 totalAmount != null ? totalAmount : BigDecimal.ZERO,
                 paidAmount  != null ? paidAmount  : BigDecimal.ZERO

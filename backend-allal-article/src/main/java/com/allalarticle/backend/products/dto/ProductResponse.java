@@ -25,9 +25,19 @@ public record ProductResponse(
         String description,
         String status,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt
+        OffsetDateTime updatedAt,
+        String image,
+        Long primaryImageMediaId
 ) {
     public static ProductResponse from(Product p) {
+        return from(p, null, null);
+    }
+
+    public static ProductResponse from(Product p, String image) {
+        return from(p, image, null);
+    }
+
+    public static ProductResponse from(Product p, String image, Long primaryImageMediaId) {
         var cat  = p.getCategory();
         var unit = p.getBaseUnit();
         return new ProductResponse(
@@ -39,7 +49,9 @@ public record ProductResponse(
                 unit != null ? unit.getSymbol(): null,
                 p.getBarcode(), p.isHasVariants(), p.getUnitsPerPackage(),
                 p.getCurrentPriceAmount(), p.getPriceCurrency(),
-                p.getMinStockQty(), p.getDescription(), p.getStatus(), p.getCreatedAt(), p.getUpdatedAt()
+                p.getMinStockQty(), p.getDescription(), p.getStatus(), p.getCreatedAt(), p.getUpdatedAt(),
+                image,
+                primaryImageMediaId
         );
     }
 }

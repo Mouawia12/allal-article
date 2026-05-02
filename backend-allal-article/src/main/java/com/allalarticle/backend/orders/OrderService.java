@@ -12,7 +12,9 @@ import com.allalarticle.backend.orders.dto.*;
 import com.allalarticle.backend.orders.entity.Order;
 import com.allalarticle.backend.orders.entity.OrderEvent;
 import com.allalarticle.backend.orders.entity.OrderItem;
+import com.allalarticle.backend.products.PriceListPricingService;
 import com.allalarticle.backend.products.ProductRepository;
+import com.allalarticle.backend.products.entity.Product;
 import com.allalarticle.backend.users.TenantUserRepository;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +49,7 @@ public class OrderService {
     private final StockMovementRepository  movementRepo;
     private final StockReservationRepository reservationRepo;
     private final AuditLogService          auditLogService;
+    private final PriceListPricingService  pricingService;
 
     // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -95,6 +98,9 @@ public class OrderService {
             order.setSalesUser(userRepo.findById(req.salesUserId())
                     .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Sales user not found", HttpStatus.NOT_FOUND)));
         }
+        String effectivePriceListId = effectivePriceListRef(
+                req.priceListId(),
+                order.getCustomer() != null ? order.getCustomer().getPriceListId() : null);
 
         var saved = orderRepo.save(order);
         saved.setOrderNumber("ORD-" + Year.now() + "-" + String.format("%06d", saved.getId()));
@@ -104,8 +110,9 @@ public class OrderService {
         for (var req2 : req.items()) {
             var product = productRepo.findById(req2.productId())
                     .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Product not found", HttpStatus.NOT_FOUND));
-            BigDecimal price = product.getCurrentPriceAmount() != null
-                    ? product.getCurrentPriceAmount() : BigDecimal.ZERO;
+            var pricing = resolveLinePrice(effectivePriceListId, product, req2.qty(), req2.unitPrice());
+            applyOrderPriceListSnapshot(saved, pricing);
+            BigDecimal price = pricing.unitPrice();
             var item = OrderItem.builder()
                     .order(saved)
                     .product(product)
@@ -113,8 +120,12 @@ public class OrderService {
                     .requestedQty(req2.qty())
                     .approvedQty(req2.qty())
                     .cancelledQty(BigDecimal.ZERO)
+                    .priceListId(pricing.priceListId())
+                    .priceListItemId(pricing.priceListItemId())
+                    .priceListNameSnapshot(pricing.priceListName())
+                    .pricingSource(pricing.pricingSource())
                     .unitPrice(price)
-                    .baseUnitPrice(price)
+                    .baseUnitPrice(pricing.baseUnitPrice())
                     .lineSubtotal(price.multiply(req2.qty()))
                     .customerNote(req2.customerNote())
                     .build();
@@ -366,6 +377,46 @@ public class OrderService {
                 .map(OrderItem::getLineSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         order.setTotalAmount(total);
+    }
+
+    private PriceListPricingService.PriceResolution resolveLinePrice(
+            String priceListId,
+            Product product,
+            BigDecimal qty,
+            BigDecimal manualUnitPrice) {
+        var resolved = pricingService.resolvePrice(
+                priceListId,
+                "sales",
+                product.getId(),
+                qty,
+                product.getCurrentPriceAmount(),
+                product.getPriceCurrency());
+        return pricingService.applyManualOverrideIfNeeded(
+                resolved,
+                manualUnitPrice,
+                product.getCurrentPriceAmount(),
+                product.getPriceCurrency());
+    }
+
+    private String effectivePriceListRef(String requestedRef, Long entityDefaultPriceListId) {
+        if (requestedRef != null
+                && !requestedRef.isBlank()
+                && !"MAIN".equalsIgnoreCase(requestedRef.trim())
+                && !"DEFAULT".equalsIgnoreCase(requestedRef.trim())) {
+            return requestedRef;
+        }
+        return entityDefaultPriceListId != null ? entityDefaultPriceListId.toString() : requestedRef;
+    }
+
+    private void applyOrderPriceListSnapshot(
+            Order order,
+            PriceListPricingService.PriceResolution pricing) {
+        if (pricing.priceListId() == null || order.getPriceListId() != null) {
+            return;
+        }
+        order.setPriceListId(pricing.priceListId());
+        order.setPriceListNameSnapshot(pricing.priceListName());
+        order.setPriceCurrency(pricing.currency());
     }
 
     private BigDecimal safeStockValue(BigDecimal value) {

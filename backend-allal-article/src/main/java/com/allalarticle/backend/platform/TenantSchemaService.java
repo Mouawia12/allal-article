@@ -54,7 +54,9 @@ public class TenantSchemaService {
         "T23__align_accounting_defaults.sql",
         "T24__align_purchase_permissions.sql",
         "T25__align_purchase_order_item_timestamps.sql",
-        "T26__email_notifications.sql"
+        "T26__email_notifications.sql",
+        "T27__align_ai_settings_permissions.sql",
+        "T28__price_list_entity_defaults.sql"
     };
 
     /**

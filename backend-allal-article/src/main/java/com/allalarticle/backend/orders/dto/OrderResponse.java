@@ -18,6 +18,8 @@ public record OrderResponse(
         String customerName,
         Long salesUserId,
         String salesUserName,
+        Long priceListId,
+        String priceListName,
         String priceCurrency,
         BigDecimal totalAmount,
         String notes,
@@ -40,6 +42,7 @@ public record OrderResponse(
                 cust  != null ? cust.getName() : null,
                 sales != null ? sales.getId()   : null,
                 sales != null ? sales.getName() : null,
+                o.getPriceListId(), o.getPriceListNameSnapshot(),
                 o.getPriceCurrency(), o.getTotalAmount(), o.getNotes(), o.getInternalNotes(),
                 o.getItems().stream().filter(i -> i.getDeletedAt() == null)
                              .map(OrderItemResponse::from).toList(),

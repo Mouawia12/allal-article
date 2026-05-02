@@ -64,6 +64,12 @@ public class PurchaseOrder {
     @Builder.Default
     private String paymentStatus = "unpaid";
 
+    @Column(name = "price_list_id")
+    private Long priceListId;
+
+    @Column(name = "price_list_name_snapshot", length = 160)
+    private String priceListNameSnapshot;
+
     @Column(name = "price_currency", nullable = false, length = 3)
     @Builder.Default
     private String priceCurrency = "DZD";
