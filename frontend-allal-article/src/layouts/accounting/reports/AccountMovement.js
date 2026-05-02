@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -26,6 +27,10 @@ import { accountingApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 
 export default function AccountMovement() {
+  const [searchParams] = useSearchParams();
+  const requestedAccount = searchParams.get("account");
+  const requestedFrom = searchParams.get("from");
+  const requestedTo = searchParams.get("to");
   const [accounts, setAccounts] = useState([]);
   const [fiscalYears, setFiscalYears] = useState([]);
   const [fyId, setFyId] = useState(null);
@@ -40,7 +45,14 @@ export default function AccountMovement() {
     accountingApi.listAccounts()
       .then((r) => {
         const all = r.data?.content ?? r.data ?? [];
-        setAccounts(all.filter((a) => a.isPostable !== false && a.isActive !== false));
+        const postable = all.filter((a) => a.isPostable !== false && a.isActive !== false);
+        setAccounts(postable);
+        if (requestedAccount) {
+          const selected = postable.find((a) => String(a.id) === requestedAccount || a.code === requestedAccount);
+          if (selected) setAccount(selected);
+        }
+        if (requestedFrom) setDateFrom(requestedFrom);
+        if (requestedTo) setDateTo(requestedTo);
       })
       .catch((error) => {
         setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
@@ -64,7 +76,7 @@ export default function AccountMovement() {
         });
         setFiscalYears([]);
       });
-  }, []);
+  }, [requestedAccount, requestedFrom, requestedTo]);
 
   useEffect(() => {
     if (!account || !fyId) return;

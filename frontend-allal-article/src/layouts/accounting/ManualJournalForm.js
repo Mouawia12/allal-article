@@ -37,12 +37,6 @@ import { accountingApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
 import { useI18n } from "i18n";
 
-const JOURNAL_BOOKS = [
-  { id: "manual",  label: "يومية عامة (يدوي)",   prefix: "MAN" },
-  { id: "opening", label: "يومية الأرصدة الافتتاحية", prefix: "OPN" },
-  { id: "adjust",  label: "يومية التسويات",        prefix: "ADJ" },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function flattenTree(nodes, result = []) {
   nodes.forEach((n) => { result.push(n); if (n.children?.length) flattenTree(n.children, result); });
@@ -139,10 +133,11 @@ export default function ManualJournalForm() {
 
   const [date, setDate]     = useState(today);
   const [notes, setNotes]   = useState("");
-  const [bookId, setBookId] = useState("manual");
+  const [bookId, setBookId] = useState(null);
   const [fyId, setFyId]     = useState(null);
   const [activeFY, setActiveFY] = useState(null);
   const [accounts, setAccounts] = useState([]);
+  const [journalBooks, setJournalBooks] = useState([]);
   const [lines, setLines] = useState([
     { id: 1, account: null, debit: "", credit: "", description: "" },
     { id: 2, account: null, debit: "", credit: "", description: "" },
@@ -176,6 +171,20 @@ export default function ManualJournalForm() {
         setAccounts([]);
         postableAccounts = [];
       });
+    accountingApi.listJournalBooks()
+      .then((r) => {
+        const books = (r.data?.content ?? r.data ?? []).filter((b) => b.active !== false && b.allowManual !== false);
+        setJournalBooks(books);
+        const preferred = books.find((b) => b.code === "manual") ?? books[0];
+        if (preferred) setBookId(preferred.id);
+      })
+      .catch((error) => {
+        setLoadError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل دفاتر اليومية");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setJournalBooks([]);
+      });
   }, []);
 
   const totalDebit  = useMemo(() => lines.reduce((s, l) => s + (Number(l.debit)  || 0), 0), [lines]);
@@ -196,6 +205,7 @@ export default function ManualJournalForm() {
     const nextErrors = {};
     if (isBlank(date)) nextErrors.date = t("تاريخ القيد مطلوب");
     if (!fyId) nextErrors.fiscalYearId = t("السنة المالية مطلوبة");
+    if (!bookId) nextErrors.journalBookId = t("دفتر اليومية مطلوب");
     if (!isBalanced) nextErrors.items = t("القيد غير متوازن، مجموع المدين يجب أن يساوي مجموع الدائن");
     if (!hasLines) nextErrors.items = t("أضف أسطراً للقيد أولاً");
     const bad = lines.find((l) => (l.debit || l.credit) && !l.account);
@@ -213,10 +223,9 @@ export default function ManualJournalForm() {
   const handleSave = async (post) => {
     if (!validate()) return;
     const payload = {
-      date,
+      journalDate: date,
       description: notes,
-      fiscalYearId: fyId,
-      bookCode: bookId,
+      journalBookId: Number(bookId),
       items: lines
         .filter((l) => l.account && (Number(l.debit) > 0 || Number(l.credit) > 0))
         .map((l) => ({
@@ -268,9 +277,9 @@ export default function ManualJournalForm() {
           </Alert>
         )}
 
-        {(errors._global || errors.items || errors.date || errors.fiscalYearId) && (
+        {(errors._global || errors.items || errors.date || errors.fiscalYearId || errors.journalBookId) && (
           <Alert severity="error" sx={{ mb: 2 }}>
-            {errors._global || errors.items || errors.date || errors.fiscalYearId}
+            {errors._global || errors.items || errors.date || errors.fiscalYearId || errors.journalBookId}
           </Alert>
         )}
 
@@ -279,9 +288,9 @@ export default function ManualJournalForm() {
           <SoftBox display="flex" gap={2} flexWrap="wrap" alignItems="center">
             <FormControl size="small" sx={{ minWidth: 220 }}>
               <InputLabel>دفتر اليومية</InputLabel>
-              <Select value={bookId} label="دفتر اليومية" onChange={(e) => setBookId(e.target.value)}>
-                {JOURNAL_BOOKS.map((b) => (
-                  <MenuItem key={b.id} value={b.id}>{b.label}</MenuItem>
+              <Select value={bookId ?? ""} label="دفتر اليومية" onChange={(e) => setBookId(e.target.value)}>
+                {journalBooks.map((b) => (
+                  <MenuItem key={b.id} value={b.id}>{b.name ?? b.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>

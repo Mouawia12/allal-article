@@ -32,10 +32,23 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import { classificationLabels } from "./mockData";
-
-const accountSettingsDefs = [];
 import { accountingApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
+
+const groupLabels = {
+  sales: "المبيعات",
+  purchases: "المشتريات",
+  inventory: "المخزون",
+  cash_bank: "الصندوق والبنك",
+  tax: "الضرائب",
+};
+
+const mapSettingDef = (setting) => ({
+  key: setting.key,
+  label: setting.label,
+  group: groupLabels[setting.group] ?? setting.group ?? "إعدادات عامة",
+  required: setting.required !== false,
+});
 
 // ─── Auto-generation rules ────────────────────────────────────────────────────
 const RULES = [
@@ -89,7 +102,7 @@ const RULES = [
     label: "استلام مرتجع بيع",
     description: "يُولَّد عند تسجيل مرتجع من زبون",
     lines: [
-      { side: "debit",  source: "sales_returns",     amount: "return_amount",  subledger: null,           desc: "مردودات بيع" },
+      { side: "debit",  source: "sales_return",      amount: "return_amount",  subledger: null,           desc: "مردودات بيع" },
       { side: "credit", source: "customers_control", amount: "return_amount",  subledger: "customer_id",  desc: "إشعار دائن للزبون" },
     ],
   },
@@ -108,7 +121,7 @@ const sourceLabels = {
   customers_control: "ذمم العملاء",
   suppliers_control: "ذمم الموردين",
   sales_revenue:     "إيرادات المبيعات",
-  sales_returns:     "مردودات المبيعات",
+  sales_return:      "مردودات المبيعات",
   cogs:              "تكلفة البضاعة",
   inventory:         "المخزون",
   cash:              "الصندوق",
@@ -129,8 +142,10 @@ function groupBy(arr, key) {
 export default function AccountLinks() {
   const [tab, setTab] = useState(0);
   const [postableAccounts, setPostableAccounts] = useState([]);
+  const [settingDefs, setSettingDefs] = useState([]);
   const [settings, setSettings] = useState({});
   const [pageError, setPageError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setPageError("");
@@ -143,6 +158,19 @@ export default function AccountLinks() {
         setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
         setPostableAccounts([]);
       });
+    accountingApi.listAccountingSettings()
+      .then((r) => {
+        const defs = r.data ?? [];
+        setSettingDefs(defs.map(mapSettingDef));
+        setSettings(Object.fromEntries(defs.map((s) => [s.key, s.accountId ?? null])));
+      })
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل إعدادات الربط");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setSettingDefs([]);
+      });
   }, []);
 
   const getAccountName = (id) => {
@@ -150,9 +178,21 @@ export default function AccountLinks() {
     return a ? `${a.code} — ${a.nameAr}` : "—";
   };
 
-  const grouped = groupBy(accountSettingsDefs, "group");
-  const missing = accountSettingsDefs.filter((s) => !settings[s.key]);
+  const grouped = groupBy(settingDefs, "group");
+  const missing = settingDefs.filter((s) => s.required && !settings[s.key]);
   const allOk = missing.length === 0;
+
+  const saveSettings = async () => {
+    setSaving(true);
+    setPageError("");
+    try {
+      await accountingApi.updateAccountingSettings(settings);
+    } catch (error) {
+      setPageError(getApiErrorMessage(error, "تعذر حفظ ربط الحسابات"));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -170,8 +210,8 @@ export default function AccountLinks() {
               ? <Chip icon={<CheckCircleOutlineIcon />} label="جميع الإعدادات مكتملة" color="success" size="small" />
               : <Chip icon={<WarningAmberIcon />} label={`${missing.length} إعدادات ناقصة`} color="warning" size="small" />
             }
-            <SoftButton variant="gradient" color="info" size="small">
-              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ الإعدادات
+            <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={saveSettings}>
+              <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
             </SoftButton>
           </SoftBox>
         </SoftBox>

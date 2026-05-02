@@ -47,6 +47,8 @@ const STATUS_LABELS = { الكل: "الكل", draft: "مسودة", posted: "مر
 function JournalPreviewDialog({ journal, onClose }) {
   if (!journal) return null;
   const st = journalStatusLabels[journal.status];
+  const typeLabel = journal.journalBookName ?? journalTypeLabels[journal.type]?.label ?? journal.type ?? "—";
+  const sourceLabel = journalSourceLabels[journal.source] ?? journal.source ?? "—";
   return (
     <Dialog open={!!journal} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -64,8 +66,8 @@ function JournalPreviewDialog({ journal, onClose }) {
         <SoftBox display="flex" gap={3} mb={2} flexWrap="wrap">
           {[
             { label: "التاريخ",  value: journal.date },
-            { label: "النوع",    value: journalTypeLabels[journal.type]?.label },
-            { label: "المصدر",   value: journalSourceLabels[journal.source] },
+            { label: "النوع",    value: typeLabel },
+            { label: "المصدر",   value: sourceLabel },
           ].map(({ label, value }) => (
             <SoftBox key={label}>
               <SoftTypography variant="caption" color="secondary" display="block">{label}</SoftTypography>
@@ -143,6 +145,7 @@ export default function Journals() {
   const [fyFilter, setFyFilter] = useState(null);
   const [preview, setPreview] = useState(null);
   const [pageError, setPageError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setPageError("");
@@ -160,14 +163,17 @@ export default function Journals() {
   }, []);
 
   useEffect(() => {
+    if (!fyFilter) return;
+    setLoading(true);
     setPageError("");
-    accountingApi.listJournals()
+    accountingApi.listJournals({ fiscalYearId: fyFilter, page: 0, size: 200 })
       .then((r) => setAllJournals(r.data?.content ?? r.data ?? []))
       .catch((error) => {
         setPageError(getApiErrorMessage(error, "تعذر تحميل القيود اليومية"));
         setAllJournals([]);
-      });
-  }, []);
+      })
+      .finally(() => setLoading(false));
+  }, [fyFilter]);
 
   const activeFY = fiscalYears.find((y) => y.id === fyFilter);
   const isLocked = activeFY?.closed;
@@ -213,6 +219,10 @@ export default function Journals() {
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPageError("")}>
             {pageError}
           </Alert>
+        )}
+
+        {loading && (
+          <SoftTypography variant="caption" color="secondary">جارٍ تحميل القيود...</SoftTypography>
         )}
 
         {/* Stats */}
@@ -265,8 +275,8 @@ export default function Journals() {
                     <TableRow key={j.id} sx={{ "&:hover": { background: "#f8f9fa" }, cursor: "pointer" }} onClick={() => setPreview(j)}>
                       <TableCell><SoftTypography variant="caption" fontWeight="bold" sx={{ color: "#17c1e8" }}>{j.number}</SoftTypography></TableCell>
                       <TableCell><SoftTypography variant="caption">{j.date}</SoftTypography></TableCell>
-                      <TableCell><Chip label={journalTypeLabels[j.type]?.label} size="small" /></TableCell>
-                      <TableCell><SoftTypography variant="caption">{journalSourceLabels[j.source]}</SoftTypography></TableCell>
+                      <TableCell><Chip label={j.journalBookName ?? journalTypeLabels[j.type]?.label ?? j.type ?? "—"} size="small" /></TableCell>
+                      <TableCell><SoftTypography variant="caption">{journalSourceLabels[j.source] ?? j.source ?? "—"}</SoftTypography></TableCell>
                       <TableCell><SoftTypography variant="caption">{j.description}</SoftTypography></TableCell>
                       <TableCell style={{ textAlign: "right" }}><SoftTypography variant="caption" fontWeight="medium" sx={{ color: "#17c1e8" }}>{fmt(j.totalDebit)}</SoftTypography></TableCell>
                       <TableCell style={{ textAlign: "right" }}><SoftTypography variant="caption" fontWeight="medium" sx={{ color: "#82d616" }}>{fmt(j.totalCredit)}</SoftTypography></TableCell>

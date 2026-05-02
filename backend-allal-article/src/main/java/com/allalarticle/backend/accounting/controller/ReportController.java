@@ -22,21 +22,21 @@ public class ReportController {
     @GetMapping("/trial-balance")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'accounting.reports')")
     public ResponseEntity<ApiResponse<TrialBalanceResponse>> trialBalance(
-            @RequestParam Long fiscalYearId, @RequestParam Long periodId) {
+            @RequestParam Long fiscalYearId, @RequestParam(required = false) Long periodId) {
         return ResponseEntity.ok(ApiResponse.ok(service.trialBalance(fiscalYearId, periodId)));
     }
 
     @GetMapping("/balance-sheet")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'accounting.reports')")
     public ResponseEntity<ApiResponse<BalanceSheetResponse>> balanceSheet(
-            @RequestParam Long fiscalYearId, @RequestParam Long periodId) {
+            @RequestParam Long fiscalYearId, @RequestParam(required = false) Long periodId) {
         return ResponseEntity.ok(ApiResponse.ok(service.balanceSheet(fiscalYearId, periodId)));
     }
 
     @GetMapping("/income-statement")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'accounting.reports')")
     public ResponseEntity<ApiResponse<IncomeStatementResponse>> incomeStatement(
-            @RequestParam Long fiscalYearId, @RequestParam Long periodId) {
+            @RequestParam Long fiscalYearId, @RequestParam(required = false) Long periodId) {
         return ResponseEntity.ok(ApiResponse.ok(service.incomeStatement(fiscalYearId, periodId)));
     }
 

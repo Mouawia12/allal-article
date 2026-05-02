@@ -88,11 +88,15 @@ export default function OpeningBalances() {
     if (!isBalanced) { setErrors({ items: "الأرصدة الافتتاحية غير متوازنة، يجب تساوي المدين والدائن" }); return; }
     const items = postable
       .filter((a) => (balances[a.id]?.debit || 0) + (balances[a.id]?.credit || 0) > 0)
-      .map((a) => ({ accountId: a.id, debit: balances[a.id]?.debit || 0, credit: balances[a.id]?.credit || 0 }));
+      .map((a) => ({
+        accountId: a.id,
+        debitBalance: balances[a.id]?.debit || 0,
+        creditBalance: balances[a.id]?.credit || 0,
+      }));
     setSaving(true);
     setErrors({});
     try {
-      await accountingApi.saveOpeningBalances({ fiscalYearId: fyId, items });
+      await accountingApi.saveOpeningBalances({ fiscalYearId: fyId, lines: items });
     } catch (error) {
       applyApiErrors(error, setErrors, "تعذر حفظ الأرصدة الافتتاحية");
     } finally {

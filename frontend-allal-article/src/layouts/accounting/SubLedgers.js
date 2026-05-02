@@ -85,7 +85,7 @@ function CustomerTab({ customers, customerControl, customerTotal }) {
 
   return (
     <>
-      <ControlBar controlCode="4110" controlBalance={customerControl} subledgerTotal={customerTotal} />
+      <ControlBar controlCode="1201" controlBalance={customerControl} subledgerTotal={customerTotal} />
       <SoftBox mb={2}>
         <TextField
           size="small" placeholder="بحث بالاسم أو الهاتف..."
@@ -143,7 +143,7 @@ function SupplierTab({ suppliers, supplierControl, supplierTotal }) {
 
   return (
     <>
-      <ControlBar controlCode="4010" controlBalance={supplierControl} subledgerTotal={supplierTotal} />
+      <ControlBar controlCode="2101" controlBalance={supplierControl} subledgerTotal={supplierTotal} />
       <SoftBox mb={2}>
         <TextField
           size="small" placeholder="بحث بالاسم..."

@@ -17,24 +17,44 @@ public class CashBankService {
     public Map<String, Object> summary() {
         String s = TenantContext.get();
 
-        // accounts with balance (SUM of posted journal items)
+        // accounts with balance. Until auto-journals are fully wired, cash/bank fall back to customer payments.
         String accountsSql = String.format("""
+            WITH payment_ops AS (
+                SELECT
+                    CASE WHEN payment_method = 'cash' THEN '1301' ELSE '1302' END AS account_code,
+                    COALESCE(SUM(CASE WHEN direction = 'in' THEN amount ELSE -amount END), 0) AS amount
+                FROM "%1$s".customer_payments
+                WHERE payment_method IN ('cash', 'bank', 'cheque')
+                GROUP BY CASE WHEN payment_method = 'cash' THEN '1301' ELSE '1302' END
+            ),
+            ledger AS (
+                SELECT
+                    a.id AS account_id,
+                    COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN ji.debit ELSE 0 END), 0) AS debit,
+                    COALESCE(SUM(CASE WHEN j.id IS NOT NULL THEN ji.credit ELSE 0 END), 0) AS credit
+                FROM "%1$s".accounts a
+                LEFT JOIN "%1$s".journal_items ji ON ji.account_id = a.id
+                LEFT JOIN "%1$s".journals j       ON j.id = ji.journal_id AND j.status = 'posted'
+                GROUP BY a.id
+            )
             SELECT
                 a.id,
                 a.code          AS "accountCode",
                 a.name_ar       AS name,
                 a.currency,
-                CASE WHEN a.code LIKE '53%%' THEN 'cash' ELSE 'bank' END AS type,
-                COALESCE(SUM(ji.debit) - SUM(ji.credit), 0) AS balance
-            FROM "%s".accounts a
-            LEFT JOIN "%s".journal_items ji ON ji.account_id = a.id
-            LEFT JOIN "%s".journals j       ON j.id = ji.journal_id AND j.status = 'posted'
+                CASE WHEN a.code = '1301' THEN 'cash' ELSE 'bank' END AS type,
+                CASE WHEN COALESCE(l.debit, 0) + COALESCE(l.credit, 0) = 0
+                     THEN COALESCE(po.amount, 0)
+                     ELSE COALESCE(l.debit, 0) - COALESCE(l.credit, 0)
+                END AS balance
+            FROM "%1$s".accounts a
+            LEFT JOIN ledger l ON l.account_id = a.id
+            LEFT JOIN payment_ops po ON po.account_code = a.code
             WHERE a.deleted_at IS NULL
               AND a.is_postable = true
-              AND (a.code LIKE '512%%' OR a.code LIKE '53%%')
-            GROUP BY a.id, a.code, a.name_ar, a.currency
+              AND a.code IN ('1301', '1302', '1303')
             ORDER BY a.sort_order
-            """, s, s, s);
+            """, s);
 
         List<Map<String, Object>> accounts = jdbc.queryForList(accountsSql);
 
@@ -61,7 +81,7 @@ public class CashBankService {
             JOIN "%s".journals j  ON j.id = ji.journal_id AND j.status = 'posted'
             JOIN "%s".accounts a  ON a.id = ji.account_id
             WHERE a.deleted_at IS NULL
-              AND (a.code LIKE '512%%' OR a.code LIKE '53%%')
+              AND a.code IN ('1301', '1302', '1303')
             ORDER BY j.journal_date DESC, ji.id DESC
             LIMIT 30
             """, s, s, s);

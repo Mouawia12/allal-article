@@ -13,14 +13,32 @@ import java.time.OffsetDateTime;
 public class AccountingSettings {
 
     @Id
-    @Column(name = "setting_key", nullable = false, length = 80)
-    private String settingKey;
+    @Column(name = "key", nullable = false, length = 100)
+    private String key;
 
-    @Column(name = "setting_value", nullable = false, length = 200)
-    private String settingValue;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "account_id")
+    private Account account;
 
-    @Column(length = 300)
-    private String description;
+    @Column(nullable = false, length = 200)
+    private String label;
+
+    @Column(name = "group_name", nullable = false, length = 80)
+    private String groupName;
+
+    @Column(name = "is_required", nullable = false)
+    @Builder.Default
+    private boolean required = true;
+
+    @Column(name = "allowed_classification", length = 30)
+    private String allowedClassification;
+
+    @Column(name = "requires_control", nullable = false)
+    @Builder.Default
+    private boolean requiresControl = false;
+
+    @Column(name = "updated_by")
+    private Long updatedById;
 
     @UpdateTimestamp
     private OffsetDateTime updatedAt;

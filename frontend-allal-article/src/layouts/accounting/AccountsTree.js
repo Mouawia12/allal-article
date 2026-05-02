@@ -58,10 +58,40 @@ import { useI18n } from "i18n";
 let nextId = 1000;
 const newId = () => ++nextId;
 
+const CLASSIFICATION_TO_LIST = { asset: 1, liability: 2, equity: 3, revenue: 4, expense: 5 };
+const LIST_TO_CLASSIFICATION = { 1: "asset", 2: "liability", 3: "equity", 4: "revenue", 5: "expense" };
+const NORMAL_TO_SIDE = { debit: 1, credit: 2 };
+const SIDE_TO_NORMAL = { 1: "debit", 2: "credit" };
+
+function accountType(account) {
+  if (account.postable) return 3;
+  if (Number(account.level) <= 1) return 0;
+  if (Number(account.level) === 2) return 1;
+  return 2;
+}
+
+function mapApiAccount(account) {
+  const classification = account.classification ?? "asset";
+  const financialStatement = account.financialStatement ?? "balance_sheet";
+  const normalBalance = account.normalBalance ?? "debit";
+  return {
+    ...account,
+    parent_id: account.parentId ?? account.parent_id ?? null,
+    parent_code: account.parentCode ?? account.parent_code ?? null,
+    is_active: account.isActive ?? account.status === "active",
+    type: account.type ?? accountType(account),
+    list: account.list ?? CLASSIFICATION_TO_LIST[classification] ?? 1,
+    department: account.department ?? (financialStatement === "income_statement" ? 2 : 1),
+    side: account.side ?? NORMAL_TO_SIDE[normalBalance] ?? 1,
+    balance: Number(account.balance ?? 0),
+    totalBalance: Number(account.totalBalance ?? account.balance ?? 0),
+  };
+}
+
 // "1101 # عقارات ومباني"
 const displayCode = (a) => `${a.code} # ${a.nameAr}`;
 
-const isPostable = (a) => a.type === 3;
+const isPostable = (a) => Boolean(a.postable ?? a.type === 3);
 
 // ─── Tree Node ────────────────────────────────────────────────────────────────
 function TreeNode({ node, depth, expanded, selected, onToggle, onSelect, onAddChild, onEdit }) {
@@ -596,7 +626,7 @@ export default function AccountsTree() {
   useEffect(() => {
     setPageError("");
     accountingApi.listAccounts()
-      .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
+      .then((r) => setAccounts((r.data?.content ?? r.data ?? []).map(mapApiAccount)))
       .catch((error) => {
         setPageError(getApiErrorMessage(error, "تعذر تحميل شجرة الحسابات"));
         setAccounts([]);
@@ -604,7 +634,7 @@ export default function AccountsTree() {
     accountingApi.listFiscalYears()
       .then((r) => {
         const fys = r.data?.content ?? r.data ?? [];
-        setActiveFY(fys.find((f) => !f.closed) ?? fys[0] ?? null);
+        setActiveFY(fys.find((f) => f.status === "open" || !f.closed) ?? fys[0] ?? null);
       })
       .catch((error) => {
         setPageError((current) => {
@@ -622,14 +652,18 @@ export default function AccountsTree() {
       code: formData.code,
       nameAr: formData.nameAr,
       parentId: formData.parent_id ?? null,
-      classification: formData.list ?? formData.classification ?? null,
-      normalBalance: formData.side ?? formData.normalBalance ?? null,
-      isPostable: !formData.children?.length,
-      isActive: formData.is_active ?? true,
+      classification: LIST_TO_CLASSIFICATION[formData.list] ?? formData.classification ?? "asset",
+      financialStatement: formData.department === 2 ? "income_statement" : "balance_sheet",
+      normalBalance: SIDE_TO_NORMAL[formData.side] ?? formData.normalBalance ?? "debit",
+      reportSection: formData.reportSection ?? null,
+      statementLineCode: formData.statementLineCode ?? null,
+      statementSortOrder: formData.statementSortOrder ?? 0,
+      postable: formData.type === 3,
+      sortOrder: formData.sortOrder ?? 0,
     };
     const apiCall = isEdit
-      ? accountingApi.updateAccount(formData.id, apiData).then((r) => r.data)
-      : accountingApi.createAccount(apiData).then((r) => r.data);
+      ? accountingApi.updateAccount(formData.id, apiData).then((r) => mapApiAccount(r.data))
+      : accountingApi.createAccount(apiData).then((r) => mapApiAccount(r.data));
     return apiCall
       .then((saved) => {
         setAccounts((prev) => {
@@ -657,7 +691,7 @@ export default function AccountsTree() {
         if (p) addAncestors(p.parent_id);
       };
       accounts.forEach((a) => {
-        if (a.nameAr.includes(q) || a.code.includes(q)) addAncestors(a.id);
+        if ((a.nameAr || "").toLowerCase().includes(q) || (a.code || "").toLowerCase().includes(q)) addAncestors(a.id);
       });
       list = list.filter((a) => matched.has(a.id));
     }

@@ -24,6 +24,7 @@ public class JournalBookController {
         List<Map<String, Object>> books = repo.findAll().stream()
                 .map(b -> Map.<String, Object>of(
                         "id",               b.getId(),
+                        "code",             b.getCode(),
                         "type",             b.getBookType(),
                         "name",             b.getNameAr(),
                         "prefix",           b.getDefaultPrefix(),

@@ -87,7 +87,8 @@ public class PartnershipService {
     @Transactional
     public Map<String, Object> submitRequest(Map<String, Object> body) {
         Long requesterTenantId = currentTenantId();
-        String code = normalizeCode(textOrNull(body.get("code")));
+        Map<String, Object> payload = body != null ? body : Map.of();
+        String code = normalizeCode(textOrNull(payload.get("code")));
         if (code == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "كود الربط مطلوب", HttpStatus.BAD_REQUEST);
         }
@@ -115,7 +116,7 @@ public class PartnershipService {
         }
 
         Map<String, Object> permissions = readJsonMap((String) invite.get("permissions_json"));
-        String message = textOrNull(body.get("message"));
+        String message = textOrNull(payload.get("message"));
 
         try {
             Long id = jdbc.queryForObject(
@@ -149,8 +150,9 @@ public class PartnershipService {
     @Transactional
     public void approveRequest(Long id, Map<String, Object> body) {
         Long tenantId = currentTenantId();
-        Map<String, Object> permissions = permissionsFrom(body.get("permissions"));
-        String supplierDecision = textOrNull(body.get("supplierLinkDecision"));
+        Map<String, Object> payload = body != null ? body : Map.of();
+        Map<String, Object> permissions = permissionsFrom(payload.get("permissions"));
+        String supplierDecision = textOrNull(payload.get("supplierLinkDecision"));
         String supplierStatus = switch (supplierDecision != null ? supplierDecision : "") {
             case "accepted" -> "confirmed";
             case "skipped" -> "skipped";

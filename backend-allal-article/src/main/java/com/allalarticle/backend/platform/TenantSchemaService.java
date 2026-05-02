@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /**
  * Provisions a new tenant schema by running all tenant migration scripts in order.
- * Scripts are loaded from classpath:db/migration/tenant/ and executed in filename order (T01..T19).
+ * Scripts are loaded from classpath:db/migration/tenant/ and executed in filename order.
  */
 @Slf4j
 @Service
@@ -48,7 +48,10 @@ public class TenantSchemaService {
         "T17__seed_roles_permissions.sql",
         "T18__seed_wilayas.sql",
         "T19__seed_reference_data.sql",
-        "T20__seed_chart_of_accounts.sql"
+        "T20__seed_chart_of_accounts.sql",
+        "T21__align_accounting_permissions.sql",
+        "T22__align_journal_reference_columns.sql",
+        "T23__align_accounting_defaults.sql"
     };
 
     /**

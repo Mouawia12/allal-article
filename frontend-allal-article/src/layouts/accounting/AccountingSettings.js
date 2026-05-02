@@ -21,7 +21,20 @@ import { classificationLabels } from "./mockData";
 import { accountingApi } from "services";
 import { getApiErrorMessage } from "utils/formErrors";
 
-const accountSettingsDefs = [];
+const groupLabels = {
+  sales: "المبيعات",
+  purchases: "المشتريات",
+  inventory: "المخزون",
+  cash_bank: "الصندوق والبنك",
+  tax: "الضرائب",
+};
+
+const mapSettingDef = (setting) => ({
+  key: setting.key,
+  label: setting.label,
+  group: groupLabels[setting.group] ?? setting.group ?? "إعدادات عامة",
+  required: setting.required !== false,
+});
 
 // Group settings by group key
 function groupBy(arr, key) {
@@ -35,8 +48,10 @@ function groupBy(arr, key) {
 
 export default function AccountingSettings() {
   const [postableAccounts, setPostableAccounts] = useState([]);
+  const [settingDefs, setSettingDefs] = useState([]);
   const [settings, setSettings] = useState({});
   const [pageError, setPageError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setPageError("");
@@ -49,10 +64,35 @@ export default function AccountingSettings() {
         setPageError(getApiErrorMessage(error, "تعذر تحميل الحسابات"));
         setPostableAccounts([]);
       });
+    accountingApi.listAccountingSettings()
+      .then((r) => {
+        const defs = r.data ?? [];
+        setSettingDefs(defs.map(mapSettingDef));
+        setSettings(Object.fromEntries(defs.map((s) => [s.key, s.accountId ?? null])));
+      })
+      .catch((error) => {
+        setPageError((current) => {
+          const message = getApiErrorMessage(error, "تعذر تحميل إعدادات الحسابات");
+          return current ? `${current}؛ ${message}` : message;
+        });
+        setSettingDefs([]);
+      });
   }, []);
 
-  const grouped = groupBy(accountSettingsDefs, "group");
-  const missing = accountSettingsDefs.filter((s) => !settings[s.key]);
+  const grouped = groupBy(settingDefs, "group");
+  const missing = settingDefs.filter((s) => s.required && !settings[s.key]);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    setPageError("");
+    try {
+      await accountingApi.updateAccountingSettings(settings);
+    } catch (error) {
+      setPageError(getApiErrorMessage(error, "تعذر حفظ إعدادات الحسابات"));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -65,8 +105,8 @@ export default function AccountingSettings() {
               تحديد الحسابات التلقائية لكل عملية محاسبية
             </SoftTypography>
           </SoftBox>
-          <SoftButton variant="gradient" color="info" size="small">
-            <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> حفظ الإعدادات
+          <SoftButton variant="gradient" color="info" size="small" disabled={saving} onClick={saveSettings}>
+            <SaveIcon sx={{ mr: 0.5, fontSize: 16 }} /> {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
           </SoftButton>
         </SoftBox>
 
@@ -116,7 +156,7 @@ export default function AccountingSettings() {
                           onChange={(_, v) => setSettings((p) => ({ ...p, [setting.key]: v?.id ?? null }))}
                           getOptionLabel={(o) => `${o.code} — ${o.nameAr}`}
                           filterOptions={(opts, { inputValue: q }) =>
-                            opts.filter((o) => o.nameAr.includes(q) || o.code.includes(q))
+                            opts.filter((o) => (o.nameAr || "").includes(q) || (o.code || "").includes(q))
                           }
                           renderOption={(props, option) => {
                             const c = classificationLabels[option.classification];
@@ -132,8 +172,8 @@ export default function AccountingSettings() {
                           }}
                           renderInput={(params) => (
                             <TextField {...params} placeholder="اختر الحساب..."
-                              error={!selectedAccId}
-                              helperText={!selectedAccId ? "مطلوب" : ""}
+                              error={!selectedAccId && setting.required}
+                              helperText={!selectedAccId && setting.required ? "مطلوب" : ""}
                               sx={{ "& .MuiOutlinedInput-root": { fontSize: 12, borderRadius: 1.5 } }}
                             />
                           )}

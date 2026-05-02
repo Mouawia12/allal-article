@@ -128,46 +128,74 @@ export default function AccountingDashboard() {
   const [pageError, setPageError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     const appendError = (error, fallback) => {
+      if (cancelled) return;
       setPageError((current) => {
         const message = getApiErrorMessage(error, fallback);
         return current ? `${current}؛ ${message}` : message;
       });
     };
     setPageError("");
+
     accountingApi.listAccounts()
-      .then((r) => setAccounts(r.data?.content ?? r.data ?? []))
+      .then((r) => {
+        if (!cancelled) setAccounts(r.data?.content ?? r.data ?? []);
+      })
       .catch((error) => {
         appendError(error, "تعذر تحميل الحسابات");
-        setAccounts([]);
+        if (!cancelled) setAccounts([]);
       });
-    accountingApi.listJournals()
-      .then((r) => setJournals(r.data?.content ?? r.data ?? []))
-      .catch((error) => {
-        appendError(error, "تعذر تحميل القيود");
-        setJournals([]);
-      });
+
     accountingApi.listFiscalYears()
-      .then((r) => setFiscalYears(r.data?.content ?? r.data ?? []))
+      .then((r) => {
+        const years = r.data?.content ?? r.data ?? [];
+        if (cancelled) return;
+        setFiscalYears(years);
+        const active = years.find((fy) => fy.status === "open" || !fy.closed);
+        if (!active) {
+          setJournals([]);
+          return;
+        }
+        accountingApi.listJournals({ fiscalYearId: active.id, page: 0, size: 10 })
+          .then((jr) => {
+            if (!cancelled) setJournals(jr.data?.content ?? jr.data ?? []);
+          })
+          .catch((error) => {
+            appendError(error, "تعذر تحميل القيود");
+            if (!cancelled) setJournals([]);
+          });
+      })
       .catch((error) => {
         appendError(error, "تعذر تحميل السنوات المالية");
-        setFiscalYears([]);
+        if (!cancelled) {
+          setFiscalYears([]);
+          setJournals([]);
+        }
       });
+
+    return () => { cancelled = true; };
   }, []);
 
   const getBalance = (code) => Number(accounts.find((a) => a.code === code)?.balance ?? 0);
+  const firstBalance = (...codes) => {
+    const hit = codes
+      .map((code) => ({ code, value: getBalance(code) }))
+      .find((item) => item.value !== 0);
+    return hit?.value ?? getBalance(codes[0]);
+  };
 
-  const cashBalance    = getBalance("141");
-  const bankBalance    = getBalance("142");
-  const customersDebt  = getBalance("131");
-  const suppliersDebt  = getBalance("221");
-  const inventoryValue = getBalance("121");
-  const revenueTotal   = getBalance("411");
-  const cogsTotal      = getBalance("511");
+  const cashBalance    = firstBalance("1301", "53001", "53002", "5300");
+  const bankBalance    = firstBalance("1302", "51201", "5120") + firstBalance("1303", "51203");
+  const customersDebt  = firstBalance("1201", "41101", "4110");
+  const suppliersDebt  = firstBalance("2101", "40101", "4010");
+  const inventoryValue = firstBalance("1101", "3001", "30011", "3000") + firstBalance("1102", "30012");
+  const revenueTotal   = firstBalance("4001", "70011", "7001") - firstBalance("4002", "70091", "7009");
+  const cogsTotal      = firstBalance("5001", "60101", "6010") - firstBalance("5002", "60102");
   const grossProfit    = revenueTotal - cogsTotal;
 
   const draftJournals = journals.filter((j) => j.status === "draft");
-  const activeFY      = fiscalYears.find((fy) => !fy.closed);
+  const activeFY      = fiscalYears.find((fy) => fy.status === "open" || !fy.closed);
 
   const alerts = [
     ...(draftJournals.length > 0

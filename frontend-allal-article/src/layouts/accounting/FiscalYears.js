@@ -51,7 +51,7 @@ function CloseYearDialog({ year, onClose }) {
   const checks = [
     { label: "لا توجد قيود مسودة", ok: true },
     { label: "كل القيود متوازنة",   ok: true },
-    { label: "كل الفترات مغلقة",    ok: false, warn: "فترة ديسمبر لم تُغلق بعد" },
+    { label: "سيتم قفل فترات السنة مع القفل", ok: true },
   ];
 
   const handleNext = () => {

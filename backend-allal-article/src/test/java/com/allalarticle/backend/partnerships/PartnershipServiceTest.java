@@ -124,6 +124,140 @@ class PartnershipServiceTest {
     }
 
     @Test
+    void submitRequest_createsPendingPartnershipAndConsumesInvite() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+        when(jdbc.queryForMap(contains("from platform.tenant_invite_codes"), anyString()))
+                .thenReturn(Map.of(
+                        "id", 55L,
+                        "provider_tenant_id", 7L,
+                        "permissions_json", "{\"view_inventory\":true,\"clone_products\":true}"));
+        when(jdbc.queryForObject(
+                contains("insert into platform.tenant_partnerships"),
+                eq(Long.class),
+                eq(7L),
+                eq(8L),
+                eq(55L),
+                anyString(),
+                eq("نريد تجربة الربط"))).thenReturn(66L);
+
+        Map<String, Object> result = service.submitRequest(Map.of(
+                "code", "link-abcd-efgh",
+                "message", "نريد تجربة الربط"));
+
+        assertThat(result)
+                .containsEntry("id", 66L)
+                .containsEntry("status", "pending")
+                .containsEntry("providerTenantId", 7L);
+        verify(jdbc).update(
+                eq("update platform.tenant_invite_codes set uses_count = uses_count + 1 where id = ?"),
+                eq(55L));
+    }
+
+    @Test
+    void submitRequest_rejectsMissingCodeWithoutQueryingInvite() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+
+        assertThatThrownBy(() -> service.submitRequest(Map.of()))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.BAD_REQUEST);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                });
+
+        verify(jdbc, never()).queryForMap(contains("from platform.tenant_invite_codes"), anyString());
+    }
+
+    @Test
+    void approveRequest_activatesPendingRequestWithReviewedPermissions() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(7L);
+        when(jdbc.update(
+                contains("update platform.tenant_partnerships"),
+                anyString(),
+                eq("confirmed"),
+                eq(66L),
+                eq(7L))).thenReturn(1);
+
+        service.approveRequest(66L, Map.of(
+                "supplierLinkDecision", "accepted",
+                "permissions", Map.of("view_inventory", true, "clone_products", true)));
+
+        verify(jdbc).update(
+                contains("update platform.tenant_partnerships"),
+                anyString(),
+                eq("confirmed"),
+                eq(66L),
+                eq(7L));
+    }
+
+    @Test
+    void approveRequest_returnsNotFoundWhenRequestDoesNotBelongToProvider() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(7L);
+        when(jdbc.update(
+                contains("update platform.tenant_partnerships"),
+                anyString(),
+                eq("none"),
+                eq(66L),
+                eq(7L))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.approveRequest(66L, Map.of("permissions", Map.of())))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.NOT_FOUND);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                });
+    }
+
+    @Test
+    void rejectRequest_marksPendingRequestRejected() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(7L);
+        when(jdbc.update(
+                contains("set status = 'rejected'"),
+                eq(66L),
+                eq(7L))).thenReturn(1);
+
+        service.rejectRequest(66L);
+
+        verify(jdbc).update(
+                contains("set status = 'rejected'"),
+                eq(66L),
+                eq(7L));
+    }
+
+    @Test
+    void revokePartnership_marksActivePartnershipRevokedForEitherSide() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+        when(jdbc.update(
+                contains("set status = 'revoked'"),
+                eq(66L),
+                eq(8L),
+                eq(8L))).thenReturn(1);
+
+        service.revokePartnership(66L);
+
+        verify(jdbc).update(
+                contains("set status = 'revoked'"),
+                eq(66L),
+                eq(8L),
+                eq(8L));
+    }
+
+    @Test
     void linkedInventory_readsPartnerSchemaOnlyWhenPermissionIsGranted() {
         String partnerUuid = "11111111-1111-1111-1111-111111111111";
         when(jdbc.queryForObject(
@@ -179,5 +313,61 @@ class PartnershipServiceTest {
                 });
 
         verify(jdbc, never()).queryForList(contains(".products"), eq(false), eq(false));
+    }
+
+    @Test
+    void cloneProducts_copiesSelectedPartnerProductsWhenPermissionIsGranted() {
+        String partnerUuid = "11111111-1111-1111-1111-111111111111";
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+        when(jdbc.queryForMap(contains("from platform.tenant_partnerships"), eq(8L), eq(partnerUuid)))
+                .thenReturn(Map.of(
+                        "permissions_json", "{\"clone_products\":true,\"view_pricing\":true}",
+                        "partner_uuid", partnerUuid,
+                        "partner_name", "Partner SARL",
+                        "partner_schema", "tenant_111111111111"));
+        when(jdbc.update(
+                contains("insert into \"tenant_abcdef123456\".categories"),
+                eq(12L),
+                eq(13L))).thenReturn(1);
+        when(jdbc.update(
+                contains("insert into \"tenant_abcdef123456\".product_units_catalog"),
+                eq(12L),
+                eq(13L))).thenReturn(1);
+        when(jdbc.queryForObject(
+                contains("select count(*) from upserted"),
+                eq(Integer.class),
+                eq(true),
+                eq(12L),
+                eq(13L))).thenReturn(2);
+
+        Map<String, Object> result = service.cloneProducts(partnerUuid, Map.of("productIds", java.util.List.of(12, 13)));
+
+        assertThat(result).containsEntry("clonedCount", 2);
+    }
+
+    @Test
+    void cloneProducts_rejectsEmptySelectionBeforeWritingAnything() {
+        String partnerUuid = "11111111-1111-1111-1111-111111111111";
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+        when(jdbc.queryForMap(contains("from platform.tenant_partnerships"), eq(8L), eq(partnerUuid)))
+                .thenReturn(Map.of(
+                        "permissions_json", "{\"clone_products\":true}",
+                        "partner_uuid", partnerUuid,
+                        "partner_name", "Partner SARL",
+                        "partner_schema", "tenant_111111111111"));
+
+        assertThatThrownBy(() -> service.cloneProducts(partnerUuid, Map.of("productIds", java.util.List.of())))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.BAD_REQUEST);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
+                });
+
+        verify(jdbc, never()).update(contains("insert into \"tenant_abcdef123456\".categories"), eq(12L));
     }
 }

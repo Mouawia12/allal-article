@@ -38,7 +38,7 @@ export function fmt(n) {
 // SCHEMA V2 — شجرة الحسابات المحاسبية
 // ═══════════════════════════════════════════════════════════════════════════════
 // type:       0=Root(دليل)  1=General(رئيسي)  2=Branch(فرعي)  3=BranchLedger(أستاذ فرعي)
-// list:       1=Assets(أصول)  2=Discounts(خصومات)  3=Income(إيرادات)  4=Expenses(مصروفات)
+// list:       1=Assets  2=Liabilities  3=Equity  4=Revenue  5=Expenses
 // department: 1=BalanceSheet(الميزانية)  2=IncomeStatement(قائمة الدخل)
 // side:       1=Debit(مدين)  2=Credit(دائن)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -51,10 +51,11 @@ export const ACCOUNT_TYPES = {
 };
 
 export const ACCOUNT_LISTS = {
-  1: { label: "أصول",    color: "#17c1e8", bg: "#e3f8fd" },
-  2: { label: "خصومات",  color: "#fb8c00", bg: "#fff3e0" },
-  3: { label: "إيرادات", color: "#82d616", bg: "#f0fde4" },
-  4: { label: "مصروفات", color: "#ea0606", bg: "#ffeaea" },
+  1: { label: "أصول",       color: "#17c1e8", bg: "#e3f8fd" },
+  2: { label: "خصوم",       color: "#fb8c00", bg: "#fff3e0" },
+  3: { label: "حقوق ملكية", color: "#7928ca", bg: "#f3e8ff" },
+  4: { label: "إيرادات",    color: "#82d616", bg: "#f0fde4" },
+  5: { label: "مصروفات",    color: "#ea0606", bg: "#ffeaea" },
 };
 
 export const ACCOUNT_DEPARTMENTS = {

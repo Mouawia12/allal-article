@@ -2,6 +2,7 @@ package com.allalarticle.backend.accounting.dto;
 
 import com.allalarticle.backend.accounting.entity.Account;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 public record AccountResponse(
@@ -20,6 +21,12 @@ public record AccountResponse(
         int statementSortOrder,
         boolean postable,
         boolean control,
+        boolean allowManualPosting,
+        boolean templateLocked,
+        boolean custom,
+        BigDecimal balance,
+        BigDecimal debitTotal,
+        BigDecimal creditTotal,
         String currency,
         String status,
         short level,
@@ -27,13 +34,21 @@ public record AccountResponse(
         int sortOrder
 ) {
     public static AccountResponse from(Account a) {
+        return from(a, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    public static AccountResponse from(Account a, BigDecimal balance, BigDecimal debitTotal, BigDecimal creditTotal) {
         return new AccountResponse(
                 a.getId(), a.getPublicId(), a.getCode(), a.getNameAr(), a.getNameFr(),
                 a.getParent() != null ? a.getParent().getId() : null,
                 a.getParent() != null ? a.getParent().getCode() : null,
                 a.getClassification(), a.getFinancialStatement(), a.getNormalBalance(),
                 a.getReportSection(), a.getStatementLineCode(), a.getStatementSortOrder(),
-                a.isPostable(), a.isControl(), a.getCurrency(), a.getStatus(),
+                a.isPostable(), a.isControl(), a.isAllowManualPosting(), a.isTemplateLocked(), a.isCustom(),
+                balance != null ? balance : BigDecimal.ZERO,
+                debitTotal != null ? debitTotal : BigDecimal.ZERO,
+                creditTotal != null ? creditTotal : BigDecimal.ZERO,
+                a.getCurrency(), a.getStatus(),
                 a.getLevel(), a.getPath(), a.getSortOrder()
         );
     }

@@ -96,7 +96,9 @@ export const allPermissions = [
   { code: "manufacturing.manage",   label: "إدارة أوامر التصنيع",         module: "التصنيع" },
   // المحاسبة
   { code: "accounting.view",        label: "عرض الحسابات",                module: "المحاسبة" },
-  { code: "accounting.journals",    label: "القيود اليومية",              module: "المحاسبة" },
+  { code: "accounting.manage",      label: "إدارة المحاسبة",              module: "المحاسبة" },
+  { code: "accounting.journals.create", label: "إنشاء قيود يومية",        module: "المحاسبة" },
+  { code: "accounting.journals.post",   label: "ترحيل قيود يومية",        module: "المحاسبة" },
   { code: "accounting.reports",     label: "تقارير المحاسبة",             module: "المحاسبة" },
   { code: "accounting.settings",    label: "إعدادات المحاسبة",            module: "المحاسبة" },
   // التقارير والسجلات
@@ -134,7 +136,7 @@ export const roleDefaultPermissions = {
     "purchases.view", "purchases.create", "purchases.approve",
     "road_invoices.view", "road_invoices.create", "road_invoices.edit",
     "manufacturing.view", "manufacturing.manage",
-    "accounting.view", "accounting.journals", "accounting.reports",
+    "accounting.view", "accounting.manage", "accounting.journals.create", "accounting.journals.post", "accounting.reports",
     "reports.view", "logs.view",
     "partners.view", "partners.manage",
     "settings.general", "settings.road_invoices",
@@ -149,7 +151,7 @@ export const roleDefaultPermissions = {
     "suppliers.view",
     "purchases.view", "purchases.create",
     "road_invoices.view",
-    "accounting.view", "accounting.journals", "accounting.reports", "accounting.settings",
+    "accounting.view", "accounting.manage", "accounting.journals.create", "accounting.journals.post", "accounting.reports", "accounting.settings",
     "reports.view", "logs.view",
   ],
 

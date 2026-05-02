@@ -9,6 +9,8 @@ import java.util.Optional;
 
 public interface AccountingPeriodRepository extends JpaRepository<AccountingPeriod, Long> {
     List<AccountingPeriod> findByFiscalYearIdOrderByPeriodNumber(Long fiscalYearId);
+    Optional<AccountingPeriod> findFirstByFiscalYearIdAndStatusOrderByPeriodNumberDesc(Long fiscalYearId, String status);
+    Optional<AccountingPeriod> findFirstByFiscalYearIdOrderByPeriodNumberDesc(Long fiscalYearId);
     Optional<AccountingPeriod> findByFiscalYearIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
             Long fiscalYearId, LocalDate date1, LocalDate date2);
 }

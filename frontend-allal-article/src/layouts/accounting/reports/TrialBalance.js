@@ -353,7 +353,7 @@ export default function TrialBalance() {
     accountingApi.trialBalance(fyId)
       .then((r) => {
         const rows = (r.data?.rows ?? r.data ?? []).map((row, idx) => ({
-          id: row.accountCode ?? String(idx),
+          id: row.accountId ?? row.accountCode ?? String(idx),
           code: row.accountCode,
           nameAr: row.accountName,
           classification: row.classification,

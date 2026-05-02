@@ -16,7 +16,7 @@ public class AccountTemplateItem {
     @JoinColumn(name = "template_id", nullable = false)
     private AccountTemplate template;
 
-    @Column(name = "account_code", nullable = false, length = 30)
+    @Column(name = "code", nullable = false, length = 30)
     private String accountCode;
 
     @Column(name = "name_ar", nullable = false, length = 200)

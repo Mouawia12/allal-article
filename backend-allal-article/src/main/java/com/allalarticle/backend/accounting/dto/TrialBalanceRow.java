@@ -3,6 +3,7 @@ package com.allalarticle.backend.accounting.dto;
 import java.math.BigDecimal;
 
 public record TrialBalanceRow(
+        Long accountId,
         String accountCode,
         String accountName,
         String classification,

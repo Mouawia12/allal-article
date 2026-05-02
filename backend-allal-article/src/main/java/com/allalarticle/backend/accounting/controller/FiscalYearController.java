@@ -26,7 +26,7 @@ public class FiscalYearController {
     @GetMapping
     @PreAuthorize("@permChecker.hasPermission(authentication, 'accounting.view')")
     public ResponseEntity<ApiResponse<List<FiscalYearResponse>>> list() {
-        return ResponseEntity.ok(ApiResponse.ok(service.findAll()));
+        return ResponseEntity.ok(ApiResponse.ok(service.ensureAndFindAll()));
     }
 
     @GetMapping("/{id}")

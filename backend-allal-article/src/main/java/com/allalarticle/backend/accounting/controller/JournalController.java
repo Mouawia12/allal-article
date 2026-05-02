@@ -27,11 +27,14 @@ public class JournalController {
     @GetMapping
     @PreAuthorize("@permChecker.hasPermission(authentication, 'accounting.view')")
     public ResponseEntity<ApiResponse<PageResponse<JournalResponse>>> list(
-            @RequestParam Long fiscalYearId,
+            @RequestParam(required = false) Long fiscalYearId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         var pageable = PageRequest.of(page, size, Sort.by("journalDate").descending());
-        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(service.findByFiscalYear(fiscalYearId, pageable))));
+        var journals = fiscalYearId != null
+                ? service.findByFiscalYear(fiscalYearId, pageable)
+                : service.findAll(pageable);
+        return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(journals)));
     }
 
     @GetMapping("/{id}")

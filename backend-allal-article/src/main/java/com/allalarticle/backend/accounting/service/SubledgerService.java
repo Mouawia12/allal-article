@@ -18,32 +18,45 @@ public class SubledgerService {
     public Map<String, Object> summary() {
         String s = TenantContext.get();
 
-        // Customer AR: customers with their unpaid orders total + accounting balance
+        // Customer receivables: operational debt first, ledger balance when journals exist.
         List<Map<String, Object>> customers = jdbc.queryForList(String.format("""
             SELECT
                 c.id,
                 c.name,
-                COALESCE(c.phone, '—')                                          AS phone,
-                COALESCE(SUM(CASE WHEN o.payment_status != 'paid' THEN o.total_amount ELSE 0 END), 0) AS balance,
+                COALESCE(c.phone, '—') AS phone,
+                GREATEST(
+                    COALESCE(c.opening_balance, 0)
+                    + COALESCE(o.total_orders, 0)
+                    - COALESCE(p.net_paid, 0),
+                    0
+                ) AS balance,
                 COALESCE(
                     (SELECT SUM(ji.debit) - SUM(ji.credit)
                      FROM "%s".journal_items ji
                      JOIN "%s".journals j ON j.id = ji.journal_id AND j.status = 'posted'
-                     JOIN "%s".accounts  a ON a.id = ji.account_id AND a.code LIKE '411%%'
+                     JOIN "%s".accounts  a ON a.id = ji.account_id AND a.code = '1201'
                      WHERE j.reference_id IN (SELECT id FROM "%s".orders WHERE customer_id = c.id)
                     ), 0)                                                        AS "ledgerBalance"
             FROM "%s".customers c
-            LEFT JOIN "%s".orders o ON o.customer_id = c.id
-                AND o.order_status NOT IN ('draft','cancelled')
+            LEFT JOIN (
+                SELECT customer_id, SUM(total_amount) AS total_orders
+                FROM "%s".orders
+                WHERE deleted_at IS NULL
+                  AND order_status NOT IN ('draft','cancelled','rejected')
+                GROUP BY customer_id
+            ) o ON o.customer_id = c.id
+            LEFT JOIN (
+                SELECT customer_id,
+                       SUM(CASE WHEN direction = 'in' THEN amount ELSE -amount END) AS net_paid
+                FROM "%s".customer_payments
+                GROUP BY customer_id
+            ) p ON p.customer_id = c.id
             WHERE c.deleted_at IS NULL
-            GROUP BY c.id, c.name, c.phone
-            HAVING COALESCE(SUM(CASE WHEN o.payment_status != 'paid' THEN o.total_amount ELSE 0 END), 0) > 0
-               OR c.opening_balance > 0
+              AND GREATEST(COALESCE(c.opening_balance, 0) + COALESCE(o.total_orders, 0) - COALESCE(p.net_paid, 0), 0) > 0
             ORDER BY balance DESC
-            """, s, s, s, s, s, s));
+            """, s, s, s, s, s, s, s));
 
-        // Control balance for 4110 account
-        BigDecimal customerControl = queryAccountBalance(s, "4110");
+        BigDecimal customerControl = queryAccountBalance(s, "1201");
 
         // Supplier AP: suppliers with outstanding purchase orders
         List<Map<String, Object>> suppliers = jdbc.queryForList(String.format("""
@@ -56,7 +69,7 @@ public class SubledgerService {
                     (SELECT SUM(ji.credit) - SUM(ji.debit)
                      FROM "%s".journal_items ji
                      JOIN "%s".journals j ON j.id = ji.journal_id AND j.status = 'posted'
-                     JOIN "%s".accounts  a ON a.id = ji.account_id AND a.code LIKE '401%%'
+                     JOIN "%s".accounts  a ON a.id = ji.account_id AND a.code = '2101'
                      WHERE j.reference_id IN (SELECT id FROM "%s".purchase_orders WHERE supplier_id = sup.id)
                     ), 0)                                                         AS "ledgerBalance"
             FROM "%s".suppliers sup
@@ -68,7 +81,7 @@ public class SubledgerService {
             ORDER BY balance DESC
             """, s, s, s, s, s, s));
 
-        BigDecimal supplierControl = queryAccountBalance(s, "4010");
+        BigDecimal supplierControl = queryAccountBalance(s, "2101");
 
         // Tax subledger: aggregate journal_items on 441x accounts
         List<Map<String, Object>> taxes = jdbc.queryForList(String.format("""
@@ -81,7 +94,7 @@ public class SubledgerService {
             FROM "%s".accounts a
             LEFT JOIN "%s".journal_items ji ON ji.account_id = a.id
             LEFT JOIN "%s".journals j       ON j.id = ji.journal_id AND j.status = 'posted'
-            WHERE a.code LIKE '441%%' AND a.is_postable = true AND a.deleted_at IS NULL
+            WHERE a.code IN ('1202', '2301', '2302') AND a.is_postable = true AND a.deleted_at IS NULL
             GROUP BY a.id, a.code, a.name_ar
             ORDER BY a.sort_order
             """, s, s, s));
@@ -96,7 +109,7 @@ public class SubledgerService {
             FROM "%s".accounts a
             LEFT JOIN "%s".journal_items ji ON ji.account_id = a.id
             LEFT JOIN "%s".journals j       ON j.id = ji.journal_id AND j.status = 'posted'
-            WHERE a.deleted_at IS NULL AND a.is_postable = true AND a.code LIKE '512%%'
+            WHERE a.deleted_at IS NULL AND a.is_postable = true AND a.code IN ('1302', '1303')
             GROUP BY a.id, a.code, a.name_ar
             ORDER BY a.sort_order
             """, s, s, s));
@@ -138,10 +151,14 @@ public class SubledgerService {
     private BigDecimal queryAccountBalance(String schema, String code) {
         try {
             BigDecimal val = jdbc.queryForObject(String.format("""
-                SELECT COALESCE(SUM(ji.debit) - SUM(ji.credit), 0)
+                SELECT CASE WHEN a.normal_balance = 'credit'
+                       THEN COALESCE(SUM(ji.credit), 0) - COALESCE(SUM(ji.debit), 0)
+                       ELSE COALESCE(SUM(ji.debit), 0) - COALESCE(SUM(ji.credit), 0)
+                       END
                 FROM "%s".journal_items ji
                 JOIN "%s".journals j ON j.id = ji.journal_id AND j.status = 'posted'
                 JOIN "%s".accounts a ON a.id = ji.account_id AND a.code = ?
+                GROUP BY a.normal_balance
                 """, schema, schema, schema), BigDecimal.class, code);
             return val != null ? val : BigDecimal.ZERO;
         } catch (Exception e) {

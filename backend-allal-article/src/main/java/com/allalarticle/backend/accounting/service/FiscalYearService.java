@@ -29,6 +29,16 @@ public class FiscalYearService {
                 .map(FiscalYearResponse::from).toList();
     }
 
+    @Transactional
+    public List<FiscalYearResponse> ensureAndFindAll() {
+        List<FiscalYear> years = fiscalYearRepo.findAllByOrderByStartDateDesc();
+        if (years.isEmpty()) {
+            FiscalYear fy = buildCurrentFiscalYear(null);
+            years = List.of(fiscalYearRepo.save(fy));
+        }
+        return years.stream().map(FiscalYearResponse::from).toList();
+    }
+
     @Transactional(readOnly = true)
     public FiscalYearResponse findById(Long id) {
         return FiscalYearResponse.from(getOrThrow(id));
@@ -56,9 +66,15 @@ public class FiscalYearService {
         if (!"open".equals(fy.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "السنة المالية ليست مفتوحة", HttpStatus.BAD_REQUEST);
         }
+        java.time.OffsetDateTime closedAt = java.time.OffsetDateTime.now();
         fy.setStatus("closed");
         fy.setClosedById(userId);
-        fy.setClosedAt(java.time.OffsetDateTime.now());
+        fy.setClosedAt(closedAt);
+        fy.getPeriods().forEach(period -> {
+            period.setStatus("closed");
+            period.setClosedById(userId);
+            period.setClosedAt(closedAt);
+        });
         return FiscalYearResponse.from(fiscalYearRepo.save(fy));
     }
 
@@ -81,6 +97,20 @@ public class FiscalYearService {
             cursor = periodEnd.plusDays(1);
         }
         fy.getPeriods().addAll(periods);
+    }
+
+    private FiscalYear buildCurrentFiscalYear(Long userId) {
+        LocalDate today = LocalDate.now();
+        LocalDate start = LocalDate.of(today.getYear(), 1, 1);
+        LocalDate end = LocalDate.of(today.getYear(), 12, 31);
+        FiscalYear fy = FiscalYear.builder()
+                .name("السنة المالية " + today.getYear())
+                .startDate(start)
+                .endDate(end)
+                .createdById(userId)
+                .build();
+        generatePeriods(fy);
+        return fy;
     }
 
     private FiscalYear getOrThrow(Long id) {

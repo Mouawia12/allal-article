@@ -31,6 +31,11 @@ public class JournalService {
     private final NumberSequenceService numberSeqService;
 
     @Transactional(readOnly = true)
+    public Page<JournalResponse> findAll(Pageable pageable) {
+        return journalRepo.findAll(pageable).map(JournalResponse::from);
+    }
+
+    @Transactional(readOnly = true)
     public Page<JournalResponse> findByFiscalYear(Long fiscalYearId, Pageable pageable) {
         return journalRepo.findByFiscalYearId(fiscalYearId, pageable).map(JournalResponse::from);
     }
