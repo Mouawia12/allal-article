@@ -64,6 +64,25 @@ public class Supplier {
     @Builder.Default
     private BigDecimal openingBalance = BigDecimal.ZERO;
 
+    @Column(name = "linked_partner_uuid")
+    private UUID linkedPartnerUuid;
+
+    @Column(name = "linked_partnership_public_id")
+    private UUID linkedPartnershipPublicId;
+
+    @Column(name = "link_match_method", length = 50)
+    private String linkMatchMethod;
+
+    @Column(name = "link_match_status", nullable = false, length = 30)
+    @Builder.Default
+    private String linkMatchStatus = "none";
+
+    @Column(name = "link_confirmed_by")
+    private Long linkConfirmedById;
+
+    @Column(name = "link_confirmed_at")
+    private OffsetDateTime linkConfirmedAt;
+
     private String notes;
 
     @Column(name = "created_by")

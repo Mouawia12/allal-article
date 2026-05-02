@@ -40,6 +40,22 @@ public class PurchaseOrder {
     @Builder.Default
     private String originChannel = "manual";
 
+    @Column(name = "linked_partner_uuid")
+    private UUID linkedPartnerUuid;
+
+    @Column(name = "linked_partnership_public_id")
+    private UUID linkedPartnershipPublicId;
+
+    @Column(name = "partner_document_link_public_id")
+    private UUID partnerDocumentLinkPublicId;
+
+    @Column(name = "partner_source_document_public_id")
+    private UUID partnerSourceDocumentPublicId;
+
+    @Column(name = "partner_sync_status", nullable = false, length = 40)
+    @Builder.Default
+    private String partnerSyncStatus = "none";
+
     @Column(nullable = false, length = 30)
     @Builder.Default
     private String status = "draft";

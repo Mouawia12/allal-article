@@ -51,7 +51,10 @@ public class TenantSchemaService {
         "T20__seed_chart_of_accounts.sql",
         "T21__align_accounting_permissions.sql",
         "T22__align_journal_reference_columns.sql",
-        "T23__align_accounting_defaults.sql"
+        "T23__align_accounting_defaults.sql",
+        "T24__align_purchase_permissions.sql",
+        "T25__align_purchase_order_item_timestamps.sql",
+        "T26__email_notifications.sql"
     };
 
     /**

@@ -62,6 +62,24 @@ import {
 import { useDarkMode } from "context/DarkModeContext";
 import { useAuth } from "context/AuthContext";
 import { useI18n } from "i18n";
+import apiClient from "services/apiClient";
+
+function notificationIcon(category) {
+  return ({
+    products: "inventory_2",
+    inventory: "warehouse",
+    orders: "shopping_cart",
+    payments: "payment",
+    accounting: "paid",
+  })[category] || "notifications";
+}
+
+function notificationColor(severity) {
+  if (severity === "critical") return "error";
+  if (severity === "action_required") return "warning";
+  if (severity === "success") return "success";
+  return "info";
+}
 
 function DashboardNavbar({ absolute, light, isMini }) {
   const [navbarType, setNavbarType] = useState();
@@ -69,6 +87,9 @@ function DashboardNavbar({ absolute, light, isMini }) {
   const { miniSidenav, transparentNavbar, fixedNavbar, openConfigurator } = controller;
   const [openMenu, setOpenMenu] = useState(false);
   const [languageMenuAnchor, setLanguageMenuAnchor] = useState(null);
+  const [notificationPreview, setNotificationPreview] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const { locale, languages, setLocale, t } = useI18n();
   const { darkMode, toggleDarkMode } = useDarkMode();
   const { isAuthenticated, logout } = useAuth();
@@ -104,13 +125,42 @@ function DashboardNavbar({ absolute, light, isMini }) {
 
   const handleMiniSidenav = () => setMiniSidenav(dispatch, !miniSidenav);
   const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, !openConfigurator);
-  const handleOpenMenu = (event) => setOpenMenu(event.currentTarget);
+  const refreshNotifications = () => {
+    if (!isAuthenticated) {
+      setNotificationPreview([]);
+      setUnreadCount(0);
+      return;
+    }
+    setNotificationsLoading(true);
+    apiClient.get("/api/notifications", { params: { filter: "unread", page: 0, size: 5 } })
+      .then((r) => {
+        const data = r.data || {};
+        setNotificationPreview(Array.isArray(data.content) ? data.content : []);
+        setUnreadCount(Number(data.totalElements ?? data.stats?.unread ?? 0));
+      })
+      .catch(() => {
+        setNotificationPreview([]);
+        setUnreadCount(0);
+      })
+      .finally(() => setNotificationsLoading(false));
+  };
+
+  useEffect(() => {
+    refreshNotifications();
+    const interval = window.setInterval(refreshNotifications, 30000);
+    return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, pathname]);
+
+  const handleOpenMenu = (event) => {
+    setOpenMenu(event.currentTarget);
+    refreshNotifications();
+  };
   const handleCloseMenu = () => setOpenMenu(false);
   const handleOpenLanguageMenu = (event) => setLanguageMenuAnchor(event.currentTarget);
   const handleCloseLanguageMenu = () => setLanguageMenuAnchor(null);
   const accountActionLabel = isAuthenticated ? "تسجيل الخروج" : "تسجيل الدخول";
   const accountActionIcon = isAuthenticated ? "logout" : "account_circle";
-  const unreadCount = 0;
 
   // Render the notifications menu
   const renderMenu = () => (
@@ -120,17 +170,50 @@ function DashboardNavbar({ absolute, light, isMini }) {
       anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       open={Boolean(openMenu)}
       onClose={handleCloseMenu}
-      sx={{ mt: 2 }}
+      sx={{ mt: 2, "& .MuiPaper-root": { width: 340, maxWidth: "calc(100vw - 32px)" } }}
     >
-      <MenuItem disabled>
-        <SoftTypography variant="caption" color="secondary" fontWeight="bold">
-          لا توجد إشعارات جديدة
-        </SoftTypography>
-      </MenuItem>
+      {notificationsLoading && (
+        <MenuItem disabled>
+          <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+            جارٍ تحميل الإشعارات...
+          </SoftTypography>
+        </MenuItem>
+      )}
+      {!notificationsLoading && notificationPreview.length === 0 && (
+        <MenuItem disabled>
+          <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+            لا توجد إشعارات جديدة
+          </SoftTypography>
+        </MenuItem>
+      )}
+      {!notificationsLoading && notificationPreview.map((item) => (
+        <NotificationItem
+          key={item.id}
+          component={Link}
+          to={item.actionUrl || "/notifications"}
+          onClick={handleCloseMenu}
+          color={notificationColor(item.severity)}
+          image={<Icon fontSize="small">{notificationIcon(item.category)}</Icon>}
+          title={[item.title || "إشعار", item.body ? ` — ${item.body}` : ""]}
+          date={item.createdAt || ""}
+        />
+      ))}
+      {unreadCount > notificationPreview.length && (
+        <MenuItem disabled>
+          <SoftTypography variant="caption" color="secondary">
+            +{unreadCount - notificationPreview.length} إشعارات أخرى غير مقروءة
+          </SoftTypography>
+        </MenuItem>
+      )}
       <Divider sx={{ my: 0.5 }} />
       <MenuItem component={Link} to="/notifications" onClick={handleCloseMenu}>
         <SoftTypography variant="button" color="info" fontWeight="bold">
           عرض كل الإشعارات
+        </SoftTypography>
+      </MenuItem>
+      <MenuItem onClick={() => { refreshNotifications(); }}>
+        <SoftTypography variant="caption" color="secondary" fontWeight="bold">
+          تحديث
         </SoftTypography>
       </MenuItem>
     </Menu>

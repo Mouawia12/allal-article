@@ -4,12 +4,14 @@ import com.allalarticle.backend.audit.AuditLogService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.PageResponse;
+import com.allalarticle.backend.email.EmailNotificationService;
 import com.allalarticle.backend.products.dto.ProductPriceHistoryResponse;
 import com.allalarticle.backend.products.dto.ProductRequest;
 import com.allalarticle.backend.products.dto.ProductResponse;
 import com.allalarticle.backend.products.entity.Product;
 import com.allalarticle.backend.products.entity.ProductPriceHistory;
 import com.allalarticle.backend.users.TenantUserRepository;
+import com.allalarticle.backend.users.entity.TenantUser;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,6 +38,7 @@ public class ProductService {
     private final ProductPriceHistoryRepository priceHistoryRepo;
     private final TenantUserRepository userRepo;
     private final AuditLogService auditLogService;
+    private final EmailNotificationService emailNotificationService;
 
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> list(String q, Long categoryId, Pageable pageable) {
@@ -117,6 +122,7 @@ public class ProductService {
                         "sku", saved.getSku(),
                         "price", saved.getCurrentPriceAmount() != null ? saved.getCurrentPriceAmount() : BigDecimal.ZERO
                 ));
+        notifySafely(() -> emailNotificationService.onProductCreated(saved, actorName(auth)));
         return ProductResponse.from(saved);
     }
 
@@ -168,9 +174,134 @@ public class ProductService {
                             "previousPrice", previousPrice != null ? previousPrice : BigDecimal.ZERO,
                             "newPrice", saved.getCurrentPriceAmount() != null ? saved.getCurrentPriceAmount() : BigDecimal.ZERO
                     ));
+            BigDecimal prev = previousPrice;
+            BigDecimal next = saved.getCurrentPriceAmount();
+            notifySafely(() -> emailNotificationService.onProductPriceChanged(saved, prev, next, actorName(auth)));
         }
         return ProductResponse.from(saved);
     }
+
+    private void notifySafely(Runnable r) {
+        try {
+            r.run();
+        } catch (Exception e) {
+            // Email failures must never break the business operation.
+        }
+    }
+
+    private String actorName(Authentication auth) {
+        Long userId = extractUserId(auth);
+        if (userId == null) return "النظام";
+        try {
+            TenantUser u = userRepo.findById(userId).orElse(null);
+            return u != null ? u.getName() : "النظام";
+        } catch (Exception e) {
+            return "النظام";
+        }
+    }
+
+    /**
+     * Bulk-create products. Each row is created in its own transaction-equivalent so that
+     * one bad row does not abort the whole batch. Sends a single summary email at the end
+     * (independent of per-row product.created emails — those are suppressed during bulk).
+     */
+    public Map<String, Object> bulkCreate(List<ProductRequest> requests, Authentication auth) {
+        if (requests == null || requests.isEmpty()) {
+            return Map.of("created", 0, "failed", 0, "items", List.of());
+        }
+
+        List<Map<String, Object>> results = new ArrayList<>();
+        List<String[]> csv = new ArrayList<>();
+        csv.add(new String[]{"#", "SKU", "الاسم", "السعر", "الحالة", "ملاحظات"});
+        List<String> sample = new ArrayList<>();
+        int created = 0;
+        int failed = 0;
+
+        for (int i = 0; i < requests.size(); i++) {
+            ProductRequest req = requests.get(i);
+            Map<String, Object> row = new HashMap<>();
+            row.put("index", i + 1);
+            row.put("sku", req != null ? req.sku() : null);
+            row.put("name", req != null ? req.name() : null);
+            try {
+                ProductResponse saved = createSilently(req, auth);
+                row.put("status", "created");
+                row.put("productId", saved.id());
+                created++;
+                if (sample.size() < 8) {
+                    sample.add((sample.size() + 1) + ". " + safeStr(saved.name()) + " — " +
+                            safeStr(saved.sku()) + (saved.currentPriceAmount() != null
+                                ? " (" + saved.currentPriceAmount() + ")" : ""));
+                }
+                csv.add(new String[]{
+                        String.valueOf(i + 1),
+                        safeStr(saved.sku()),
+                        safeStr(saved.name()),
+                        saved.currentPriceAmount() != null ? saved.currentPriceAmount().toPlainString() : "",
+                        "تمت الإضافة",
+                        ""
+                });
+            } catch (Exception e) {
+                failed++;
+                row.put("status", "failed");
+                row.put("error", e.getMessage());
+                csv.add(new String[]{
+                        String.valueOf(i + 1),
+                        req != null ? safeStr(req.sku()) : "",
+                        req != null ? safeStr(req.name()) : "",
+                        req != null && req.currentPriceAmount() != null ? req.currentPriceAmount().toPlainString() : "",
+                        "فشل",
+                        e.getMessage() != null ? e.getMessage() : ""
+                });
+            }
+            results.add(row);
+        }
+
+        final int createdF = created;
+        final int failedF = failed;
+        notifySafely(() -> emailNotificationService.onBulkImportCompleted(
+                createdF, 0, failedF, csv, sample, actorName(auth)));
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("created", created);
+        summary.put("failed", failed);
+        summary.put("total", requests.size());
+        summary.put("items", results);
+        return summary;
+    }
+
+    @Transactional
+    protected ProductResponse createSilently(ProductRequest req, Authentication auth) {
+        if (productRepo.existsBySku(req.sku())) {
+            throw new AppException(ErrorCode.CONFLICT, "SKU موجود مسبقاً: " + req.sku(), HttpStatus.CONFLICT);
+        }
+        var unit = unitRepo.findById(req.baseUnitId())
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND,
+                        "الوحدة غير موجودة (" + req.baseUnitId() + ")", HttpStatus.NOT_FOUND));
+
+        var builder = Product.builder()
+                .sku(req.sku())
+                .name(req.name())
+                .baseUnit(unit)
+                .barcode(req.barcode())
+                .currentPriceAmount(req.currentPriceAmount())
+                .description(req.description())
+                .status(req.status() != null ? req.status() : "active");
+        if (req.unitsPerPackage() != null) builder.unitsPerPackage(req.unitsPerPackage());
+        if (req.minStockQty()     != null) builder.minStockQty(req.minStockQty());
+        if (req.categoryId()      != null) {
+            var cat = categoryRepo.findById(req.categoryId())
+                    .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND,
+                            "التصنيف غير موجود (" + req.categoryId() + ")", HttpStatus.NOT_FOUND));
+            builder.category(cat);
+        }
+        var saved = productRepo.save(builder.build());
+        recordPriceHistory(saved, null, saved.getCurrentPriceAmount(),
+                "سعر ابتدائي عند إنشاء الصنف (استيراد)", "product_bulk_import", saved.getId(), auth);
+        return ProductResponse.from(saved);
+    }
+
+    private String safeStr(String s) { return s != null ? s : ""; }
 
     @Transactional
     public void delete(Long id) {

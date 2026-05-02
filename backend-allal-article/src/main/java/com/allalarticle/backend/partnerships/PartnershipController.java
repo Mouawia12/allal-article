@@ -64,6 +64,15 @@ public class PartnershipController {
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
+    @PatchMapping("/{id}/permissions")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'partners.manage')")
+    public ResponseEntity<ApiResponse<Void>> updatePermissions(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        partnershipService.updatePermissions(id, body);
+        return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
     @GetMapping("/{partnerId}/inventory")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'partners.view')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> linkedInventory(@PathVariable String partnerId) {

@@ -7,6 +7,7 @@ const partnershipsApi = {
   approveRequest: (id, body) => apiClient.post(`/api/partnerships/requests/${id}/approve`, body),
   rejectRequest: (id) => apiClient.post(`/api/partnerships/requests/${id}/reject`),
   revokePartnership: (id) => apiClient.patch(`/api/partnerships/${id}/revoke`),
+  updatePermissions: (id, body) => apiClient.patch(`/api/partnerships/${id}/permissions`, body),
   linkedInventory: (partnerId) => apiClient.get(`/api/partnerships/${partnerId}/inventory`),
   cloneProducts: (partnerId, productIds) =>
     apiClient.post(`/api/partnerships/${partnerId}/products/clone`, { productIds }),

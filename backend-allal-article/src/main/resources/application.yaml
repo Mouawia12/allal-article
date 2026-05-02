@@ -25,6 +25,21 @@ spring:
     baseline-on-migrate: false
     out-of-order: false
 
+  mail:
+    host: ${MAIL_HOST:live.smtp.mailtrap.io}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:api}
+    password: ${MAIL_PASSWORD:649dc7050c3d362aa961a8c658f5038a}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
 server:
   port: ${SERVER_PORT:8080}
   servlet:
@@ -36,6 +51,10 @@ app:
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  mail:
+    from-address: ${MAIL_FROM_ADDRESS:no-reply@souftech.com}
+    from-name: ${MAIL_FROM_NAME:ALLAL-ARTICLE}
+    app-url: ${APP_PUBLIC_URL:http://localhost:3000}
 
 # ─── Cloudflare R2 Storage ────────────────────────────────────────────────────
 r2:

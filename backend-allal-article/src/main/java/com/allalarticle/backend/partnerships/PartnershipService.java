@@ -218,6 +218,29 @@ public class PartnershipService {
         }
     }
 
+    @Transactional
+    public void updatePermissions(Long id, Map<String, Object> body) {
+        Long tenantId = currentTenantId();
+        Map<String, Object> payload = body != null ? body : Map.of();
+        Map<String, Object> permissions = permissionsFrom(payload.get("permissions"));
+
+        int updated = jdbc.update(
+                """
+                update platform.tenant_partnerships
+                set permissions_json = ?::jsonb
+                where id = ?
+                  and (provider_tenant_id = ? or requester_tenant_id = ?)
+                  and status = 'active'
+                """,
+                toJson(permissions),
+                id,
+                tenantId,
+                tenantId);
+        if (updated == 0) {
+            throw new AppException(ErrorCode.NOT_FOUND, "الربط غير موجود أو لا تملك صلاحية تعديل صلاحياته", HttpStatus.NOT_FOUND);
+        }
+    }
+
     public Map<String, Object> linkedInventory(String partnerPublicId) {
         PartnershipAccess access = partnershipAccess(partnerPublicId, "view_inventory");
         boolean canViewPricing = Boolean.TRUE.equals(access.permissions().get("view_pricing"));

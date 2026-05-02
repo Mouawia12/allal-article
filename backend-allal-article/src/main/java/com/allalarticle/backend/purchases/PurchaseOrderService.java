@@ -10,6 +10,7 @@ import com.allalarticle.backend.inventory.WarehouseRepository;
 import com.allalarticle.backend.inventory.entity.ProductStock;
 import com.allalarticle.backend.inventory.entity.StockMovement;
 import com.allalarticle.backend.inventory.entity.Warehouse;
+import com.allalarticle.backend.partnerships.PartnerDocumentSyncService;
 import com.allalarticle.backend.products.ProductRepository;
 import com.allalarticle.backend.purchases.dto.*;
 import com.allalarticle.backend.purchases.entity.PurchaseOrder;
@@ -51,6 +52,7 @@ public class PurchaseOrderService {
     private final StockMovementRepository movementRepo;
     private final AuditLogService auditLogService;
     private final JdbcTemplate jdbc;
+    private final PartnerDocumentSyncService partnerDocumentSyncService;
 
     @Transactional(readOnly = true)
     public PageResponse<PurchaseOrderResponse> list(String status, Long supplierId, Pageable pageable) {
@@ -104,6 +106,17 @@ public class PurchaseOrderService {
         }
         saved.setTotalAmount(total);
         var finalSaved = poRepo.save(saved);
+        poRepo.flush();
+
+        var sync = partnerDocumentSyncService.syncPurchaseOrderToPartnerSale(finalSaved);
+        if (sync != null) {
+            finalSaved.setLinkedPartnerUuid(sync.linkedPartnerUuid());
+            finalSaved.setPartnerDocumentLinkPublicId(sync.documentLinkPublicId());
+            finalSaved.setPartnerSourceDocumentPublicId(sync.targetDocumentPublicId());
+            finalSaved.setPartnerSyncStatus(sync.syncStatus());
+            finalSaved = poRepo.saveAndFlush(finalSaved);
+        }
+
         auditLogService.log(finalSaved.getCreatedById(), "purchase_order", finalSaved.getId(),
                 "purchase_order_created",
                 "إنشاء أمر شراء — " + finalSaved.getSupplierName(),

@@ -1,16 +1,20 @@
 /* eslint-disable react/prop-types */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Alert from "@mui/material/Alert";
+import Autocomplete from "@mui/material/Autocomplete";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
+import Switch from "@mui/material/Switch";
 import Tab from "@mui/material/Tab";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -26,7 +30,9 @@ import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditIcon from "@mui/icons-material/Edit";
+import EmailIcon from "@mui/icons-material/MailOutline";
 import LockIcon from "@mui/icons-material/Lock";
+import SendIcon from "@mui/icons-material/Send";
 
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
@@ -38,6 +44,7 @@ import Footer from "examples/Footer";
 import { productSettings, updateProductSettings } from "./mockProductData";
 import { hasErrors, isBlank } from "utils/formErrors";
 import { useI18n } from "i18n";
+import { emailNotificationsApi, usersApi } from "services";
 
 // ─── Units Tab ────────────────────────────────────────────────────────────────
 function UnitsTab() {
@@ -336,6 +343,317 @@ function VariantAttrsTab() {
   );
 }
 
+// ─── Email Notifications Tab ─────────────────────────────────────────────────
+const COMMON_EMAIL_DOMAIN_FIXES = {
+  "ahoo.com": "yahoo.com",
+  "yaho.com": "yahoo.com",
+  "gamil.com": "gmail.com",
+  "gmial.com": "gmail.com",
+  "hotnail.com": "hotmail.com",
+};
+
+function normalizeEmail(value) {
+  return value.trim().toLowerCase();
+}
+
+function emailWarning(email) {
+  const domain = email.split("@")[1]?.toLowerCase();
+  const suggestion = COMMON_EMAIL_DOMAIN_FIXES[domain];
+  return suggestion ? `هل تقصد ${email.split("@")[0]}@${suggestion}؟` : "";
+}
+
+function EmailNotificationsTab() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [outbox, setOutbox] = useState([]);
+  const [feedback, setFeedback] = useState(null); // {severity, message}
+  const [extraEmailDraft, setExtraEmailDraft] = useState("");
+  const [settings, setSettings] = useState({
+    enabled: false,
+    recipientUserIds: [],
+    extraEmails: [],
+    events: {
+      productCreated: true,
+      productPriceChanged: true,
+      productLowStock: true,
+      bulkImportCompleted: true,
+    },
+    bulkAttachThresholdRows: 10,
+  });
+
+  const reloadOutbox = () => {
+    emailNotificationsApi.listOutbox(15)
+      .then((r) => setOutbox(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setOutbox([]));
+  };
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      emailNotificationsApi.get().catch(() => ({ data: null })),
+      usersApi.list({ size: 200 }).catch(() => ({ data: { content: [] } })),
+    ]).then(([settingsRes, usersRes]) => {
+      if (!active) return;
+      if (settingsRes?.data) {
+        setSettings((prev) => ({ ...prev, ...settingsRes.data,
+          events: { ...prev.events, ...(settingsRes.data.events || {}) } }));
+      }
+      const list = usersRes?.data?.content || usersRes?.data || [];
+      setUsers(Array.isArray(list) ? list : []);
+      setLoading(false);
+      reloadOutbox();
+    });
+    return () => { active = false; };
+  }, []);
+
+  const setEvent = (key, value) =>
+    setSettings((s) => ({ ...s, events: { ...s.events, [key]: value } }));
+
+  const addExtraEmail = () => {
+    const e = normalizeEmail(extraEmailDraft);
+    if (!e || !e.includes("@")) {
+      setFeedback({ severity: "warning", message: "أدخل بريداً إلكترونياً صحيحاً" });
+      return;
+    }
+    if (settings.extraEmails.includes(e)) {
+      setExtraEmailDraft("");
+      return;
+    }
+    setSettings((s) => ({ ...s, extraEmails: [...s.extraEmails, e] }));
+    setExtraEmailDraft("");
+    const warning = emailWarning(e);
+    if (warning) setFeedback({ severity: "warning", message: warning });
+  };
+
+  const removeExtraEmail = (e) =>
+    setSettings((s) => ({ ...s, extraEmails: s.extraEmails.filter((x) => x !== e) }));
+
+  const save = () => {
+    setSaving(true);
+    setFeedback(null);
+    emailNotificationsApi.save(settings)
+      .then((r) => {
+        if (r?.data) {
+          setSettings((prev) => ({ ...prev, ...r.data,
+            events: { ...prev.events, ...(r.data.events || {}) } }));
+        }
+        setFeedback({ severity: "success", message: "تم حفظ الإعدادات بنجاح" });
+      })
+      .catch((err) => {
+        setFeedback({ severity: "error",
+          message: err?.response?.data?.message || "تعذر حفظ الإعدادات" });
+      })
+      .finally(() => setSaving(false));
+  };
+
+  const sendTest = () => {
+    setTesting(true);
+    setFeedback(null);
+    emailNotificationsApi.save(settings)
+      .then((r) => {
+        if (r?.data) {
+          setSettings((prev) => ({ ...prev, ...r.data,
+            events: { ...prev.events, ...(r.data.events || {}) } }));
+        }
+        return emailNotificationsApi.sendTest();
+      })
+      .then((r) => {
+        setFeedback({ severity: "success",
+          message: `تم إرسال رسالة اختبار إلى ${r?.data?.recipientCount ?? 0} مستلم` });
+        setTimeout(reloadOutbox, 1500);
+      })
+      .catch((err) => {
+        setFeedback({ severity: "error",
+          message: err?.response?.data?.message || "تعذر إرسال رسالة الاختبار. تأكد من اختيار المستلمين أولاً." });
+      })
+      .finally(() => setTesting(false));
+  };
+
+  const selectedUsers = users.filter((u) => settings.recipientUserIds.includes(u.id));
+
+  if (loading) {
+    return (
+      <SoftBox display="flex" justifyContent="center" alignItems="center" py={6}>
+        <CircularProgress size={28} />
+      </SoftBox>
+    );
+  }
+
+  return (
+    <SoftBox>
+      <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <SoftBox display="flex" alignItems="center" gap={1.5}>
+          <EmailIcon sx={{ color: "#cb0c9f" }} />
+          <SoftBox>
+            <SoftTypography variant="h6" fontWeight="bold">إشعارات البريد الإلكتروني</SoftTypography>
+            <SoftTypography variant="caption" color="secondary">
+              اختر المستخدمين الذين يصلهم بريد عند إضافة صنف، تعديل سعر، تنبيه مخزون أو استيراد جماعي
+            </SoftTypography>
+          </SoftBox>
+        </SoftBox>
+        <FormControlLabel
+          control={<Switch checked={settings.enabled}
+            onChange={(e) => setSettings((s) => ({ ...s, enabled: e.target.checked }))} />}
+          label={<SoftTypography variant="caption" fontWeight="medium">
+            {settings.enabled ? "مُفعّل" : "موقوف"}
+          </SoftTypography>}
+        />
+      </SoftBox>
+
+      {feedback && (
+        <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
+          {feedback.message}
+        </Alert>
+      )}
+
+      <Card sx={{ p: 2.5, mb: 2.5, border: "1px solid #e9ecef", boxShadow: "none" }}>
+        <SoftTypography variant="button" fontWeight="bold" display="block" mb={1.5}>
+          المستلمون من المستخدمين
+        </SoftTypography>
+        <Autocomplete
+          multiple
+          options={users}
+          value={selectedUsers}
+          getOptionLabel={(u) => `${u.name || u.fullName || ""} — ${u.email}`}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          onChange={(_, value) =>
+            setSettings((s) => ({ ...s, recipientUserIds: value.map((u) => u.id) }))}
+          renderTags={(value, getTagProps) =>
+            value.map((u, i) => (
+              <Chip key={u.id} size="small" color="info" variant="outlined"
+                label={u.name || u.email} {...getTagProps({ index: i })} />
+            ))
+          }
+          renderInput={(params) => (
+            <TextField {...params} size="small" placeholder="ابحث عن مستخدم..." />
+          )}
+        />
+
+        <SoftTypography variant="button" fontWeight="bold" display="block" mt={3} mb={1}>
+          عناوين بريد إضافية
+        </SoftTypography>
+        <SoftBox display="flex" gap={1} alignItems="center" mb={1}>
+          <TextField size="small" fullWidth placeholder="example@domain.com"
+            value={extraEmailDraft}
+            onChange={(e) => setExtraEmailDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraEmail(); } }} />
+          <SoftButton variant="outlined" color="info" size="small"
+            startIcon={<AddIcon />} onClick={addExtraEmail}>إضافة</SoftButton>
+        </SoftBox>
+        <SoftBox display="flex" flexWrap="wrap" gap={0.7}>
+          {settings.extraEmails.map((e) => (
+            <Tooltip key={e} title={emailWarning(e)}>
+              <Chip
+                label={e}
+                size="small"
+                color={emailWarning(e) ? "warning" : "default"}
+                onDelete={() => removeExtraEmail(e)}
+              />
+            </Tooltip>
+          ))}
+          {!settings.extraEmails.length && (
+            <SoftTypography variant="caption" color="secondary">
+              لم يُضَف أي بريد إضافي بعد.
+            </SoftTypography>
+          )}
+        </SoftBox>
+      </Card>
+
+      <Card sx={{ p: 2.5, mb: 2.5, border: "1px solid #e9ecef", boxShadow: "none" }}>
+        <SoftTypography variant="button" fontWeight="bold" display="block" mb={1.5}>
+          الأحداث التي يصل بها إشعار
+        </SoftTypography>
+        {[
+          { key: "productCreated",      label: "إضافة صنف جديد",        hint: "عند إنشاء أي صنف جديد" },
+          { key: "productPriceChanged", label: "تعديل سعر صنف",          hint: "عند تغيير السعر الحالي" },
+          { key: "productLowStock",     label: "تنبيه مخزون منخفض",      hint: "عندما تصل الكمية للحد الأدنى" },
+          { key: "bulkImportCompleted", label: "اكتمال استيراد جماعي",  hint: "ملخص بعد إضافة عدة أصناف عبر الاستيراد" },
+        ].map((ev) => (
+          <SoftBox key={ev.key} display="flex" justifyContent="space-between" alignItems="center"
+            sx={{ borderBottom: "1px solid #f1f3f5", py: 1, "&:last-of-type": { borderBottom: 0 } }}>
+            <SoftBox>
+              <SoftTypography variant="button" fontWeight="medium" display="block">{ev.label}</SoftTypography>
+              <SoftTypography variant="caption" color="secondary">{ev.hint}</SoftTypography>
+            </SoftBox>
+            <Switch
+              checked={!!settings.events[ev.key]}
+              onChange={(e) => setEvent(ev.key, e.target.checked)}
+            />
+          </SoftBox>
+        ))}
+        <Divider sx={{ my: 2 }} />
+        <SoftBox display="flex" alignItems="center" gap={1.5} flexWrap="wrap">
+          <SoftTypography variant="caption" color="secondary">
+            إرفاق ملف CSV عند الاستيراد إذا تجاوز عدد الصفوف:
+          </SoftTypography>
+          <TextField size="small" type="number" sx={{ maxWidth: 110 }}
+            value={settings.bulkAttachThresholdRows}
+            onChange={(e) => setSettings((s) => ({ ...s,
+              bulkAttachThresholdRows: Math.max(1, Number(e.target.value) || 1) }))} />
+          <SoftTypography variant="caption" color="secondary">صف</SoftTypography>
+        </SoftBox>
+      </Card>
+
+      <SoftBox display="flex" gap={1.5} mb={3}>
+        <SoftButton variant="gradient" color="info" size="small" onClick={save} disabled={saving}>
+          {saving ? "جارٍ الحفظ..." : "حفظ الإعدادات"}
+        </SoftButton>
+        <SoftButton variant="outlined" color="dark" size="small"
+          startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={sendTest} disabled={testing || !settings.enabled}>
+          {testing ? "جارٍ الإرسال..." : "إرسال رسالة اختبار"}
+        </SoftButton>
+      </SoftBox>
+
+      <Card sx={{ p: 2.5, border: "1px solid #e9ecef", boxShadow: "none" }}>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
+          <SoftTypography variant="button" fontWeight="bold">آخر الرسائل المُرسَلة</SoftTypography>
+          <SoftButton variant="text" color="info" size="small" onClick={reloadOutbox}>تحديث</SoftButton>
+        </SoftBox>
+        {outbox.length === 0 ? (
+          <SoftTypography variant="caption" color="secondary">
+            لا توجد رسائل بعد. ستظهر هنا فور إرسال أول إشعار.
+          </SoftTypography>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ background: "#f8f9fa" }}>
+                  {["الموضوع", "الحدث", "المستلمون", "الحالة", "التاريخ"].map((h) => (
+                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: "#8392ab" }}>{h}</TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {outbox.map((row) => (
+                  <TableRow key={row.id} hover>
+                    <TableCell sx={{ fontSize: 12 }}>{row.subject}</TableCell>
+                    <TableCell sx={{ fontSize: 11, fontFamily: "monospace", color: "#8392ab" }}>{row.eventCode}</TableCell>
+                    <TableCell sx={{ fontSize: 12 }}>{row.recipientCount}</TableCell>
+                    <TableCell>
+                      {row.status === "sent" && <Chip size="small" color="success" label="تم الإرسال" sx={{ fontSize: 11 }} />}
+                      {row.status === "failed" && (
+                        <Tooltip title={row.errorMessage || ""}>
+                          <Chip size="small" color="error" label="فشل" sx={{ fontSize: 11 }} />
+                        </Tooltip>
+                      )}
+                      {row.status === "pending" && <Chip size="small" label="قيد الإرسال" sx={{ fontSize: 11 }} />}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>
+                      {row.sentAt || row.createdAt}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Card>
+    </SoftBox>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ProductSettings() {
   const navigate = useNavigate();
@@ -350,23 +668,25 @@ export default function ProductSettings() {
           <SoftBox>
             <SoftTypography variant="h5" fontWeight="bold">إعدادات الأصناف</SoftTypography>
             <SoftTypography variant="caption" color="secondary">
-              إدارة الوحدات والتصنيفات وخصائص المتغيرات
+              إدارة الوحدات والتصنيفات وخصائص المتغيرات وإشعارات البريد
             </SoftTypography>
           </SoftBox>
         </SoftBox>
 
         <Card>
           <SoftBox sx={{ borderBottom: "1px solid #e9ecef" }}>
-            <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
               <Tab label="وحدات القياس" sx={{ fontSize: "0.8rem" }} />
               <Tab label="التصنيفات" sx={{ fontSize: "0.8rem" }} />
               <Tab label="خصائص المتغيرات" sx={{ fontSize: "0.8rem" }} />
+              <Tab label="إشعارات البريد" sx={{ fontSize: "0.8rem" }} icon={<EmailIcon sx={{ fontSize: 16 }} />} iconPosition="start" />
             </Tabs>
           </SoftBox>
           <SoftBox p={3}>
             {tab === 0 && <UnitsTab />}
             {tab === 1 && <CategoriesTab />}
             {tab === 2 && <VariantAttrsTab />}
+            {tab === 3 && <EmailNotificationsTab />}
           </SoftBox>
         </Card>
       </SoftBox>

@@ -15,3 +15,4 @@ export { priceListsApi } from "./priceListsApi";
 export { dashboardApi } from "./dashboardApi";
 export { auditLogsApi } from "./auditLogsApi";
 export { referenceApi } from "./referenceApi";
+export { emailNotificationsApi } from "./emailNotificationsApi";

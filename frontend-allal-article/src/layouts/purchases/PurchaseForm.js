@@ -35,8 +35,18 @@ import { calcLineTotal, formatDZD } from "./mockData";
 const getPriceListsFor = () => [];
 const priceSourceLabels = {};
 const getSupplierName = (v) => (typeof v === "string" ? v : v?.name || "");
-const resolveSupplierLink = () => ({ isLinked: false });
-const supplierMatchLabels = {};
+const resolveSupplierLink = (supplier) => ({
+  isLinked: Boolean(supplier?.linkedPartnerUuid || supplier?.linkMatchStatus === "confirmed"),
+  matchedBy: supplier?.linkMatchMethod || "manual",
+  permissions: supplier?.partnerPermissions || {},
+});
+const supplierMatchLabels = {
+  email: "البريد الإلكتروني",
+  phone: "الهاتف",
+  name: "اسم الشركة",
+  auto: "تطابق تلقائي",
+  manual: "ربط يدوي",
+};
 import { purchasesApi, productsApi, suppliersApi, inventoryApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isPositiveNumber } from "utils/formErrors";
 import {

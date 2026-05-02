@@ -31,7 +31,9 @@ insert into permissions (code, module, name_ar, description) values
   ('purchases.view',        'purchases',    'عرض أوامر الشراء',           null),
   ('purchases.create',      'purchases',    'إنشاء أمر شراء',             null),
   ('purchases.edit',        'purchases',    'تعديل أمر شراء',             null),
+  ('purchases.confirm',     'purchases',    'تأكيد أمر شراء',             null),
   ('purchases.receive',     'purchases',    'استلام مشتريات',             null),
+  ('purchases.cancel',      'purchases',    'إلغاء أمر شراء',             null),
   -- Manufacturing
   ('manufacturing.view',    'manufacturing','عرض طلبات التصنيع',          null),
   ('manufacturing.create',  'manufacturing','إنشاء طلب تصنيع',            null),

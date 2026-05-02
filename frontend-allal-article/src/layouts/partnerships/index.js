@@ -28,6 +28,7 @@ import AddLinkIcon from "@mui/icons-material/AddLink";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EditIcon from "@mui/icons-material/Edit";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import VpnKeyIcon from "@mui/icons-material/VpnKey";
@@ -46,6 +47,8 @@ const PERMISSION_DEFS = [
   { key: "view_pricing",   labelAr: "عرض الأسعار",             descAr: "يسمح برؤية أسعار البيع",               risk: "medium" },
   { key: "view_sales_data",labelAr: "عرض بيانات المبيعات",     descAr: "إجمالي مبيعات الصنف وحركته الشهرية",   risk: "high" },
   { key: "clone_products", labelAr: "نسخ الأصناف",             descAr: "نسخ بيانات الأصناف إلى كتالوج الشريك", risk: "high" },
+  { key: "create_purchase_link", labelAr: "ربط أوامر الشراء",  descAr: "تحويل أمر شراء عندهم إلى طلبية بيع عندك", risk: "high" },
+  { key: "create_sales_link", labelAr: "ربط أوامر البيع",      descAr: "السماح بربط أوامر البيع والشراء بين الطرفين", risk: "high" },
 ];
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const riskColor = { low: "#82d616", medium: "#fb8c00", high: "#ea0606" };
@@ -445,6 +448,85 @@ function ApprovalDialog({ request, onClose, onApprove, onReject }) {
   );
 }
 
+// ─── Permission Editor Dialog ────────────────────────────────────────────────
+function PermissionEditorDialog({ partnership, onClose, onSave }) {
+  const [perms, setPerms] = useState(defaultPermissions);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setPerms({ ...defaultPermissions, ...(partnership?.permissions ?? {}) });
+    setSaveError("");
+    setSaving(false);
+  }, [partnership?.id]);
+
+  if (!partnership) return null;
+
+  const handleSave = async () => {
+    setSaveError("");
+    setSaving(true);
+    try {
+      await onSave?.(partnership.id, { permissions: perms });
+      onClose();
+    } catch (error) {
+      setSaveError(getApiErrorMessage(error, "تعذر تحديث صلاحيات الشريك"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={!!partnership} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box>
+          <Box sx={{ fontWeight: 700 }}>تعديل صلاحيات الشريك</Box>
+          <Box sx={{ fontSize: 12, color: "#8392ab" }}>{partnership.partnerName}</Box>
+        </Box>
+        <IconButton size="small" onClick={onClose}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <Alert severity="info">
+            هذه الصلاحيات تحدد ما هو مفعّل في الربط بينك وبين هذا الشريك.
+          </Alert>
+          {saveError && <Alert severity="error">{saveError}</Alert>}
+
+          <Box>
+            {PERMISSION_DEFS.map((def) => (
+              <Box key={def.key} sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", py: 1.1, borderBottom: "1px solid #f0f2f5" }}>
+                <Box sx={{ flex: 1 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ fontSize: 12, fontWeight: 600, color: "#344767" }}>{def.labelAr}</Box>
+                    <Box sx={{ fontSize: 9, color: riskColor[def.risk], background: `${riskColor[def.risk]}18`, px: 0.8, py: 0.2, borderRadius: 1 }}>
+                      خطر {riskLabel[def.risk]}
+                    </Box>
+                  </Box>
+                  <Box sx={{ fontSize: 10, color: "#8392ab", mt: 0.3 }}>{def.descAr}</Box>
+                </Box>
+                <Switch
+                  size="small"
+                  checked={Boolean(perms[def.key])}
+                  onChange={() => setPerms((current) => ({ ...current, [def.key]: !current[def.key] }))}
+                />
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ p: 2, gap: 1 }}>
+        <Box component="button" onClick={onClose}
+          sx={{ border: "1px solid #dee2e6", background: "transparent", borderRadius: 2, px: 2, py: 0.8, cursor: "pointer", fontSize: 13, color: "#8392ab" }}>
+          إلغاء
+        </Box>
+        <Box component="button" onClick={handleSave} disabled={saving}
+          sx={{ background: "linear-gradient(135deg, #17c1e8, #0ea5c9)", border: "none", borderRadius: 2, px: 2.5, py: 0.8, cursor: saving ? "not-allowed" : "pointer", fontSize: 13, color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
+          {saving ? "جاري الحفظ..." : "حفظ الصلاحيات"}
+        </Box>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Partnerships() {
   const navigate = useNavigate();
@@ -452,6 +534,7 @@ export default function Partnerships() {
   const [genOpen, setGenOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [approvalTarget, setApprovalTarget] = useState(null);
+  const [permissionTarget, setPermissionTarget] = useState(null);
   const [copyError, setCopyError] = useState("");
   const [copiedCodeId, setCopiedCodeId] = useState(null);
   const [activePartnerships, setActivePartnerships] = useState([]);
@@ -507,6 +590,11 @@ export default function Partnerships() {
 
   const handleApprove = async (id, body) => {
     await partnershipsApi.approveRequest(id, body);
+    await loadPartnerships();
+  };
+
+  const handlePermissionSave = async (id, body) => {
+    await partnershipsApi.updatePermissions(id, body);
     await loadPartnerships();
   };
 
@@ -633,6 +721,11 @@ export default function Partnerships() {
                         <TableCell sx={{ fontSize: 11, color: "#8392ab" }}>{p.approvedAt}</TableCell>
                         <TableCell>
                           <SoftBox display="flex" gap={0.5}>
+                            <Tooltip title="تعديل صلاحيات الشريك">
+                              <IconButton size="small" onClick={() => setPermissionTarget(p)}>
+                                <EditIcon sx={{ fontSize: 15 }} />
+                              </IconButton>
+                            </Tooltip>
                             {p.direction === "requester" && p.permissions.view_inventory && (
                               <Tooltip title="عرض مخزون الشريك">
                                 <IconButton size="small" onClick={() => navigate(`/partnerships/inventory/${p.partnerUuid}`, { state: { partner: p } })}>
@@ -779,6 +872,7 @@ export default function Partnerships() {
       <GenerateCodeDialog open={genOpen} onClose={() => setGenOpen(false)} onCreated={loadPartnerships} />
       <SubmitCodeDialog open={submitOpen} onClose={() => setSubmitOpen(false)} onSubmitted={loadPartnerships} />
       <ApprovalDialog request={approvalTarget} onClose={() => setApprovalTarget(null)} onApprove={handleApprove} onReject={handleReject} />
+      <PermissionEditorDialog partnership={permissionTarget} onClose={() => setPermissionTarget(null)} onSave={handlePermissionSave} />
       <Footer />
     </DashboardLayout>
   );

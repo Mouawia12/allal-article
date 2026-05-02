@@ -3,6 +3,7 @@ package com.allalarticle.backend.suppliers;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.common.response.PageResponse;
+import com.allalarticle.backend.partnerships.PartnerSupplierLinkResolver;
 import com.allalarticle.backend.reference.WilayaRepository;
 import com.allalarticle.backend.suppliers.dto.SupplierRequest;
 import com.allalarticle.backend.suppliers.dto.SupplierResponse;
@@ -22,6 +23,7 @@ public class SupplierService {
 
     private final SupplierRepository supplierRepo;
     private final WilayaRepository wilayaRepo;
+    private final PartnerSupplierLinkResolver partnerSupplierLinkResolver;
 
     @Transactional(readOnly = true)
     public PageResponse<SupplierResponse> list(String q, Pageable pageable) {
@@ -49,7 +51,11 @@ public class SupplierService {
         if (req.openingBalance() != null) b.openingBalance(req.openingBalance());
         if (req.wilayaId() != null) b.wilaya(wilayaRepo.findById(req.wilayaId())
                 .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Wilaya not found", HttpStatus.NOT_FOUND)));
-        return SupplierResponse.from(supplierRepo.save(b.build()));
+        var supplier = b.build();
+        Long userId = extractUserId(auth);
+        partnerSupplierLinkResolver.resolveForSupplier(supplier)
+                .ifPresent(link -> partnerSupplierLinkResolver.applyToSupplier(supplier, link, userId));
+        return SupplierResponse.from(supplierRepo.save(supplier));
     }
 
     @Transactional
@@ -65,6 +71,8 @@ public class SupplierService {
         if (req.openingBalance() != null) s.setOpeningBalance(req.openingBalance());
         s.setWilaya(req.wilayaId() != null
                 ? wilayaRepo.findById(req.wilayaId()).orElse(null) : null);
+        partnerSupplierLinkResolver.resolveForSupplier(s)
+                .ifPresent(link -> partnerSupplierLinkResolver.applyToSupplier(s, link, null));
         return SupplierResponse.from(supplierRepo.save(s));
     }
 

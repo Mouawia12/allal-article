@@ -90,6 +90,7 @@ create table purchase_order_items (
     unit_price                  numeric(14,2),
     line_subtotal               numeric(14,2) not null default 0,
     notes                       text,
+    created_at                  timestamptz   not null default now(),
     check (ordered_qty >= 0),
     check (received_qty >= 0),
     check (returned_qty >= 0),

@@ -91,6 +91,20 @@ function joinLoadError(current, message) {
   return current ? `${current}؛ ${message}` : message;
 }
 
+function priceInputValue(value) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function productBaseUnitRow(product) {
+  return {
+    ...newUnitRow(true),
+    unit: product.baseUnitName ?? product.baseUnit ?? product.unit ?? "",
+    conversionFactor: 1,
+    price: priceInputValue(product.currentPriceAmount),
+    barcode: product.barcode ?? "",
+  };
+}
+
 // ─── Section Card wrapper ─────────────────────────────────────────────────────
 function SectionCard({ icon, title, subtitle, action, accentColor = "#17c1e8", children, sx = {} }) {
   return (
@@ -731,7 +745,15 @@ export default function ProductForm() {
           unitsPerPackage: p.unitsPerPackage ?? "", packageUnit: p.packageUnit ?? "كرطون",
           initialStock: String(p.stock ?? 0), initialWarehouseId: p.warehouseId ?? "",
         });
-        if (p.units?.length) setUnits(p.units.map((u) => ({ ...u, _id: unitRowId++ })));
+        setUnits(p.units?.length
+          ? p.units.map((u) => ({
+              ...u,
+              _id: unitRowId++,
+              price: priceInputValue(u.price ?? (u.isBase ? p.currentPriceAmount : "")),
+              unit: u.unit ?? (u.isBase ? (p.baseUnitName ?? p.baseUnit ?? p.unit ?? "") : ""),
+              barcode: u.barcode ?? (u.isBase ? (p.barcode ?? "") : ""),
+            }))
+          : [productBaseUnitRow(p)]);
         if (p.hasVariants) { setHasVariants(true); setVariantAttrs(p.variantAttributes ?? []); }
         if (p.variants?.length) setVariants(p.variants.map((v) => ({ ...v, _id: variantRowId++ })));
       }).catch((error) => {

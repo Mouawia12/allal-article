@@ -16,6 +16,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
@@ -51,6 +52,15 @@ public class ProductController {
             Authentication auth) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Product created", productService.create(req, auth)));
+    }
+
+    @PostMapping("/bulk")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.create')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> bulkCreate(
+            @RequestBody List<ProductRequest> requests,
+            Authentication auth) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Bulk import processed", productService.bulkCreate(requests, auth)));
     }
 
     @PutMapping("/{id}")

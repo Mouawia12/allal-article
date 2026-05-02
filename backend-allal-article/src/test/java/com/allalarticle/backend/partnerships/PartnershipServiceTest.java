@@ -258,6 +258,52 @@ class PartnershipServiceTest {
     }
 
     @Test
+    void updatePermissions_allowsParticipantToReplaceActivePartnershipPermissions() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(7L);
+        when(jdbc.update(
+                contains("set permissions_json = ?::jsonb"),
+                anyString(),
+                eq(66L),
+                eq(7L),
+                eq(7L))).thenReturn(1);
+
+        service.updatePermissions(66L, Map.of("permissions", Map.of(
+                "view_inventory", true,
+                "view_pricing", true,
+                "create_purchase_link", true)));
+
+        verify(jdbc).update(
+                contains("set permissions_json = ?::jsonb"),
+                anyString(),
+                eq(66L),
+                eq(7L),
+                eq(7L));
+    }
+
+    @Test
+    void updatePermissions_returnsNotFoundWhenCurrentTenantIsNotParticipant() {
+        when(jdbc.queryForObject(
+                eq("select id from platform.tenants where schema_name = ?"),
+                eq(Long.class),
+                eq("tenant_abcdef123456"))).thenReturn(8L);
+        when(jdbc.update(
+                contains("set permissions_json = ?::jsonb"),
+                anyString(),
+                eq(66L),
+                eq(8L),
+                eq(8L))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.updatePermissions(66L, Map.of("permissions", Map.of("view_inventory", true))))
+                .isInstanceOfSatisfying(AppException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.NOT_FOUND);
+                    assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+                });
+    }
+
+    @Test
     void linkedInventory_readsPartnerSchemaOnlyWhenPermissionIsGranted() {
         String partnerUuid = "11111111-1111-1111-1111-111111111111";
         when(jdbc.queryForObject(
