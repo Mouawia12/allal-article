@@ -41,6 +41,7 @@ import {
   formatCatalogPrice,
   normalizeCatalogProducts,
 } from "utils/productCatalog";
+import ImportProductsDialog from "./ImportProductsDialog";
 
 const favoriteCategory = "المفضلة";
 
@@ -339,6 +340,8 @@ function Products({
   const [category, setCategory] = useState(initialCategory);
   const [search, setSearch] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
   const productImageUrls = useRef([]);
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
 
@@ -385,7 +388,7 @@ function Products({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadTick]);
 
   const categoryFilters = useMemo(() => {
     const realCategories = [...new Set(products.map((p) => p.category).filter(Boolean))];
@@ -426,7 +429,11 @@ function Products({
             <SoftButton variant="outlined" color="info" size="small" startIcon={<PriceChangeIcon />} onClick={() => navigate("/products/price-lists")}>
               قوائم الأسعار
             </SoftButton>
-            <SoftButton variant="outlined" color="secondary" size="small" startIcon={<CloudUploadIcon />}>
+            <SoftButton
+              variant="outlined" color="secondary" size="small"
+              startIcon={<CloudUploadIcon />}
+              onClick={() => setImportOpen(true)}
+            >
               استيراد
             </SoftButton>
             <Tooltip title="إعدادات الأصناف">
@@ -523,7 +530,10 @@ function Products({
                         isFavorite={isFavorite(p.id)}
                         onToggleFavorite={toggleFavorite}
                         onView={(id) => navigate(`/products/${id}`)}
-                        onEdit={(id) => navigate(`/products/${id}/edit`)}
+                        onEdit={(id) => {
+                          const product = products.find((x) => x.id === id);
+                          navigate(`/products/${id}/edit`, { state: { product } });
+                        }}
                       />
                     </Grid>
                   ))
@@ -562,7 +572,10 @@ function Products({
                           isFavorite={isFavorite(p.id)}
                           onToggleFavorite={toggleFavorite}
                           onView={(id) => navigate(`/products/${id}`)}
-                          onEdit={(id) => navigate(`/products/${id}/edit`)}
+                          onEdit={(id) => {
+                          const product = products.find((x) => x.id === id);
+                          navigate(`/products/${id}/edit`, { state: { product } });
+                        }}
                         />
                       ))
                     )}
@@ -573,6 +586,11 @@ function Products({
           </SoftBox>
         </SoftBox>
       </SoftBox>
+      <ImportProductsDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onCompleted={() => setReloadTick((n) => n + 1)}
+      />
       <Footer />
     </DashboardLayout>
   );

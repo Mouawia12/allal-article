@@ -20,6 +20,9 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import LoginIcon from "@mui/icons-material/Login";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import PrintIcon from "@mui/icons-material/Print";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import ReplyIcon from "@mui/icons-material/Reply";
@@ -70,6 +73,10 @@ const actionConfig = {
   stock_transfer: { label: "تحويل مخزون",     color: "#17c1e8", Icon: SwapHorizIcon },
   customer_payment_received: { label: "استلام دفعة", color: "#66BB6A", Icon: PaymentsIcon },
   customer_payment_refund:   { label: "دفعة عكسية",  color: "#ea0606", Icon: ReplyIcon },
+  road_invoice_created:   { label: "إنشاء فاتورة طريق", color: "#17c1e8", Icon: ReceiptLongIcon },
+  road_invoice_confirmed: { label: "تأكيد فاتورة طريق", color: "#66BB6A", Icon: CheckCircleIcon },
+  road_invoice_printed:   { label: "طباعة فاتورة طريق", color: "#344767", Icon: PrintIcon },
+  road_invoice_whatsapp:  { label: "إرسال واتساب",     color: "#25D366", Icon: WhatsAppIcon },
   supplier_payment_paid:     { label: "دفع لمورد",   color: "#344767", Icon: PaymentsIcon },
   user_permission_changed: { label: "تعديل صلاحيات", color: "#7928ca", Icon: ManageAccountsIcon },
   settings_changed: { label: "تعديل إعدادات", color: "#344767", Icon: SettingsApplicationsIcon },

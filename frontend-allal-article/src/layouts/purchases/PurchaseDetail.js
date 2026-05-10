@@ -402,7 +402,7 @@ export default function PurchaseDetail() {
                   color="warning"
                   startIcon={<EditIcon />}
                   disabled={Boolean(editLock) || purchaseLockedForEdit}
-                  onClick={() => navigate(`/purchases/${purchase.id}/edit`)}
+                  onClick={() => navigate(`/purchases/${purchase._id ?? purchase.id}/edit`)}
                 >
                   تعديل
                 </SoftButton>

@@ -54,6 +54,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   const location = useLocation();
   const { pathname } = location;
   const collapseName = pathname.split("/").slice(1)[0];
+  const exactMatchKey = routes.find((r) => r.type === "collapse" && r.route === pathname)?.key;
 
   const closeSidenav = () => setMiniSidenav(dispatch, true);
   const openLanguageMenu = (event) => setLanguageAnchor(event.currentTarget);
@@ -79,9 +80,12 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, route, href }) => {
     let returnValue;
 
-    // A route is active if its key matches the first path segment (handles /orders/123 → orders)
-    // OR if the pathname exactly matches the route (handles /accounting/accounts-tree)
-    const isActive = key === collapseName || (route ? pathname === route : false);
+    // Active rules (highest priority first):
+    //   1. If any sidebar route matches pathname exactly, only that route is active.
+    //   2. Otherwise, mark the route whose key matches the first path segment (handles /orders/123 → orders).
+    const isActive = exactMatchKey
+      ? key === exactMatchKey
+      : key === collapseName;
 
     if (type === "collapse") {
       returnValue = href ? (

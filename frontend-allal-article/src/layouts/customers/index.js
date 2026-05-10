@@ -125,6 +125,32 @@ function MoneyAmount({ value, million = false, decimals = 0 }) {
   );
 }
 
+function allocateOrderPayments(orders, customer) {
+  if (!Array.isArray(orders) || orders.length === 0) return {};
+  const sorted = [...orders].sort((a, b) => {
+    const da = a.submittedAt || a.createdAt || "";
+    const db = b.submittedAt || b.createdAt || "";
+    return String(da).localeCompare(String(db));
+  });
+  const opening = Number(customer?.openingBalance || 0);
+  const netPaid = Math.max(0, Number(customer?.paidAmount || 0));
+  let pool = netPaid - Math.max(0, opening);
+  if (pool < 0) pool = 0;
+
+  const map = {};
+  for (const o of sorted) {
+    const amount = Number(o.totalAmount || 0);
+    const taken = Math.min(amount, Math.max(0, pool));
+    pool -= taken;
+    const remaining = Math.max(0, amount - taken);
+    let status = "unpaid";
+    if (amount > 0 && remaining <= 0.005) status = "paid";
+    else if (taken > 0) status = "partial";
+    map[o.id] = { amount, paid: taken, remaining, status };
+  }
+  return map;
+}
+
 function normalizeCustomer(c) {
   return {
     totalAmount: 0,
@@ -225,7 +251,7 @@ function CustomerCard({ customer, onView }) {
 }
 
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
-function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
+function AddPaymentDialog({ open, onClose, customer, onSaved, users, prefill }) {
   const { t } = useI18n();
   const [direction, setDirection] = useState("in");
   const [amount, setAmount] = useState("");
@@ -240,11 +266,14 @@ function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
 
   useEffect(() => {
     if (open) {
-      setDirection("in"); setAmount(""); setMethod("cash");
+      setDirection("in"); setMethod("cash");
       setReceivedById(""); setCounterpartyName(customer?.name || "");
-      setReferenceNumber(""); setPaymentDate(""); setNotes(""); setError("");
+      setReferenceNumber(""); setPaymentDate("");
+      setAmount(prefill?.amount ? String(prefill.amount) : "");
+      setNotes(prefill?.notes || "");
+      setError("");
     }
-  }, [open, customer]);
+  }, [open, customer, prefill]);
 
   const validate = () => {
     if (!amount || Number(amount) <= 0) return t("المبلغ يجب أن يكون أكبر من صفر");
@@ -363,12 +392,153 @@ function AddPaymentDialog({ open, onClose, customer, onSaved, users }) {
   );
 }
 
+// ─── Customer Statement Print Dialog ─────────────────────────────────────────
+function CustomerStatementPrintDialog({ open, onClose, customer, orders, payments, orderPaymentMap }) {
+  if (!customer) return null;
+  const printDate = new Date().toLocaleDateString("ar-DZ");
+  const opening = Number(customer.openingBalance || 0);
+  const totalOrders = Number(customer.totalAmount || 0);
+  const netPaid = Number(customer.paidAmount || 0);
+  const balance = totalOrders + opening - netPaid;
+  const sortedOrders = [...(orders || [])].sort((a, b) => {
+    const da = a.submittedAt || a.createdAt || "";
+    const db = b.submittedAt || b.createdAt || "";
+    return String(da).localeCompare(String(db));
+  });
+  const statusLabel = { paid: "مدفوعة", partial: "جزئية", unpaid: "غير مدفوعة" };
+  const statusColor = { paid: "#66BB6A", partial: "#fb8c00", unpaid: "#ea0606" };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+          <SoftTypography variant="h6" fontWeight="bold">معاينة كشف حساب الزبون</SoftTypography>
+          <SoftBox display="flex" gap={1}>
+            <SoftButton variant="gradient" color="info" size="small" startIcon={<PrintIcon />}
+              onClick={() => window.print()}>طباعة</SoftButton>
+            <IconButton size="small" onClick={onClose}><CloseIcon /></IconButton>
+          </SoftBox>
+        </SoftBox>
+      </DialogTitle>
+      <DialogContent dividers>
+        <SoftBox textAlign="center" mb={2}>
+          <SoftTypography variant="h5" fontWeight="bold">كشف حساب: {customer.name}</SoftTypography>
+          <SoftTypography variant="caption" color="secondary" display="block">
+            {customer.wilaya || "—"} | {customer.phone || "—"} | تاريخ الطباعة: {printDate}
+          </SoftTypography>
+        </SoftBox>
+
+        <SoftBox mb={2} p={1.5} sx={{ background: "#f8f9fa", borderRadius: 2, border: "1px solid #e9ecef" }}>
+          <Grid container spacing={1}>
+            {[
+              { label: "الرصيد الافتتاحي", value: opening, color: "#17c1e8" },
+              { label: "إجمالي الطلبيات", value: totalOrders, color: "#344767" },
+              { label: "إجمالي المدفوع (صافي)", value: netPaid, color: "#66BB6A" },
+              { label: "الرصيد المتبقي", value: balance, color: balance > 0 ? "#ea0606" : "#66BB6A" },
+            ].map((s) => (
+              <Grid item xs={6} sm={3} key={s.label}>
+                <SoftBox textAlign="center">
+                  <SoftTypography variant="caption" color="secondary">{s.label}</SoftTypography>
+                  <SoftTypography variant="button" fontWeight="bold" display="block" sx={{ color: s.color }}>
+                    {Math.abs(s.value).toLocaleString("fr-DZ")} دج
+                  </SoftTypography>
+                </SoftBox>
+              </Grid>
+            ))}
+          </Grid>
+          <SoftTypography variant="caption" color="secondary" display="block" textAlign="center" mt={1}>
+            الافتتاحي ({opening.toLocaleString("fr-DZ")}) + الطلبيات ({totalOrders.toLocaleString("fr-DZ")}) − المدفوع الصافي ({netPaid.toLocaleString("fr-DZ")}) = {balance.toLocaleString("fr-DZ")} دج
+          </SoftTypography>
+        </SoftBox>
+
+        <SoftTypography variant="button" fontWeight="bold" display="block" mb={1}>
+          سجل الطلبيات ({sortedOrders.length})
+        </SoftTypography>
+        <SoftBox sx={{ overflowX: "auto", mb: 2 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: "#f8f9fa" }}>
+                {["رقم الطلبية", "التاريخ", "المبلغ", "المدفوع", "المتبقي", "الحالة"].map((h) => (
+                  <th key={h} style={{ padding: "6px 8px", textAlign: "right", borderBottom: "2px solid #e9ecef" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedOrders.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: 12, textAlign: "center", color: "#8392ab" }}>لا توجد طلبيات</td></tr>
+              ) : sortedOrders.map((o) => {
+                const a = orderPaymentMap?.[o.id] || { amount: Number(o.totalAmount || 0), paid: 0, remaining: Number(o.totalAmount || 0), status: "unpaid" };
+                const dateStr = (o.submittedAt || o.createdAt || "").slice(0, 10) || "—";
+                return (
+                  <tr key={o.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                    <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption" fontWeight="bold">{o.orderNumber || o.id}</SoftTypography></td>
+                    <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption">{dateStr}</SoftTypography></td>
+                    <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption">{a.amount.toLocaleString("fr-DZ")}</SoftTypography></td>
+                    <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption" sx={{ color: "#66BB6A" }}>{a.paid.toLocaleString("fr-DZ")}</SoftTypography></td>
+                    <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption" sx={{ color: a.remaining > 0 ? "#ea0606" : "#8392ab" }}>{a.remaining.toLocaleString("fr-DZ")}</SoftTypography></td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <SoftTypography variant="caption" fontWeight="bold" sx={{ color: statusColor[a.status] }}>
+                        {statusLabel[a.status]}
+                      </SoftTypography>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </SoftBox>
+
+        <SoftTypography variant="button" fontWeight="bold" display="block" mb={1}>
+          سجل الدفعات ({(payments || []).length})
+        </SoftTypography>
+        <SoftBox sx={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: "#f8f9fa" }}>
+                {["التاريخ", "النوع", "الطريقة", "المرجع", "المبلغ"].map((h) => (
+                  <th key={h} style={{ padding: "6px 8px", textAlign: "right", borderBottom: "2px solid #e9ecef" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" color="secondary">{h}</SoftTypography>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(!payments || payments.length === 0) ? (
+                <tr><td colSpan={5} style={{ padding: 12, textAlign: "center", color: "#8392ab" }}>لا توجد دفعات</td></tr>
+              ) : payments.map((p) => (
+                <tr key={p.id} style={{ borderBottom: "1px solid #f0f2f5" }}>
+                  <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption">{p.paymentDate || "—"}</SoftTypography></td>
+                  <td style={{ padding: "6px 8px" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" sx={{ color: p.direction === "in" ? "#66BB6A" : "#ea0606" }}>
+                      {p.direction === "in" ? "استلام" : "إرجاع"}
+                    </SoftTypography>
+                  </td>
+                  <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption">{paymentMethodLabel[p.paymentMethod] || p.paymentMethod}</SoftTypography></td>
+                  <td style={{ padding: "6px 8px" }}><SoftTypography variant="caption">{p.referenceNumber || "—"}</SoftTypography></td>
+                  <td style={{ padding: "6px 8px" }}>
+                    <SoftTypography variant="caption" fontWeight="bold" sx={{ color: p.direction === "in" ? "#66BB6A" : "#ea0606" }}>
+                      {positiveAmount(p.amount).toLocaleString("fr-DZ")} دج
+                    </SoftTypography>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </SoftBox>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Customer Detail Dialog ───────────────────────────────────────────────────
 export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpdate, onEdit, users, usersError = "" }) {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(initialCustomer);
   const [tab, setTab] = useState(0);
-  const [paymentDialog, setPaymentDialog] = useState(false);
+  const [paymentDialog, setPaymentDialog] = useState(null);
+  const [statementOpen, setStatementOpen] = useState(false);
   const [payments, setPayments] = useState([]);
   const [loadingPayments, setLoadingPayments] = useState(false);
   const [paymentsError, setPaymentsError] = useState("");
@@ -385,7 +555,9 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
   }, [initialCustomer]);
 
   useEffect(() => {
-    if (!customer?.id || (tab !== 1 && tab !== 3)) return;
+    if (!customer?.id) return;
+    if (tab !== 1 && tab !== 3 && !statementOpen) return;
+    if (orders.length > 0 || loadingOrders) return;
     setLoadingOrders(true);
     setOrdersError("");
     ordersApi.list({ customerId: customer.id, size: 50 })
@@ -395,10 +567,12 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
         setOrders([]);
       })
       .finally(() => setLoadingOrders(false));
-  }, [customer?.id, tab]);
+  }, [customer?.id, tab, statementOpen, orders.length, loadingOrders]);
 
   useEffect(() => {
-    if (!customer?.id || tab !== 2) return;
+    if (!customer?.id) return;
+    if (tab !== 2 && !statementOpen) return;
+    if (payments.length > 0 || loadingPayments) return;
     setLoadingPayments(true);
     setPaymentsError("");
     customersApi.listPayments(customer.id)
@@ -408,7 +582,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
         setPayments([]);
       })
       .finally(() => setLoadingPayments(false));
-  }, [customer?.id, tab]);
+  }, [customer?.id, tab, statementOpen, payments.length, loadingPayments]);
 
   if (!customer) return null;
 
@@ -416,6 +590,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
   const balance = netCustomerBalance(customer);
   const balanceLabel = balance < 0 ? "رصيد لصالح الزبون" : "الرصيد المتبقي";
   const shipments = buildCustomerShipments(orders, customer);
+  const orderPaymentMap = allocateOrderPayments(orders, customer);
 
   const handlePaymentSaved = (newPayment) => {
     const signedAmount = newPayment.direction === "in"
@@ -525,13 +700,18 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
               </SoftTypography>
               <SoftBox display="flex" gap={1}>
                 <SoftButton variant="outlined" color="secondary" size="small" startIcon={<PrintIcon />}
-                  onClick={() => window.print()}>
+                  onClick={() => setStatementOpen(true)}>
                   طباعة كشف الحساب
                 </SoftButton>
-                <SoftButton variant="outlined" color="success" size="small" startIcon={<WhatsAppIcon />}
-                  sx={{ color: "#25D366", borderColor: "#25D366" }}>
-                  واتساب PDF
-                </SoftButton>
+                <Tooltip title="قريباً — إرسال كشف الحساب عبر واتساب">
+                  <span>
+                    <SoftButton variant="outlined" color="success" size="small" startIcon={<WhatsAppIcon />}
+                      sx={{ color: "#25D366", borderColor: "#25D366" }}
+                      disabled>
+                      واتساب PDF
+                    </SoftButton>
+                  </span>
+                </Tooltip>
               </SoftBox>
             </SoftBox>
             {loadingOrders && (
@@ -547,39 +727,67 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
                 لا توجد طلبيات مسجلة
               </SoftTypography>
             ) : orders.map((o) => {
-              const amount = o.totalAmount || o.amount || 0;
-              const paid = o.paidAmount || o.paid || 0;
-              const remaining = amount - paid;
-              const payStatus = remaining <= 0 ? "paid" : paid > 0 ? "partial" : "unpaid";
+              const allocation = orderPaymentMap[o.id] || { amount: Number(o.totalAmount || 0), paid: 0, remaining: Number(o.totalAmount || 0), status: "unpaid" };
+              const { amount, paid, remaining, status: payStatus } = allocation;
               const payColors = { paid: "#66BB6A", partial: "#fb8c00", unpaid: "#ea0606" };
               const payLabels = { paid: "مدفوعة", partial: "مدفوعة جزئياً", unpaid: "غير مدفوعة" };
+              const dateStr = (o.submittedAt || o.createdAt || "").slice(0, 10) || o.date || "—";
               return (
-                <SoftBox key={o.id} mb={1.5} p={1.5} sx={{
-                  border: `2px solid ${payColors[payStatus]}33`,
-                  borderRight: `4px solid ${payColors[payStatus]}`,
-                  borderRadius: 1.5,
-                  background: payStatus === "unpaid" ? "#fff5f5" : payStatus === "partial" ? "#fffbeb" : "#f0fff4",
-                }}>
-                  <SoftBox display="flex" justifyContent="space-between" alignItems="center">
+                <SoftBox key={o.id} mb={1.5} p={1.5}
+                  onClick={() => { onClose(); navigate(`/orders/${o.id}`); }}
+                  sx={{
+                    border: `2px solid ${payColors[payStatus]}33`,
+                    borderRight: `4px solid ${payColors[payStatus]}`,
+                    borderRadius: 1.5,
+                    background: payStatus === "unpaid" ? "#fff5f5" : payStatus === "partial" ? "#fffbeb" : "#f0fff4",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    "&:hover": { boxShadow: "0 2px 10px rgba(0,0,0,0.08)", transform: "translateY(-1px)" },
+                  }}>
+                  <SoftBox display="flex" justifyContent="space-between" alignItems="center" gap={1}>
                     <SoftBox>
                       <SoftTypography variant="caption" fontWeight="bold">{o.orderNumber || o.id}</SoftTypography>
                       <SoftTypography variant="caption" color="secondary" display="block">
-                        {o.createdAt ? o.createdAt.slice(0, 10) : o.date || "—"}
+                        {dateStr}
                       </SoftTypography>
                     </SoftBox>
                     <SoftBox textAlign="right">
                       <SoftTypography variant="caption" fontWeight="bold">
                         {amount.toLocaleString("fr-DZ")} دج
                       </SoftTypography>
-                      {remaining > 0 && (
+                      {payStatus === "partial" && (
+                        <SoftTypography variant="caption" sx={{ color: "#fb8c00" }} display="block">
+                          مدفوع: {paid.toLocaleString("fr-DZ")} | متبقي: {remaining.toLocaleString("fr-DZ")} دج
+                        </SoftTypography>
+                      )}
+                      {payStatus === "unpaid" && remaining > 0 && (
                         <SoftTypography variant="caption" color="error" display="block">
                           متبقي: {remaining.toLocaleString("fr-DZ")} دج
                         </SoftTypography>
                       )}
                     </SoftBox>
-                    <SoftBadge variant="gradient"
-                      color={payStatus === "paid" ? "success" : payStatus === "partial" ? "warning" : "error"}
-                      size="xs" badgeContent={payLabels[payStatus]} container />
+                    <SoftBox display="flex" alignItems="center" gap={0.5}>
+                      <SoftBadge variant="gradient"
+                        color={payStatus === "paid" ? "success" : payStatus === "partial" ? "warning" : "error"}
+                        size="xs" badgeContent={payLabels[payStatus]} container />
+                      {remaining > 0 && (
+                        <Tooltip title={`تسجيل دفعة لهذه الطلبية (${remaining.toLocaleString("fr-DZ")} دج)`}>
+                          <IconButton size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPaymentDialog({
+                                prefill: {
+                                  amount: remaining,
+                                  notes: `تسديد ${o.orderNumber || `طلبية #${o.id}`}`,
+                                },
+                              });
+                            }}
+                            sx={{ color: payColors[payStatus] }}>
+                            <PaymentIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </SoftBox>
                   </SoftBox>
                 </SoftBox>
               );
@@ -592,7 +800,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
             <SoftBox display="flex" justifyContent="space-between" mb={2}>
               <SoftTypography variant="caption" color="text">{payments.length} دفعة مسجلة</SoftTypography>
               <SoftButton variant="gradient" color="info" size="small" startIcon={<PaymentIcon />}
-                onClick={() => setPaymentDialog(true)}>
+                onClick={() => setPaymentDialog({})}>
                 تسجيل دفعة
               </SoftButton>
             </SoftBox>
@@ -727,7 +935,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
           تعديل
         </SoftButton>
         <SoftButton variant="outlined" color="success" size="small" startIcon={<PaymentIcon />}
-          onClick={() => { setTab(2); setPaymentDialog(true); }}>
+          onClick={() => { setTab(2); setPaymentDialog({}); }}>
           دفعة
         </SoftButton>
         <SoftButton variant="gradient" color="info" size="small" startIcon={<ShoppingCartIcon />}
@@ -737,11 +945,21 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
       </DialogActions>
 
       <AddPaymentDialog
-        open={paymentDialog}
-        onClose={() => setPaymentDialog(false)}
+        open={!!paymentDialog}
+        onClose={() => setPaymentDialog(null)}
         customer={customer}
         onSaved={handlePaymentSaved}
         users={users}
+        prefill={paymentDialog?.prefill}
+      />
+
+      <CustomerStatementPrintDialog
+        open={statementOpen}
+        onClose={() => setStatementOpen(false)}
+        customer={customer}
+        orders={orders}
+        payments={payments}
+        orderPaymentMap={orderPaymentMap}
       />
     </Dialog>
   );

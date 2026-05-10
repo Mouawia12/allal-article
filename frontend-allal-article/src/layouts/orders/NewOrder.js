@@ -60,7 +60,7 @@ import { CustomerDetailDialog } from "layouts/customers";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank, isPositiveNumber } from "utils/formErrors";
 import { useI18n } from "i18n";
 const formatDZD = (v) => Number(v || 0).toLocaleString("fr-DZ", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-import { ordersApi, customersApi, productsApi, usersApi, inventoryApi, priceListsApi } from "services";
+import { ordersApi, customersApi, productsApi, usersApi, inventoryApi, priceListsApi, mediaApi } from "services";
 import {
   attachPriceListPrices,
   buildPriceListPricesByProduct,
@@ -571,8 +571,15 @@ function NewOrder() {
   const [newCustomerSaving, setNewCustomerSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const { favoriteCount, isFavorite, toggleFavorite } = useProductFavorites();
+  const productImageUrls = useRef([]);
+
+  useEffect(() => () => {
+    productImageUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    productImageUrls.current = [];
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const appendLoadError = (error, fallback) => {
       setLoadError((current) => {
         const message = getApiErrorMessage(error, fallback);
@@ -587,14 +594,33 @@ function NewOrder() {
         appendLoadError(error, "تعذر تحميل المخزون");
         return { data: [] };
       }),
-    ]).then(([productsResponse, stockResponse]) => {
+    ]).then(async ([productsResponse, stockResponse]) => {
       const mapped = normalizeProductsForOrder(
         extractArray(productsResponse.data),
         extractArray(stockResponse.data)
       );
-      setBaseProducts(mapped);
-      if (mapped.length) setSelectedProductId(mapped[0].id);
+      const nextImageUrls = [];
+      const withImages = await Promise.all(mapped.map(async (product) => {
+        if (!product.primaryImageMediaId) return product;
+        try {
+          const response = await mediaApi.content(product.primaryImageMediaId);
+          const imageUrl = URL.createObjectURL(response.data);
+          nextImageUrls.push(imageUrl);
+          return { ...product, image: imageUrl };
+        } catch {
+          return product;
+        }
+      }));
+      if (cancelled) {
+        nextImageUrls.forEach((url) => URL.revokeObjectURL(url));
+        return;
+      }
+      productImageUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      productImageUrls.current = nextImageUrls;
+      setBaseProducts(withImages);
+      if (withImages.length) setSelectedProductId(withImages[0].id);
     }).catch((error) => {
+      if (cancelled) return;
       appendLoadError(error, "تعذر تحميل الأصناف");
     });
     priceListsApi.list().then((r) => {
@@ -633,6 +659,7 @@ function NewOrder() {
     }).catch((error) => {
       appendLoadError(error, "تعذر تحميل الزبائن");
     });
+    return () => { cancelled = true; };
   }, []);
 
   const normalizeQty = (value, product = null) => {

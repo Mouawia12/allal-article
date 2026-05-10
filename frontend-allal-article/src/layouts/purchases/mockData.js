@@ -1,7 +1,10 @@
 export const statusConfig = {
-  pending:   { label: "مسودة شراء", color: "warning" },
+  draft:     { label: "مسودة",       color: "secondary" },
+  pending:   { label: "مسودة شراء",  color: "warning" },
+  submitted: { label: "مُرسل",        color: "warning" },
   confirmed: { label: "مؤكد للمورد", color: "info" },
   received:  { label: "مستلم",       color: "success" },
+  completed: { label: "مكتمل",       color: "success" },
   cancelled: { label: "ملغى",        color: "error" },
 };
 
@@ -10,6 +13,17 @@ export const paymentConfig = {
   partial: { label: "جزئي",       color: "warning" },
   unpaid:  { label: "غير مدفوع", color: "error" },
 };
+
+const DEFAULT_STATUS  = { label: "—", color: "secondary" };
+const DEFAULT_PAYMENT = { label: "—", color: "secondary" };
+
+export function statusOf(key) {
+  return statusConfig[key] ?? { ...DEFAULT_STATUS, label: key || DEFAULT_STATUS.label };
+}
+
+export function paymentOf(key) {
+  return paymentConfig[key] ?? { ...DEFAULT_PAYMENT, label: key || DEFAULT_PAYMENT.label };
+}
 
 export const supplierOptions = [];
 

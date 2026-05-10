@@ -25,3 +25,4 @@ export { referenceApi } from "./referenceApi";
 export { emailNotificationsApi } from "./emailNotificationsApi";
 export { aiSettingsApi } from "./aiSettingsApi";
 export { mediaApi } from "./mediaApi";
+export { productImportApi } from "./productImportApi";

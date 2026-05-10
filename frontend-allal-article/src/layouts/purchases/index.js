@@ -38,7 +38,8 @@ import {
   calcReturnedQty,
   formatDZD,
   paymentConfig,
-  statusConfig,
+  paymentOf,
+  statusOf,
 } from "./mockData";
 const supplierMatchLabels = { taxNumber: "الرقم الضريبي", email: "البريد الإلكتروني" };
 const findSupplierByName = () => null;
@@ -256,8 +257,8 @@ function Purchases() {
                       </td>
                     </tr>
                   ) : filtered.map((p, i) => {
-                    const sc = statusConfig[p.status];
-                    const pc = paymentConfig[p.paymentStatus];
+                    const sc = statusOf(p.status);
+                    const pc = paymentOf(p.paymentStatus);
                     const purchaseReturnedQty = calcReturnedQty(p);
                     const returnAmount = calcReturnAmount(p);
                     return (
@@ -270,11 +271,11 @@ function Purchases() {
                         }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f7ff")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc")}
-                        onClick={() => navigate(`/purchases/${p.id}`)}
+                        onClick={() => navigate(`/purchases/${p._id ?? p.id}`)}
                       >
                         <td style={{ padding: "10px 12px" }}>
                           <SoftTypography variant="caption" fontWeight="bold" color="info"
-                            sx={{ cursor: "pointer" }} onClick={() => navigate(`/purchases/${p.id}`)}>
+                            sx={{ cursor: "pointer" }} onClick={() => navigate(`/purchases/${p._id ?? p.id}`)}>
                             {p.id}
                           </SoftTypography>
                         </td>
@@ -338,7 +339,7 @@ function Purchases() {
                             <IconButton
                               size="small"
                               color="primary"
-                              onClick={(e) => { e.stopPropagation(); navigate(`/purchases/${p.id}`); }}
+                              onClick={(e) => { e.stopPropagation(); navigate(`/purchases/${p._id ?? p.id}`); }}
                             >
                               <VisibilityIcon fontSize="small" />
                             </IconButton>

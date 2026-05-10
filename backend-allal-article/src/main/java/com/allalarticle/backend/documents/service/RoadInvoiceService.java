@@ -1,5 +1,6 @@
 package com.allalarticle.backend.documents.service;
 
+import com.allalarticle.backend.audit.AuditLogService;
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.customers.entity.Customer;
@@ -29,7 +30,9 @@ import java.time.OffsetDateTime;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -42,6 +45,7 @@ public class RoadInvoiceService {
     private final CustomerRepository customerRepo;
     private final ProductRepository productRepo;
     private final OrderRepository orderRepo;
+    private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public Page<RoadInvoiceResponse> list(String status, Pageable pageable) {
@@ -89,7 +93,15 @@ public class RoadInvoiceService {
 
         RoadInvoice saved = invoiceRepo.save(invoice);
         saved.setInvoiceNumber("RI-" + Year.now() + "-" + String.format("%06d", saved.getId()));
-        return RoadInvoiceResponse.from(invoiceRepo.save(saved));
+        RoadInvoice persisted = invoiceRepo.save(saved);
+
+        auditLogService.log(userId, "road_invoice", persisted.getId(),
+                "road_invoice_created",
+                "إنشاء فاتورة طريق" + (wilaya != null ? " — " + wilaya.getNameAr() : ""),
+                persisted.getInvoiceNumber(),
+                "إدارة",
+                buildAuditDetails(persisted));
+        return RoadInvoiceResponse.from(persisted);
     }
 
     @Transactional
@@ -99,7 +111,14 @@ public class RoadInvoiceService {
             throw new AppException(ErrorCode.BAD_REQUEST, "فاتورة الطريق ليست في حالة مسودة", HttpStatus.BAD_REQUEST);
         }
         invoice.setStatus("confirmed");
-        return RoadInvoiceResponse.from(invoiceRepo.save(invoice));
+        RoadInvoice persisted = invoiceRepo.save(invoice);
+        auditLogService.log(null, "road_invoice", persisted.getId(),
+                "road_invoice_confirmed",
+                "تأكيد فاتورة طريق",
+                persisted.getInvoiceNumber(),
+                "إدارة",
+                buildAuditDetails(persisted));
+        return RoadInvoiceResponse.from(persisted);
     }
 
     @Transactional
@@ -108,14 +127,47 @@ public class RoadInvoiceService {
         invoice.setPrintCount(invoice.getPrintCount() + 1);
         invoice.setLastPrintedAt(OffsetDateTime.now());
         invoice.setLastPrintedById(userId);
-        return RoadInvoiceResponse.from(invoiceRepo.save(invoice));
+        RoadInvoice persisted = invoiceRepo.save(invoice);
+        auditLogService.log(userId, "road_invoice", persisted.getId(),
+                "road_invoice_printed",
+                "طباعة فاتورة طريق",
+                persisted.getInvoiceNumber(),
+                "إدارة",
+                buildAuditDetails(persisted));
+        return RoadInvoiceResponse.from(persisted);
     }
 
     @Transactional
     public RoadInvoiceResponse recordWhatsapp(Long id) {
         RoadInvoice invoice = getOrThrow(id);
         invoice.setWhatsappSentAt(OffsetDateTime.now());
-        return RoadInvoiceResponse.from(invoiceRepo.save(invoice));
+        RoadInvoice persisted = invoiceRepo.save(invoice);
+        auditLogService.log(null, "road_invoice", persisted.getId(),
+                "road_invoice_whatsapp",
+                "إرسال فاتورة طريق عبر واتساب",
+                persisted.getInvoiceNumber(),
+                "إدارة",
+                buildAuditDetails(persisted));
+        return RoadInvoiceResponse.from(persisted);
+    }
+
+    private Map<String, Object> buildAuditDetails(RoadInvoice ri) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("invoiceNumber", ri.getInvoiceNumber());
+        details.put("invoiceDate", ri.getInvoiceDate() != null ? ri.getInvoiceDate().toString() : null);
+        details.put("status", ri.getStatus());
+        details.put("totalWeight", ri.getTotalWeight());
+        details.put("itemsCount", ri.getItems() != null ? ri.getItems().size() : 0);
+        details.put("ordersCount", ri.getLinkedOrders() != null ? ri.getLinkedOrders().size() : 0);
+        if (ri.getWilaya() != null) {
+            details.put("wilayaId", ri.getWilaya().getId());
+            details.put("wilayaName", ri.getWilaya().getNameAr());
+        }
+        if (ri.getCustomer() != null) {
+            details.put("customerId", ri.getCustomer().getId());
+            details.put("customerName", ri.getCustomer().getName());
+        }
+        return details;
     }
 
     @Transactional

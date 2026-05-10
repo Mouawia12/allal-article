@@ -243,13 +243,15 @@ export default function LinkedInventory() {
         )}
 
         {/* Permission badges */}
-        <Card sx={{ p: 1.5, mb: 2.5, display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
-          <Box sx={{ fontSize: 11, color: "#8392ab", fontWeight: 600 }}>صلاحياتك:</Box>
-          {perms.view_inventory && <Chip label="عرض الكميات" size="small" sx={{ background: "#e3f8fd", color: "#17c1e8", fontSize: 10, fontWeight: 600 }} />}
-          {perms.view_pricing && <Chip label="عرض الأسعار" size="small" sx={{ background: "#f0fde4", color: "#82d616", fontSize: 10, fontWeight: 600 }} />}
-          {perms.view_sales_data && <Chip label="بيانات المبيعات" size="small" sx={{ background: "#fce4ec", color: "#e91e63", fontSize: 10, fontWeight: 600 }} />}
-          {perms.clone_products && <Chip label="نسخ الأصناف" size="small" sx={{ background: "#ede7f6", color: "#7928ca", fontSize: 10, fontWeight: 600 }} />}
-          {perms.create_purchase_link && <Chip label="ربط الطلبيات" size="small" sx={{ background: "#fff3e0", color: "#fb8c00", fontSize: 10, fontWeight: 600 }} />}
+        <Card sx={{ px: 2, py: 1.2, mb: 2.5 }}>
+          <Box sx={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+            <Box sx={{ fontSize: 11, color: "#8392ab", fontWeight: 700, ml: 0.5, whiteSpace: "nowrap" }}>صلاحياتك:</Box>
+            {perms.view_inventory && <Chip label="عرض الكميات" size="small" sx={{ height: 22, background: "#e3f8fd", color: "#17c1e8", fontSize: 10, fontWeight: 600, "& .MuiChip-label": { px: 1.2 } }} />}
+            {perms.view_pricing && <Chip label="عرض الأسعار" size="small" sx={{ height: 22, background: "#f0fde4", color: "#82d616", fontSize: 10, fontWeight: 600, "& .MuiChip-label": { px: 1.2 } }} />}
+            {perms.view_sales_data && <Chip label="بيانات المبيعات" size="small" sx={{ height: 22, background: "#fce4ec", color: "#e91e63", fontSize: 10, fontWeight: 600, "& .MuiChip-label": { px: 1.2 } }} />}
+            {perms.clone_products && <Chip label="نسخ الأصناف" size="small" sx={{ height: 22, background: "#ede7f6", color: "#7928ca", fontSize: 10, fontWeight: 600, "& .MuiChip-label": { px: 1.2 } }} />}
+            {perms.create_purchase_link && <Chip label="ربط الطلبيات" size="small" sx={{ height: 22, background: "#fff3e0", color: "#fb8c00", fontSize: 10, fontWeight: 600, "& .MuiChip-label": { px: 1.2 } }} />}
+          </Box>
         </Card>
 
         {/* Stats */}

@@ -157,6 +157,11 @@ public class AiSettingsService {
     }
 
     @Transactional(readOnly = true)
+    public String currentChatModel() {
+        return stringValue(readSettingsMap().get("model"), defaultOpenAiModel);
+    }
+
+    @Transactional(readOnly = true)
     public boolean currentImageProcessEnabled() {
         return booleanValue(readSettingsMap().get("imageProcessEnabled"), true);
     }
@@ -386,8 +391,11 @@ public class AiSettingsService {
             try {
                 return secretCodec.decrypt(encryptedKey);
             } catch (Exception e) {
-                throw new AppException(ErrorCode.INTERNAL_ERROR,
-                        "تعذر قراءة مفتاح OpenAI المحفوظ", HttpStatus.INTERNAL_SERVER_ERROR);
+                log.warn("Saved OpenAI key could not be decrypted (likely JWT secret rotated): {}", e.getMessage());
+                if (hasText(envOpenAiApiKey)) return envOpenAiApiKey.trim();
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "مفتاح OpenAI المحفوظ تالف أو مُشفّر بسرّ مختلف. الرجاء إعادة إدخاله من «إعدادات الذكاء الاصطناعي».",
+                        HttpStatus.BAD_REQUEST);
             }
         }
 

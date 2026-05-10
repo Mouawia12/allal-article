@@ -1,6 +1,8 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+
+import Snackbar from "@mui/material/Snackbar";
 
 import Card from "@mui/material/Card";
 import Alert from "@mui/material/Alert";
@@ -52,8 +54,9 @@ import {
   generateVariantCombinations,
   productSettings,
 } from "./mockProductData";
-import { productsApi, inventoryApi, mediaApi } from "services";
+import { productsApi, mediaApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
+import { referenceCache } from "utils/referenceCache";
 import { useI18n } from "i18n";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -84,12 +87,6 @@ function buildSku(code, attrs) {
   return `${code || "PRD"}-${parts}`.slice(0, 20);
 }
 
-function extractList(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.content)) return payload.content;
-  return [];
-}
-
 function joinLoadError(current, message) {
   return current ? `${current}؛ ${message}` : message;
 }
@@ -106,6 +103,34 @@ function productBaseUnitRow(product) {
     price: priceInputValue(product.currentPriceAmount),
     barcode: product.barcode ?? "",
   };
+}
+
+function productToForm(p) {
+  return {
+    name: p.name ?? "",
+    code: p.sku ?? p.code ?? "",
+    category: p.categoryName ?? p.category ?? "",
+    description: p.description ?? "",
+    barcode: p.barcode ?? "",
+    baseUnit: p.baseUnitName ?? p.baseUnit ?? p.unit ?? "",
+    weightPerUnit: p.weightPerUnit ?? "",
+    unitsPerPackage: p.unitsPerPackage ?? "",
+    packageUnit: p.packageUnit ?? "كرطون",
+    initialStock: String(p.stock ?? 0),
+    initialWarehouseId: p.warehouseId ?? "",
+  };
+}
+
+function productToUnits(p) {
+  return p.units?.length
+    ? p.units.map((u) => ({
+        ...u,
+        _id: unitRowId++,
+        price: priceInputValue(u.price ?? (u.isBase ? p.currentPriceAmount : "")),
+        unit: u.unit ?? (u.isBase ? (p.baseUnitName ?? p.baseUnit ?? p.unit ?? "") : ""),
+        barcode: u.barcode ?? (u.isBase ? (p.barcode ?? "") : ""),
+      }))
+    : [productBaseUnitRow(p)];
 }
 
 // ─── Section Card wrapper ─────────────────────────────────────────────────────
@@ -837,15 +862,21 @@ function ImageUploadZone({
 export default function ProductForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const location = useLocation();
   const isEdit  = !!id;
   const { t } = useI18n();
+  const seedProduct = location.state?.product;
 
-  const [form, setForm] = useState({
-    name: "", code: "", category: "", description: "", barcode: "",
-    baseUnit: "", weightPerUnit: "", unitsPerPackage: "", packageUnit: "كرطون",
-    initialStock: "0", initialWarehouseId: "",
-  });
-  const [units, setUnits] = useState([newUnitRow(true)]);
+  const [form, setForm] = useState(() => (
+    isEdit && seedProduct ? productToForm(seedProduct) : {
+      name: "", code: "", category: "", description: "", barcode: "",
+      baseUnit: "", weightPerUnit: "", unitsPerPackage: "", packageUnit: "كرطون",
+      initialStock: "0", initialWarehouseId: "",
+    }
+  ));
+  const [units, setUnits] = useState(() => (
+    isEdit && seedProduct ? productToUnits(seedProduct) : [newUnitRow(true)]
+  ));
   const [hasVariants, setHasVariants] = useState(false);
   const [variantAttrs, setVariantAttrs] = useState([]);
   const [variants, setVariants] = useState([]);
@@ -860,64 +891,63 @@ export default function ProductForm() {
   const [imageDeletingId, setImageDeletingId] = useState(null);
   const [imagePrimaryUpdatingId, setImagePrimaryUpdatingId] = useState(null);
   const [touched, setTouched] = useState(false);
-  const [warehouses, setWarehouses] = useState([]);
-  const [catalogCategories, setCatalogCategories] = useState([]);
-  const [catalogUnits, setCatalogUnits] = useState([]);
+  const [warehouses, setWarehouses] = useState(() => referenceCache.peek("warehouses") ?? []);
+  const [catalogCategories, setCatalogCategories] = useState(() => referenceCache.peek("categories") ?? []);
+  const [catalogUnits, setCatalogUnits] = useState(() => referenceCache.peek("units") ?? []);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [loadingProduct, setLoadingProduct] = useState(isEdit && !seedProduct);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
+    let active = true;
     setLoadError("");
-    inventoryApi.listWarehouses().then((r) => {
-      const whs = extractList(r.data);
+
+    referenceCache.warehouses().then((whs) => {
+      if (!active) return;
       setWarehouses(whs);
-      const def = whs.find((w) => w.isDefault) ?? whs[0];
-      if (def) setForm((p) => ({ ...p, initialWarehouseId: def.id }));
+      setForm((prev) => {
+        if (prev.initialWarehouseId) return prev;
+        const def = whs.find((w) => w.isDefault) ?? whs[0];
+        return def ? { ...prev, initialWarehouseId: def.id } : prev;
+      });
     }).catch((error) => {
-      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل المستودعات")));
-      setWarehouses([]);
+      if (active) setLoadError((c) => joinLoadError(c, getApiErrorMessage(error, "تعذر تحميل المستودعات")));
     });
-    productsApi.listCategories().then((r) => {
-      setCatalogCategories(extractList(r.data));
+
+    referenceCache.categories().then((list) => {
+      if (active) setCatalogCategories(list);
     }).catch((error) => {
-      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل الفئات")));
-      setCatalogCategories([]);
+      if (active) setLoadError((c) => joinLoadError(c, getApiErrorMessage(error, "تعذر تحميل الفئات")));
     });
-    productsApi.listUnits().then((r) => {
-      setCatalogUnits(extractList(r.data));
+
+    referenceCache.units().then((list) => {
+      if (active) setCatalogUnits(list);
     }).catch((error) => {
-      setLoadError((current) => joinLoadError(current, getApiErrorMessage(error, "تعذر تحميل وحدات القياس")));
-      setCatalogUnits([]);
+      if (active) setLoadError((c) => joinLoadError(c, getApiErrorMessage(error, "تعذر تحميل وحدات القياس")));
     });
+
     if (isEdit) {
       productsApi.getById(id).then((r) => {
+        if (!active) return;
         const p = r.data;
-        setForm({
-          name: p.name ?? "", code: p.sku ?? p.code ?? "", category: p.categoryName ?? p.category ?? "",
-          description: p.description ?? "", barcode: p.barcode ?? "",
-          baseUnit: p.baseUnitName ?? p.baseUnit ?? p.unit ?? "", weightPerUnit: p.weightPerUnit ?? "",
-          unitsPerPackage: p.unitsPerPackage ?? "", packageUnit: p.packageUnit ?? "كرطون",
-          initialStock: String(p.stock ?? 0), initialWarehouseId: p.warehouseId ?? "",
-        });
-        setUnits(p.units?.length
-          ? p.units.map((u) => ({
-              ...u,
-              _id: unitRowId++,
-              price: priceInputValue(u.price ?? (u.isBase ? p.currentPriceAmount : "")),
-              unit: u.unit ?? (u.isBase ? (p.baseUnitName ?? p.baseUnit ?? p.unit ?? "") : ""),
-              barcode: u.barcode ?? (u.isBase ? (p.barcode ?? "") : ""),
-            }))
-          : [productBaseUnitRow(p)]);
+        setForm(productToForm(p));
+        setUnits(productToUnits(p));
         if (p.hasVariants) { setHasVariants(true); setVariantAttrs(p.variantAttributes ?? []); }
         if (p.variants?.length) setVariants(p.variants.map((v) => ({ ...v, _id: variantRowId++ })));
       }).catch((error) => {
-        setLoadError((current) => {
-          const message = getApiErrorMessage(error, "تعذر تحميل بيانات الصنف");
-          return current ? `${current}؛ ${message}` : message;
+        if (!active) return;
+        setLoadError((c) => {
+          const m = getApiErrorMessage(error, "تعذر تحميل بيانات الصنف");
+          return c ? `${c}؛ ${m}` : m;
         });
+      }).finally(() => {
+        if (active) setLoadingProduct(false);
       });
     }
+
+    return () => { active = false; };
   }, [id, isEdit]);
 
   const set = (field) => (e) => {
@@ -944,47 +974,47 @@ export default function ProductForm() {
     }
   };
 
-  const imageWithPreview = async (productImage, generated = false) => {
+  const imageMetaOnly = (productImage, generated = false) => {
     const media = productImage.media ?? productImage;
+    return {
+      ...productImage,
+      media,
+      publicUrl: media.publicUrl,
+      title: media.title,
+      previewUrl: null,
+      generated: generated || productImage.sourceType === "ai_generated" || media.title?.startsWith("AI"),
+      processed: productImage.sourceType === "ai_processed",
+    };
+  };
+
+  const ensureImagePreview = async (image) => {
+    if (!image?.media?.id || image.previewUrl) return image;
     try {
-      const response = await mediaApi.content(media.id);
+      const response = await mediaApi.content(image.media.id);
       const previewUrl = rememberImageObjectUrl(URL.createObjectURL(response.data));
-      return {
-        ...productImage,
-        media,
-        publicUrl: media.publicUrl,
-        title: media.title,
-        previewUrl,
-        generated: generated || productImage.sourceType === "ai_generated" || media.title?.startsWith("AI"),
-        processed: productImage.sourceType === "ai_processed",
-      };
+      const next = { ...image, previewUrl };
+      setImages((current) => current.map((it) => (it.id === image.id ? { ...it, previewUrl } : it)));
+      return next;
     } catch {
-      return {
-        ...productImage,
-        media,
-        publicUrl: media.publicUrl,
-        title: media.title,
-        previewUrl: media.publicUrl,
-        generated: generated || productImage.sourceType === "ai_generated" || media.title?.startsWith("AI"),
-        processed: productImage.sourceType === "ai_processed",
-      };
+      return image;
     }
   };
 
   const refreshProductImages = async (preferredImageId = null) => {
     const refreshed = await productsApi.listImages(id);
     const list = Array.isArray(refreshed.data) ? refreshed.data : [];
-    const withPreviews = await Promise.all(list.map((media) => imageWithPreview(media)));
+    const meta = list.map((m) => imageMetaOnly(m));
     setImages((current) => {
       current.forEach((image) => revokeImageUrl(image.previewUrl));
-      return withPreviews;
+      return meta;
     });
-    setSelectedImageId((current) => {
-      if (preferredImageId && withPreviews.some((image) => image.id === preferredImageId)) return preferredImageId;
-      if (current && withPreviews.some((image) => image.id === current)) return current;
-      return withPreviews.find((image) => image.isPrimary)?.id ?? withPreviews[0]?.id ?? null;
-    });
-    return withPreviews;
+    const target =
+      (preferredImageId && meta.find((i) => i.id === preferredImageId)) ||
+      meta.find((i) => i.isPrimary) ||
+      meta[0];
+    setSelectedImageId(target?.id ?? null);
+    if (target) ensureImagePreview(target);
+    return meta;
   };
 
   const addImage = () => {
@@ -1215,14 +1245,19 @@ export default function ProductForm() {
       description: form.description.trim() || null,
       status: "active",
     };
+    if (saving) return;
     setSaving(true);
     setErrors({});
     try {
-      if (isEdit) await productsApi.update(id, payload);
-      else await productsApi.create(payload);
-      navigate("/products");
+      const response = isEdit
+        ? await productsApi.update(id, payload)
+        : await productsApi.create(payload);
+      const savedId = response.data?.id ?? id;
+      setToast({ severity: "success", message: isEdit ? "تم حفظ التعديلات" : "تم إنشاء الصنف" });
+      navigate(savedId ? `/products/${savedId}` : "/products", { replace: true });
     } catch (error) {
       applyApiErrors(error, setErrors, "تعذر حفظ الصنف");
+      setToast({ severity: "error", message: "تعذر حفظ الصنف" });
     } finally {
       setSaving(false);
     }
@@ -1276,6 +1311,15 @@ export default function ProductForm() {
             </SoftButton>
           </SoftBox>
         </SoftBox>
+
+        {loadingProduct && (
+          <SoftBox mb={2}>
+            <LinearProgress color="info" />
+            <SoftTypography variant="caption" color="secondary" mt={0.5} display="block">
+              جارٍ تحميل بيانات الصنف...
+            </SoftTypography>
+          </SoftBox>
+        )}
 
         {loadError && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>
@@ -1511,7 +1555,11 @@ export default function ProductForm() {
                 onRemove={removeImage}
                 onGenerate={handleGenerateProductImage}
                 onSetPrimary={setPrimaryImage}
-                onSelect={(image) => image?.id && setSelectedImageId(image.id)}
+                onSelect={(image) => {
+                  if (!image?.id) return;
+                  setSelectedImageId(image.id);
+                  ensureImagePreview(image);
+                }}
                 onProcess={handleProcessSelectedImage}
                 generating={imageGenerating}
                 uploading={imageUploading}
@@ -1573,6 +1621,18 @@ export default function ProductForm() {
         </Grid>
       </SoftBox>
       <Footer />
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={3000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        {toast ? (
+          <Alert onClose={() => setToast(null)} severity={toast.severity} variant="filled" sx={{ width: "100%" }}>
+            {toast.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </DashboardLayout>
   );
 }

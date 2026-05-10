@@ -109,6 +109,7 @@ public class AuditLogService {
             case "return" -> "returns";
             case "customer" -> "customers";
             case "supplier" -> "suppliers";
+            case "road_invoice" -> "road_invoices";
             default -> "system";
         };
     }
@@ -146,6 +147,9 @@ public class AuditLogService {
         if ("customer_payment".equals(entityType) || "customer".equals(entityType)) return "/customers";
         if ("purchase_return".equals(entityType)) return "/purchases";
         if ("supplier".equals(entityType)) return "/suppliers";
+        if ("road_invoice".equals(entityType)) {
+            return entityId != null ? "/road-invoices/" + entityId : "/road-invoices";
+        }
         return null;
     }
 
@@ -245,9 +249,59 @@ public class AuditLogService {
             backfillPurchaseOrders(s);
             backfillPurchaseReturns(s);
             backfillStockMovements(s);
+            backfillRoadInvoices(s);
         } catch (Exception e) {
             log.warn("Failed to backfill audit logs: {}", e.getMessage());
         }
+    }
+
+    private void backfillRoadInvoices(String s) {
+        jdbc.update(String.format("""
+            INSERT INTO "%1$s".audit_logs
+                (actor_user_id, entity_type, entity_id, action, meta_json, created_at)
+            SELECT
+                ri.created_by,
+                'road_invoice',
+                ri.id,
+                'road_invoice_created',
+                jsonb_build_object(
+                    'description', 'إنشاء فاتورة طريق' || COALESCE(' — ' || w.name_ar, ''),
+                    'entity', ri.invoice_number,
+                    'role', 'إدارة',
+                    'details', jsonb_build_object(
+                        'invoiceNumber', ri.invoice_number,
+                        'invoiceDate', ri.invoice_date,
+                        'status', ri.status,
+                        'totalWeight', ri.total_weight,
+                        'wilayaId', ri.wilaya_id,
+                        'wilayaName', w.name_ar,
+                        'customerId', ri.customer_id,
+                        'customerName', c.name,
+                        'itemsCount', COALESCE(items.items_count, 0),
+                        'ordersCount', COALESCE(orders.orders_count, 0)
+                    )
+                ),
+                ri.created_at
+            FROM "%1$s".road_invoices ri
+            LEFT JOIN "%1$s".wilayas w ON w.id = ri.wilaya_id
+            LEFT JOIN "%1$s".customers c ON c.id = ri.customer_id
+            LEFT JOIN (
+                SELECT road_invoice_id, count(*) AS items_count
+                FROM "%1$s".road_invoice_items
+                GROUP BY road_invoice_id
+            ) items ON items.road_invoice_id = ri.id
+            LEFT JOIN (
+                SELECT road_invoice_id, count(*) AS orders_count
+                FROM "%1$s".road_invoice_orders
+                GROUP BY road_invoice_id
+            ) orders ON orders.road_invoice_id = ri.id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM "%1$s".audit_logs al
+                WHERE al.entity_type = 'road_invoice'
+                  AND al.entity_id = ri.id
+                  AND al.action = 'road_invoice_created'
+            )
+            """, s));
     }
 
     private void backfillCustomerPayments(String s) {
