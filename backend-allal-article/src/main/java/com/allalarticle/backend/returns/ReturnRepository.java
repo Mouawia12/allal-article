@@ -10,6 +10,4 @@ public interface ReturnRepository extends JpaRepository<Return, Long> {
     Page<Return> findByStatus(String status, Pageable pageable);
 
     Page<Return> findByCustomerId(Long customerId, Pageable pageable);
-
-    Page<Return> findAll(Pageable pageable);
 }

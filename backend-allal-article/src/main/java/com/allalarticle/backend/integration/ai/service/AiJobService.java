@@ -2,7 +2,6 @@ package com.allalarticle.backend.integration.ai.service;
 
 import com.allalarticle.backend.common.exception.AppException;
 import com.allalarticle.backend.common.exception.ErrorCode;
-import com.allalarticle.backend.common.response.PageResponse;
 import com.allalarticle.backend.integration.ai.dto.AiJobRequest;
 import com.allalarticle.backend.integration.ai.dto.AiJobResponse;
 import com.allalarticle.backend.integration.ai.entity.AiJob;

@@ -83,11 +83,15 @@ public class PriceListService {
             INSERT INTO "%s".price_lists (code, name, price_list_type, description, is_active)
             VALUES (?, ?, ?, ?, true) RETURNING id
             """, s), Long.class, code, name, type, description);
+        if (id == null) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR, "Failed to create price list", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        Long createdId = id;
 
         return listAll().stream()
-            .filter(m -> id.equals(m.get("id")))
+            .filter(m -> createdId.equals(m.get("id")))
             .findFirst()
-            .orElse(Map.of("id", id, "name", name, "code", code, "type", type,
+            .orElse(Map.of("id", createdId, "name", name, "code", code, "type", type,
                     "is_active", true, "is_default", false, "items_count", 0L));
     }
 

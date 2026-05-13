@@ -32,7 +32,6 @@ import java.util.Map;
 public class ManufacturingService {
 
     private final ManufacturingRequestRepository requestRepo;
-    private final ManufacturingMaterialRepository materialRepo;
     private final ManufacturingQualityCheckRepository qcRepo;
     private final ManufacturingEventRepository eventRepo;
     private final ManufacturingReceiptRepository receiptRepo;

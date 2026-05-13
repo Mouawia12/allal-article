@@ -1,6 +1,5 @@
 package com.allalarticle.backend.accounting.controller;
 
-import com.allalarticle.backend.accounting.entity.JournalBook;
 import com.allalarticle.backend.accounting.repository.JournalBookRepository;
 import com.allalarticle.backend.common.response.ApiResponse;
 import lombok.RequiredArgsConstructor;

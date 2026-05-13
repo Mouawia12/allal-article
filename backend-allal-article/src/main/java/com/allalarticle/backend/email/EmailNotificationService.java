@@ -219,11 +219,11 @@ public class EmailNotificationService {
     public EmailDeliveryResult sendNow(String schema, Long outboxId, String subject,
                                        List<String> recipients, String html,
                                        byte[] attachment, String attachmentName) {
-        int total = recipients != null ? recipients.size() : 0;
-        if (total == 0) {
+        if (recipients == null || recipients.isEmpty()) {
             markSent(schema, outboxId, false, "No recipients configured");
             return new EmailDeliveryResult(0, 0, List.of());
         }
+        int total = recipients.size();
 
         List<String> failed = new ArrayList<>();
         int sent = 0;

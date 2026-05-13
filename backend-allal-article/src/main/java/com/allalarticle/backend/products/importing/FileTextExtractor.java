@@ -41,9 +41,11 @@ public class FileTextExtractor {
                     "حجم الملف يتجاوز الحد المسموح (15MB)", HttpStatus.BAD_REQUEST);
         }
 
-        String name = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+        String originalName = file.getOriginalFilename();
+        String name = originalName != null ? originalName : "file";
         String lowerName = name.toLowerCase(Locale.ROOT);
-        String contentType = file.getContentType() != null ? file.getContentType().toLowerCase(Locale.ROOT) : "";
+        String rawContentType = file.getContentType();
+        String contentType = rawContentType != null ? rawContentType.toLowerCase(Locale.ROOT) : "";
         FileKind kind = detect(lowerName, contentType);
 
         try {

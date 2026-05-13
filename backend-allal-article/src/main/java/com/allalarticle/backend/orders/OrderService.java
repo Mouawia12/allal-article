@@ -39,7 +39,6 @@ public class OrderService {
     private static final Set<String> TERMINAL = Set.of("completed", "cancelled", "rejected");
 
     private final OrderRepository          orderRepo;
-    private final OrderItemRepository      itemRepo;
     private final OrderEventRepository     eventRepo;
     private final ProductRepository        productRepo;
     private final CustomerRepository       customerRepo;

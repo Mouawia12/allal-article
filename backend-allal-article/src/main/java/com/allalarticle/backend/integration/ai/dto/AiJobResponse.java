@@ -3,7 +3,6 @@ package com.allalarticle.backend.integration.ai.dto;
 import com.allalarticle.backend.integration.ai.entity.AiJob;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 

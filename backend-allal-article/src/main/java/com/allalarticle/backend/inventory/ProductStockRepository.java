@@ -20,6 +20,4 @@ public interface ProductStockRepository extends JpaRepository<ProductStock, Long
     List<ProductStock> findByProductId(Long productId);
 
     Page<ProductStock> findByWarehouseId(Long warehouseId, Pageable pageable);
-
-    Page<ProductStock> findAll(Pageable pageable);
 }

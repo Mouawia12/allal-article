@@ -16,7 +16,7 @@ import java.util.Locale;
 public final class EmailTemplates {
 
     private static final DateTimeFormatter DT =
-            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withLocale(new Locale("ar"));
+            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withLocale(Locale.of("ar"));
 
     private EmailTemplates() {}
 
