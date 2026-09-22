@@ -12,7 +12,7 @@
 |--------|:------:|-------------|
 | Spring Boot Backend (Java) | **8080** | `./mvnw spring-boot:run` |
 | React Frontend (CRA) | **3003** | `PORT=3003 npm start` |
-| PostgreSQL (Docker) | **5432** | `docker-compose up` |
+| PostgreSQL (محلي) | **5432** | `brew services start postgresql@16` |
 
 ## تحذير
 

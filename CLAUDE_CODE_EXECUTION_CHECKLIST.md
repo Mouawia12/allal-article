@@ -25,7 +25,7 @@
 | Migrations | Flyway |
 | Security | Spring Security |
 | API Docs | OpenAPI / Swagger |
-| Deployment مبدئي | Docker Compose |
+| Deployment مبدئي | تشغيل محلي مباشر (بدون حاويات) |
 
 مبدأ التنفيذ:
 - لا تبدأ بـ microservices.

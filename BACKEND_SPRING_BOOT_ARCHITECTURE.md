@@ -17,7 +17,7 @@
 - أسلوب التوثيق: `OpenAPI / Swagger`
 - الكاش والمهام الخلفية: `Redis` لاحقًا عند الحاجة
 - تخزين الملفات الخارجي: `Cloudflare R2` حاليًا عبر abstraction داخلية
-- النشر: `Docker Compose` في البداية، ثم يمكن التوسع لاحقًا
+- النشر: تشغيل محلي مباشر في البداية، ثم يمكن التوسع لاحقًا
 
 ## لماذا Spring Boot لهذا المشروع
 
@@ -392,7 +392,7 @@ Quartz أو Spring Batch
 
 ```text
 JUnit 5
-Testcontainers PostgreSQL
+قاعدة PostgreSQL محلية مخصصة للاختبار (allal_article_test)
 Spring Security Tests
 ```
 
@@ -401,19 +401,17 @@ Spring Security Tests
 المرحلة الأولى:
 
 ```text
-Docker Compose
-Spring Boot API
-PostgreSQL
-Redis
-Nginx / reverse proxy
+Spring Boot API يعمل مباشرة عبر ./mvnw
+PostgreSQL مثبت محليًا على الجهاز
+Redis لاحقًا عند الحاجة
+Nginx / reverse proxy عند النشر على خادم
 Cloudflare R2 للصور والمرفقات والـ PDF
 ```
 
 المطلوب لاحقًا:
 
-- ملف `Dockerfile`.
-- ملف `docker-compose.yml`.
 - profile للتطوير و profile للإنتاج.
+- سكربت تشغيل موحّد للباك اند والفرونت اند.
 - backup يومي لقاعدة البيانات.
 - سياسة backup/retention منفصلة للأصول المخزنة في Cloudflare R2.
 - مراقبة logs.

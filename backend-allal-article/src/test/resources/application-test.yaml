@@ -1,0 +1,21 @@
+# إعدادات الاختبارات — قاعدة بيانات محلية منفصلة عن قاعدة التطوير.
+# أنشئها مرة واحدة:
+#   createdb -O allal_user allal_article_test
+spring:
+  datasource:
+    url: ${TEST_DB_URL:jdbc:postgresql://localhost:5432/allal_article_test}
+    username: ${TEST_DB_USERNAME:allal_user}
+    password: ${TEST_DB_PASSWORD:allal_pass@39}
+    driver-class-name: org.postgresql.Driver
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/platform
+    schemas: platform
+    default-schema: platform
+    create-schemas: true
+    baseline-on-migrate: false
+
+platform:
+  owner:
+    password: TestOwner@2026!

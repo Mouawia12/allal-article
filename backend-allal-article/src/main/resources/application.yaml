@@ -2,6 +2,12 @@ spring:
   application:
     name: backend-allal-article
 
+  # يستورد ملف .env المحلي كملف خصائص — آلية مدمجة في Spring Boot 3،
+  # وهي بديل env_file الذي كان يوفّره docker-compose. optional: يعني
+  # أن غياب الملف لا يمنع الإقلاع (مفيد في بيئات تضبط المتغيرات فعليًا).
+  config:
+    import: optional:file:.env[.properties]
+
   servlet:
     multipart:
       max-file-size: 20MB
@@ -49,6 +55,12 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: ${SERVER_CONTEXT_PATH:/}
+
+# كلمة مرور مالك المنصة — تُقرأ من .env عبر بيئة Spring.
+# ملاحظة: System.getenv لا يرى قيم .env، لذلك يجب تعريفها هنا.
+platform:
+  owner:
+    password: ${PLATFORM_OWNER_PASSWORD:}
 
 app:
   jwt:
