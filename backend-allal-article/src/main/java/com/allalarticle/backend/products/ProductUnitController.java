@@ -37,6 +37,20 @@ public class ProductUnitController {
                 .body(ApiResponse.ok(ProductUnitResponse.from(unitRepo.save(unit))));
     }
 
+    @PutMapping("/{id}")
+    @PreAuthorize("@permChecker.hasPermission(authentication, 'products.create')")
+    public ResponseEntity<ApiResponse<ProductUnitResponse>> update(
+            @PathVariable Long id, @Valid @RequestBody ProductUnitRequest req) {
+        var unit = unitRepo.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.NOT_FOUND, "Unit not found", HttpStatus.NOT_FOUND));
+        if (unit.isSystem()) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Cannot edit system unit", HttpStatus.FORBIDDEN);
+        }
+        unit.setName(req.name());
+        unit.setSymbol(req.symbol());
+        return ResponseEntity.ok(ApiResponse.ok(ProductUnitResponse.from(unitRepo.save(unit))));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("@permChecker.hasPermission(authentication, 'products.create')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {

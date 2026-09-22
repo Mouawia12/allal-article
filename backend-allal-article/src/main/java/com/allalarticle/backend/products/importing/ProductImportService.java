@@ -101,6 +101,11 @@ public class ProductImportService {
         List<ImportedProductPayload> items = request != null && request.items() != null && !request.items().isEmpty()
                 ? request.items()
                 : job.items();
+        // Drop null / blank-name items so client-supplied payloads cannot reach
+        // bulkCreate with an invalid name (the async path applies the same guard).
+        items = items.stream()
+                .filter(p -> p != null && p.name() != null && !p.name().isBlank())
+                .toList();
         if (items.isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "لا توجد أصناف للحفظ", HttpStatus.BAD_REQUEST);

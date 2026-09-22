@@ -26,3 +26,5 @@ export { emailNotificationsApi } from "./emailNotificationsApi";
 export { aiSettingsApi } from "./aiSettingsApi";
 export { mediaApi } from "./mediaApi";
 export { productImportApi } from "./productImportApi";
+export { default as partnershipsApi } from "./partnershipsApi";
+export { default as ownerApi } from "./ownerApi";

@@ -50,6 +50,10 @@ public class Supplier {
 
     private String address;
 
+    private Double latitude;
+
+    private Double longitude;
+
     @Column(length = 80)
     private String category;
 

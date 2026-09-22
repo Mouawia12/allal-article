@@ -100,7 +100,11 @@ function LogEntry({ log, isLast }) {
   const [expanded, setExpanded] = useState(false);
 
   let details = {};
-  try { details = log.details_json ? JSON.parse(log.details_json) : {}; } catch (_) {}
+  try {
+    details = log.details_json ? JSON.parse(log.details_json) : {};
+  } catch (err) {
+    console.warn("Invalid JSON in audit log details (id:", log.id, ")", err);
+  }
 
   return (
     <SoftBox display="flex" gap={2} mb={isLast ? 0 : 3}>

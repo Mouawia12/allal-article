@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
@@ -21,6 +22,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.customer.id = :id AND o.deletedAt IS NULL")
     BigDecimal sumTotalByCustomerId(@Param("id") Long id);
+
+    /** Batch variant of {@link #sumTotalByCustomerId}: returns rows of [customerId, sumTotal] for the given ids. */
+    @Query("SELECT o.customer.id, COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.customer.id IN :ids AND o.deletedAt IS NULL GROUP BY o.customer.id")
+    List<Object[]> sumTotalGroupedByCustomerIds(@Param("ids") Collection<Long> ids);
 
     @Query("""
         SELECT o FROM Order o

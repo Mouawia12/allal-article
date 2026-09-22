@@ -42,6 +42,10 @@ public class Customer {
 
     private String address;
 
+    private Double latitude;
+
+    private Double longitude;
+
     @Column(name = "shipping_route", length = 200)
     private String shippingRoute;
 

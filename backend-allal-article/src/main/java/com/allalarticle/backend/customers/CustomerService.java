@@ -22,10 +22,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,7 +53,27 @@ public class CustomerService {
         var page = (q != null && !q.isBlank())
                 ? customerRepo.search(q.trim(), pageable)
                 : customerRepo.findByDeletedAtIsNull(pageable);
-        return PageResponse.from(page.map(this::toResponse));
+
+        var ids = page.getContent().stream().map(Customer::getId).toList();
+        if (ids.isEmpty()) {
+            return PageResponse.from(page.map(c -> CustomerResponse.from(c, BigDecimal.ZERO, BigDecimal.ZERO)));
+        }
+
+        // Two grouped aggregate queries instead of two queries per customer (N+1).
+        Map<Long, BigDecimal> orderTotals  = toSumMap(orderRepo.sumTotalGroupedByCustomerIds(ids));
+        Map<Long, BigDecimal> paymentNets  = toSumMap(paymentRepo.sumNetGroupedByCustomerIds(ids));
+
+        return PageResponse.from(page.map(c -> CustomerResponse.from(c,
+                orderTotals.getOrDefault(c.getId(), BigDecimal.ZERO),
+                paymentNets.getOrDefault(c.getId(), BigDecimal.ZERO))));
+    }
+
+    /** Converts grouped [customerId, sum] rows into a lookup map. */
+    private static Map<Long, BigDecimal> toSumMap(List<Object[]> rows) {
+        return rows.stream().collect(Collectors.toMap(
+                r -> (Long) r[0],
+                r -> r[1] != null ? (BigDecimal) r[1] : BigDecimal.ZERO,
+                (a, b) -> a));
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +92,8 @@ public class CustomerService {
                 .phone2(req.phone2())
                 .email(req.email())
                 .address(req.address())
+                .latitude(req.latitude())
+                .longitude(req.longitude())
                 .shippingRoute(req.shippingRoute())
                 .notes(req.notes());
 
@@ -93,6 +117,8 @@ public class CustomerService {
         c.setPhone2(req.phone2());
         c.setEmail(req.email());
         c.setAddress(req.address());
+        c.setLatitude(req.latitude());
+        c.setLongitude(req.longitude());
         c.setShippingRoute(req.shippingRoute());
         c.setNotes(req.notes());
         if (req.openingBalance() != null) c.setOpeningBalance(req.openingBalance());

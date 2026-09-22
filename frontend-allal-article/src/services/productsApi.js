@@ -27,8 +27,11 @@ export const productsApi = {
   listCategories: () => apiClient.get("/api/categories"),
   createCategory: (data) => apiClient.post("/api/categories", data),
   updateCategory: (id, data) => apiClient.put(`/api/categories/${id}`, data),
+  deleteCategory: (id) => apiClient.delete(`/api/categories/${id}`),
 
   // Units
   listUnits: () => apiClient.get("/api/product-units"),
   createUnit: (data) => apiClient.post("/api/product-units", data),
+  updateUnit: (id, data) => apiClient.put(`/api/product-units/${id}`, data),
+  deleteUnit: (id) => apiClient.delete(`/api/product-units/${id}`),
 };

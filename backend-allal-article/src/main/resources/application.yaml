@@ -10,7 +10,7 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:allal_article}}
     username: ${DB_USERNAME:allal_user}
-    password: ${DB_PASSWORD:allal_pass@39}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:10}
@@ -34,7 +34,7 @@ spring:
     host: ${MAIL_HOST:live.smtp.mailtrap.io}
     port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME:api}
-    password: ${MAIL_PASSWORD:649dc7050c3d362aa961a8c658f5038a}
+    password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
@@ -82,7 +82,7 @@ ai:
     model: ${OPENAI_MODEL:gpt-4o}
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
-    model: ${ANTHROPIC_MODEL:claude-opus-4-7}
+    model: ${ANTHROPIC_MODEL:claude-opus-4-8}
 
 management:
   endpoints:

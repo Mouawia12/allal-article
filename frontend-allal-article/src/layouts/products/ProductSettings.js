@@ -43,19 +43,44 @@ import Footer from "examples/Footer";
 
 import { productSettings, updateProductSettings } from "./mockProductData";
 import { hasErrors, isBlank } from "utils/formErrors";
+import { referenceCache } from "utils/referenceCache";
 import { useI18n } from "i18n";
-import { emailNotificationsApi, usersApi } from "services";
+import { emailNotificationsApi, productsApi, usersApi } from "services";
+
+// Categories have no color column in the backend; derive a stable chip color from
+// the id so the palette is consistent across reloads without a schema change.
+const CATEGORY_COLORS = [
+  "#17c1e8", "#cb0c9f", "#82d616", "#fbcf33",
+  "#ea0606", "#5e72e4", "#3a416f", "#f53939",
+];
+const colorForId = (id) => CATEGORY_COLORS[Math.abs(Number(id) || 0) % CATEGORY_COLORS.length];
+
+function apiErrorMessage(err, fallback) {
+  return err?.response?.data?.message || fallback;
+}
 
 // ─── Units Tab ────────────────────────────────────────────────────────────────
 function UnitsTab() {
   const { t } = useI18n();
-  const [units, setUnits] = useState(productSettings.units);
+  const [units, setUnits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [dialog, setDialog] = useState(null); // null | { mode, item }
   const [form, setForm] = useState({ name: "", symbol: "" });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    productsApi.listUnits()
+      .then((r) => { setUnits(Array.isArray(r.data) ? r.data : []); setLoadError(""); })
+      .catch((err) => setLoadError(apiErrorMessage(err, "تعذر تحميل الوحدات")))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
 
   const openAdd  = () => { setForm({ name: "", symbol: "" }); setErrors({}); setDialog({ mode: "add" }); };
-  const openEdit = (u) => { setForm({ name: u.name, symbol: u.symbol }); setErrors({}); setDialog({ mode: "edit", item: u }); };
+  const openEdit = (u) => { setForm({ name: u.name, symbol: u.symbol || "" }); setErrors({}); setDialog({ mode: "edit", item: u }); };
   const setField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
@@ -65,30 +90,40 @@ function UnitsTab() {
     const nextErrors = {};
     const name = form.name.trim();
     if (isBlank(name)) nextErrors.name = t("اسم الوحدة مطلوب");
-    if (units.some((u) => u.id !== dialog.item?.id && u.name.trim() === name)) {
+    if (units.some((u) => u.id !== dialog.item?.id && (u.name || "").trim() === name)) {
       nextErrors.name = "هذه الوحدة موجودة من قبل";
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
-    let next;
-    if (dialog.mode === "add") {
-      const newU = { id: Date.now(), name, symbol: form.symbol.trim(), isSystem: false };
-      next = [...units, newU];
-    } else {
-      next = units.map((u) => u.id === dialog.item.id ? { ...u, name, symbol: form.symbol.trim() } : u);
-    }
-    setUnits(next);
-    updateProductSettings({ units: next });
-    setDialog(null);
+
+    const payload = { name, symbol: form.symbol.trim() };
+    const request = dialog.mode === "add"
+      ? productsApi.createUnit(payload)
+      : productsApi.updateUnit(dialog.item.id, payload);
+
+    setSaving(true);
+    request
+      .then(() => { referenceCache.invalidate("units"); setDialog(null); load(); })
+      .catch((err) => setErrors({ _global: apiErrorMessage(err, "تعذر حفظ الوحدة") }))
+      .finally(() => setSaving(false));
   };
 
   const remove = (id) => {
-    const next = units.filter((u) => u.id !== id);
-    setUnits(next);
-    updateProductSettings({ units: next });
+    productsApi.deleteUnit(id)
+      .then(() => { referenceCache.invalidate("units"); load(); })
+      .catch((err) => setLoadError(apiErrorMessage(err, "تعذر حذف الوحدة")));
   };
+
+  if (loading) {
+    return (
+      <SoftBox display="flex" justifyContent="center" alignItems="center" py={6}>
+        <CircularProgress size={28} />
+      </SoftBox>
+    );
+  }
 
   return (
     <>
+      {loadError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>{loadError}</Alert>}
       <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <SoftTypography variant="h6" fontWeight="bold">وحدات القياس</SoftTypography>
         <SoftButton variant="gradient" color="info" size="small" startIcon={<AddIcon />} onClick={openAdd}>
@@ -110,24 +145,24 @@ function UnitsTab() {
                 <TableCell sx={{ fontSize: 13 }}>{u.name}</TableCell>
                 <TableCell sx={{ fontSize: 12, fontFamily: "monospace" }}>{u.symbol}</TableCell>
                 <TableCell>
-                  {u.isSystem
+                  {u.system
                     ? <Chip label="نظام" size="small" color="default" sx={{ fontSize: 11 }} />
                     : <Chip label="مخصص" size="small" color="info" sx={{ fontSize: 11 }} />
                   }
                 </TableCell>
                 <TableCell>
                   <SoftBox display="flex" gap={0.5}>
-                    <Tooltip title={u.isSystem ? "وحدة النظام لا يمكن تعديلها" : "تعديل"}>
+                    <Tooltip title={u.system ? "وحدة النظام لا يمكن تعديلها" : "تعديل"}>
                       <span>
-                        <IconButton size="small" disabled={u.isSystem} onClick={() => openEdit(u)}>
-                          {u.isSystem ? <LockIcon sx={{ fontSize: 14, color: "#ccc" }} /> : <EditIcon sx={{ fontSize: 14 }} />}
+                        <IconButton size="small" disabled={u.system} onClick={() => openEdit(u)}>
+                          {u.system ? <LockIcon sx={{ fontSize: 14, color: "#ccc" }} /> : <EditIcon sx={{ fontSize: 14 }} />}
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title={u.isSystem ? "لا يمكن حذف وحدات النظام" : "حذف"}>
+                    <Tooltip title={u.system ? "لا يمكن حذف وحدات النظام" : "حذف"}>
                       <span>
-                        <IconButton size="small" disabled={u.isSystem} onClick={() => remove(u.id)}>
-                          <DeleteOutlineIcon sx={{ fontSize: 14, color: u.isSystem ? "#ccc" : "#ea0606" }} />
+                        <IconButton size="small" disabled={u.system} onClick={() => remove(u.id)}>
+                          <DeleteOutlineIcon sx={{ fontSize: 14, color: u.system ? "#ccc" : "#ea0606" }} />
                         </IconButton>
                       </span>
                     </Tooltip>
@@ -152,8 +187,8 @@ function UnitsTab() {
           </SoftBox>
         </DialogContent>
         <DialogActions>
-          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setDialog(null)}>إلغاء</SoftButton>
-          <SoftButton variant="gradient" color="info" size="small" onClick={save}>حفظ</SoftButton>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setDialog(null)} disabled={saving}>إلغاء</SoftButton>
+          <SoftButton variant="gradient" color="info" size="small" onClick={save} disabled={saving}>{saving ? "جارٍ الحفظ..." : "حفظ"}</SoftButton>
         </DialogActions>
       </Dialog>
     </>
@@ -163,13 +198,25 @@ function UnitsTab() {
 // ─── Categories Tab ───────────────────────────────────────────────────────────
 function CategoriesTab() {
   const { t } = useI18n();
-  const [cats, setCats] = useState(productSettings.categories);
+  const [cats, setCats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [dialog, setDialog] = useState(null);
-  const [form, setForm] = useState({ name: "", color: "#17c1e8" });
+  const [form, setForm] = useState({ name: "" });
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
-  const openAdd  = () => { setForm({ name: "", color: "#17c1e8" }); setErrors({}); setDialog({ mode: "add" }); };
-  const openEdit = (c) => { setForm({ name: c.name, color: c.color }); setErrors({}); setDialog({ mode: "edit", item: c }); };
+  const load = () => {
+    setLoading(true);
+    productsApi.listCategories()
+      .then((r) => { setCats(Array.isArray(r.data) ? r.data : []); setLoadError(""); })
+      .catch((err) => setLoadError(apiErrorMessage(err, "تعذر تحميل التصنيفات")))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const openAdd  = () => { setForm({ name: "" }); setErrors({}); setDialog({ mode: "add" }); };
+  const openEdit = (c) => { setForm({ name: c.name }); setErrors({}); setDialog({ mode: "edit", item: c }); };
   const setField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     if (errors[field] || errors._global) setErrors((current) => ({ ...current, [field]: "", _global: "" }));
@@ -179,29 +226,41 @@ function CategoriesTab() {
     const nextErrors = {};
     const name = form.name.trim();
     if (isBlank(name)) nextErrors.name = t("اسم التصنيف مطلوب");
-    if (cats.some((c) => c.id !== dialog.item?.id && c.name.trim() === name)) {
+    if (cats.some((c) => c.id !== dialog.item?.id && (c.name || "").trim() === name)) {
       nextErrors.name = "هذا التصنيف موجود من قبل";
     }
     if (hasErrors(nextErrors)) { setErrors(nextErrors); return; }
-    let next;
-    if (dialog.mode === "add") {
-      next = [...cats, { id: Date.now(), name, color: form.color }];
-    } else {
-      next = cats.map((c) => c.id === dialog.item.id ? { ...c, name, color: form.color } : c);
-    }
-    setCats(next);
-    updateProductSettings({ categories: next });
-    setDialog(null);
+
+    // Backend CategoryRequest requires name + sortOrder; slug/description/parent optional.
+    const payload = { name, sortOrder: dialog.item?.sortOrder ?? 0 };
+    const request = dialog.mode === "add"
+      ? productsApi.createCategory(payload)
+      : productsApi.updateCategory(dialog.item.id, payload);
+
+    setSaving(true);
+    request
+      .then(() => { referenceCache.invalidate("categories"); setDialog(null); load(); })
+      .catch((err) => setErrors({ _global: apiErrorMessage(err, "تعذر حفظ التصنيف") }))
+      .finally(() => setSaving(false));
   };
 
   const remove = (id) => {
-    const next = cats.filter((c) => c.id !== id);
-    setCats(next);
-    updateProductSettings({ categories: next });
+    productsApi.deleteCategory(id)
+      .then(() => { referenceCache.invalidate("categories"); load(); })
+      .catch((err) => setLoadError(apiErrorMessage(err, "تعذر حذف التصنيف")));
   };
+
+  if (loading) {
+    return (
+      <SoftBox display="flex" justifyContent="center" alignItems="center" py={6}>
+        <CircularProgress size={28} />
+      </SoftBox>
+    );
+  }
 
   return (
     <>
+      {loadError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setLoadError("")}>{loadError}</Alert>}
       <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <SoftTypography variant="h6" fontWeight="bold">تصنيفات الأصناف</SoftTypography>
         <SoftButton variant="gradient" color="info" size="small" startIcon={<AddIcon />} onClick={openAdd}>
@@ -212,7 +271,7 @@ function CategoriesTab() {
         {cats.map((c) => (
           <SoftBox key={c.id} display="flex" alignItems="center" gap={0.5}
             sx={{ border: "1px solid #e9ecef", borderRadius: 2, px: 1.5, py: 0.8, background: "#fff" }}>
-            <SoftBox sx={{ width: 12, height: 12, borderRadius: "50%", background: c.color, flexShrink: 0 }} />
+            <SoftBox sx={{ width: 12, height: 12, borderRadius: "50%", background: colorForId(c.id), flexShrink: 0 }} />
             <SoftTypography variant="caption" fontWeight="medium">{c.name}</SoftTypography>
             <IconButton size="small" onClick={() => openEdit(c)} sx={{ p: 0.2 }}>
               <EditIcon sx={{ fontSize: 12, color: "#8392ab" }} />
@@ -222,6 +281,9 @@ function CategoriesTab() {
             </IconButton>
           </SoftBox>
         ))}
+        {!cats.length && (
+          <SoftTypography variant="caption" color="secondary">لا توجد تصنيفات بعد.</SoftTypography>
+        )}
       </SoftBox>
 
       <Dialog open={!!dialog} onClose={() => setDialog(null)} maxWidth="xs" fullWidth>
@@ -232,18 +294,11 @@ function CategoriesTab() {
             <TextField label="اسم التصنيف *" size="small" fullWidth value={form.name}
               onChange={(e) => setField("name", e.target.value)}
               error={!!errors.name} helperText={errors.name || ""} />
-            <SoftBox display="flex" alignItems="center" gap={1}>
-              <SoftTypography variant="caption" color="secondary">اللون:</SoftTypography>
-              <input type="color" value={form.color}
-                onChange={(e) => setField("color", e.target.value)}
-                style={{ width: 40, height: 32, border: "none", borderRadius: 4, cursor: "pointer" }} />
-              <SoftTypography variant="caption" color="secondary" sx={{ fontFamily: "monospace" }}>{form.color}</SoftTypography>
-            </SoftBox>
           </SoftBox>
         </DialogContent>
         <DialogActions>
-          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setDialog(null)}>إلغاء</SoftButton>
-          <SoftButton variant="gradient" color="info" size="small" onClick={save}>حفظ</SoftButton>
+          <SoftButton variant="outlined" color="secondary" size="small" onClick={() => setDialog(null)} disabled={saving}>إلغاء</SoftButton>
+          <SoftButton variant="gradient" color="info" size="small" onClick={save} disabled={saving}>{saving ? "جارٍ الحفظ..." : "حفظ"}</SoftButton>
         </DialogActions>
       </Dialog>
     </>
@@ -294,6 +349,9 @@ function VariantAttrsTab() {
 
   return (
     <>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        خصائص المتغيرات تُحفظ محلياً على هذا الجهاز فقط حالياً (لا يوجد ربط خادم بعد).
+      </Alert>
       <SoftBox display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <SoftTypography variant="h6" fontWeight="bold">خصائص المتغيرات</SoftTypography>
         <SoftButton variant="gradient" color="info" size="small" startIcon={<AddIcon />} onClick={openAdd}>

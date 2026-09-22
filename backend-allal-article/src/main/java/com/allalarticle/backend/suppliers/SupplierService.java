@@ -46,6 +46,7 @@ public class SupplierService {
                 .phone(req.phone()).email(req.email())
                 .taxNumber(req.taxNumber()).commercialRegister(req.commercialRegister())
                 .nisNumber(req.nisNumber()).address(req.address())
+                .latitude(req.latitude()).longitude(req.longitude())
                 .category(req.category()).paymentTerms(req.paymentTerms())
                 .notes(req.notes()).createdById(extractUserId(auth));
         if (req.openingBalance() != null) b.openingBalance(req.openingBalance());
@@ -66,7 +67,9 @@ public class SupplierService {
         s.setPhone(req.phone()); s.setEmail(req.email());
         s.setTaxNumber(req.taxNumber()); s.setCommercialRegister(req.commercialRegister());
         s.setNisNumber(req.nisNumber());
-        s.setAddress(req.address()); s.setCategory(req.category());
+        s.setAddress(req.address());
+        s.setLatitude(req.latitude()); s.setLongitude(req.longitude());
+        s.setCategory(req.category());
         s.setPaymentTerms(req.paymentTerms()); s.setNotes(req.notes());
         if (req.openingBalance() != null) s.setOpeningBalance(req.openingBalance());
         s.setWilaya(req.wilayaId() != null

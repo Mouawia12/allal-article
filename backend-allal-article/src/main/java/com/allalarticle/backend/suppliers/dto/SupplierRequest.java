@@ -15,6 +15,8 @@ public record SupplierRequest(
         @Size(max = 80) String nisNumber,
         Long wilayaId,
         String address,
+        Double latitude,
+        Double longitude,
         @Size(max = 80) String category,
         @Size(max = 120) String paymentTerms,
         BigDecimal openingBalance,

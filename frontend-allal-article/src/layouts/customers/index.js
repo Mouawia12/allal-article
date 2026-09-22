@@ -39,6 +39,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import MapIcon from "@mui/icons-material/Map";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -51,6 +52,9 @@ import { customersApi, ordersApi, referenceApi, usersApi } from "services";
 import { buildCustomerShipments } from "utils/customerShipments";
 import { getApiErrorMessage } from "utils/formErrors";
 import { useI18n } from "i18n";
+import LocationMap from "components/Maps/LocationMap";
+import LocationPicker from "components/Maps/LocationPicker";
+import EntitiesMap from "components/Maps/EntitiesMap";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getInitials(name) {
@@ -652,6 +656,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">سجل الطلبيات</SoftTypography>} />
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">سجل الدفعات</SoftTypography>} />
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">الشحن</SoftTypography>} />
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">الموقع</SoftTypography>} />
         </Tabs>
       </SoftBox>
 
@@ -660,6 +665,9 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
           <Alert severity="warning" sx={{ mb: 2 }}>
             {usersError}
           </Alert>
+        )}
+        {tab === 4 && (
+          <LocationMap lat={customer.latitude} lng={customer.longitude} label={customer.name} />
         )}
         {tab === 0 && (
           <Grid container spacing={2}>
@@ -968,6 +976,7 @@ export function CustomerDetailDialog({ customer: initialCustomer, onClose, onUpd
 // ─── Add / Edit Customer Dialog ───────────────────────────────────────────────
 const emptyForm = {
   name: "", phone: "", phone2: "", wilayaId: "", address: "",
+  latitude: "", longitude: "",
   shippingRoute: "", email: "", openingBalance: "", openingBalanceDirection: "debit", notes: "",
 };
 
@@ -988,6 +997,8 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
           phone2: editCustomer.phone2 || "",
           wilayaId: editCustomer.wilayaId || "",
           address: editCustomer.address || "",
+          latitude: editCustomer.latitude ?? "",
+          longitude: editCustomer.longitude ?? "",
           shippingRoute: editCustomer.shippingRoute || "",
           email: editCustomer.email || "",
           openingBalance: Math.abs(Number(editCustomer.openingBalance) || 0) || "",
@@ -1012,6 +1023,10 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
     if (!form.phone.trim()) errs.phone = t("رقم الهاتف مطلوب");
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = t("بريد إلكتروني غير صالح");
     if (form.openingBalance && isNaN(Number(form.openingBalance))) errs.openingBalance = t("يجب أن يكون رقماً");
+    if (form.latitude !== "" && (isNaN(Number(form.latitude)) || Number(form.latitude) < -90 || Number(form.latitude) > 90))
+      errs._global = t("خط العرض يجب أن يكون بين -90 و 90");
+    else if (form.longitude !== "" && (isNaN(Number(form.longitude)) || Number(form.longitude) < -180 || Number(form.longitude) > 180))
+      errs._global = t("خط الطول يجب أن يكون بين -180 و 180");
     return errs;
   };
 
@@ -1026,6 +1041,8 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
         phone2: form.phone2.trim() || null,
         wilayaId: form.wilayaId ? Number(form.wilayaId) : null,
         address: form.address.trim() || null,
+        latitude: form.latitude === "" || form.latitude == null ? null : Number(form.latitude),
+        longitude: form.longitude === "" || form.longitude == null ? null : Number(form.longitude),
         shippingRoute: form.shippingRoute.trim() || null,
         email: form.email.trim() || null,
         openingBalance: signedOpeningBalance(form.openingBalance, form.openingBalanceDirection),
@@ -1111,6 +1128,16 @@ function CustomerFormDialog({ open, onClose, onSaved, editCustomer, wilayas }) {
                 <MenuItem value="credit">دائن - نحنا نخلصوه</MenuItem>
               </Select>
             </FormControl>
+          </Grid>
+          <Grid item xs={12}>
+            <SoftTypography variant="caption" fontWeight="medium" color="text" display="block" mb={1}>
+              موقع الزبون على الخريطة
+            </SoftTypography>
+            <LocationPicker
+              lat={form.latitude}
+              lng={form.longitude}
+              onChange={({ lat, lng }) => setForm((f) => ({ ...f, latitude: lat ?? "", longitude: lng ?? "" }))}
+            />
           </Grid>
           <Grid item xs={12}>
             <TextField fullWidth label="ملاحظات" size="small" multiline rows={2}
@@ -1268,6 +1295,7 @@ function Customers() {
   const [addDialog, setAddDialog] = useState(false);
   const [editCustomer, setEditCustomer] = useState(null);
   const [printDialog, setPrintDialog] = useState(false);
+  const [mapDialog, setMapDialog] = useState(false);
   const [pageError, setPageError] = useState("");
   const { toast, show: showToast, hide: hideToast } = useToast();
 
@@ -1343,6 +1371,10 @@ function Customers() {
             <SoftTypography variant="body2" color="text">إدارة قائمة الزبائن والمدفوعات والرصيد</SoftTypography>
           </SoftBox>
           <SoftBox display="flex" gap={1}>
+            <SoftButton variant="outlined" color="dark"
+              startIcon={<MapIcon />} onClick={() => setMapDialog(true)}>
+              عرض على الخريطة
+            </SoftButton>
             <SoftButton variant="outlined" color={tab === 3 ? "error" : "secondary"}
               startIcon={<PrintIcon />} onClick={() => setPrintDialog(true)}>
               {tab === 3 ? "طباعة تقرير الديون" : "طباعة تقرير"}
@@ -1442,6 +1474,27 @@ function Customers() {
         isDebtMode={tab === 3}
         wilayaFilter={wilayaFilter}
       />
+
+      <Dialog open={mapDialog} onClose={() => setMapDialog(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <SoftBox display="flex" alignItems="center" justifyContent="space-between">
+            <SoftTypography variant="h6" fontWeight="bold">مواقع الزبائن على الخريطة</SoftTypography>
+            <IconButton onClick={() => setMapDialog(false)} size="small"><CloseIcon /></IconButton>
+          </SoftBox>
+        </DialogTitle>
+        <DialogContent sx={{ p: 2 }}>
+          <EntitiesMap
+            items={filtered.map((c) => ({
+              id: c.id,
+              name: c.name,
+              lat: c.latitude,
+              lng: c.longitude,
+              subtitle: c.phone || c.wilaya || "",
+            }))}
+            onSelect={(it) => { setMapDialog(false); setSelectedCustomer(filtered.find((c) => c.id === it.id) || null); }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Snackbar open={toast.open} autoHideDuration={4000} onClose={hideToast}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>

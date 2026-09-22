@@ -27,6 +27,7 @@ import EmailIcon from "@mui/icons-material/Email";
 import LinkIcon from "@mui/icons-material/Link";
 import LinkOffIcon from "@mui/icons-material/LinkOff";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
+import MapIcon from "@mui/icons-material/Map";
 import PaymentIcon from "@mui/icons-material/Payment";
 import PhoneIcon from "@mui/icons-material/Phone";
 import ReceiptIcon from "@mui/icons-material/Receipt";
@@ -43,6 +44,9 @@ import Footer from "examples/Footer";
 import { purchasesApi, suppliersApi, referenceApi } from "services";
 import { applyApiErrors, getApiErrorMessage, hasErrors, isBlank } from "utils/formErrors";
 import { useI18n } from "i18n";
+import LocationMap from "components/Maps/LocationMap";
+import LocationPicker from "components/Maps/LocationPicker";
+import EntitiesMap from "components/Maps/EntitiesMap";
 
 const formatDZD = (n) => (n != null ? Number(n).toLocaleString("fr-DZ") : "0");
 const resolveSupplierLink = () => ({ isLinked: false, supplier: null, partner: null, matchedBy: null, permissions: {} });
@@ -87,6 +91,8 @@ const emptySupplierForm = {
   nisNumber: "",
   wilayaId: "",
   address: "",
+  latitude: "",
+  longitude: "",
   category: "",
   paymentTerms: "",
   openingBalance: "",
@@ -105,6 +111,8 @@ function buildSupplierForm(supplier = null) {
     nisNumber: supplier.nisNumber || "",
     wilayaId: supplier.wilayaId || "",
     address: supplier.address || "",
+    latitude: supplier.latitude ?? "",
+    longitude: supplier.longitude ?? "",
     category: supplier.category || "",
     paymentTerms: supplier.paymentTerms || "",
     openingBalance: Math.abs(Number(supplier.openingBalance) || 0) || "",
@@ -234,10 +242,14 @@ function SupplierDetailDialog({ supplier, onClose, onEdit }) {
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">أوامر الشراء</SoftTypography>} />
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">الدفعات</SoftTypography>} />
           <Tab label={<SoftTypography variant="caption" fontWeight="medium">الربط</SoftTypography>} />
+          <Tab label={<SoftTypography variant="caption" fontWeight="medium">الموقع</SoftTypography>} />
         </Tabs>
       </SoftBox>
 
       <DialogContent sx={{ p: 2, minHeight: 300 }}>
+        {tab === 4 && (
+          <LocationMap lat={supplier.latitude} lng={supplier.longitude} label={supplier.name} />
+        )}
         {tab === 0 && (
           <Grid container spacing={2}>
             {[
@@ -385,6 +397,10 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
     if (form.openingBalance && !Number.isFinite(Number(form.openingBalance))) {
       errs.openingBalance = t("الرصيد الافتتاحي يجب أن يكون رقماً");
     }
+    if (form.latitude !== "" && (isNaN(Number(form.latitude)) || Number(form.latitude) < -90 || Number(form.latitude) > 90))
+      errs._global = t("خط العرض يجب أن يكون بين -90 و 90");
+    else if (form.longitude !== "" && (isNaN(Number(form.longitude)) || Number(form.longitude) < -180 || Number(form.longitude) > 180))
+      errs._global = t("خط الطول يجب أن يكون بين -180 و 180");
     if (hasErrors(errs)) { setErrors(errs); return; }
     setSaving(true);
     setErrors({});
@@ -478,6 +494,16 @@ function SupplierFormDialog({ open, onClose, onSave, supplier = null, wilayas = 
             <TextField fullWidth size="small" label="شروط الدفع" value={form.paymentTerms}
               onChange={(e) => set("paymentTerms", e.target.value)} />
           </Grid>
+          <Grid item xs={12}>
+            <SoftTypography variant="caption" fontWeight="medium" color="text" display="block" mb={1}>
+              موقع المورد على الخريطة
+            </SoftTypography>
+            <LocationPicker
+              lat={form.latitude}
+              lng={form.longitude}
+              onChange={({ lat, lng }) => setForm((f) => ({ ...f, latitude: lat ?? "", longitude: lng ?? "" }))}
+            />
+          </Grid>
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2, gap: 1 }}>
@@ -499,6 +525,7 @@ function Suppliers() {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [addDialog, setAddDialog] = useState(false);
   const [editSupplier, setEditSupplier] = useState(null);
+  const [mapDialog, setMapDialog] = useState(false);
   const [pageError, setPageError] = useState("");
   const [toast, setToast] = useState({ open: false, message: "", severity: "success" });
   const showToast = (message, severity = "success") => setToast({ open: true, message, severity });
@@ -568,6 +595,8 @@ function Suppliers() {
       nisNumber: formData.nisNumber || null,
       wilayaId: formData.wilayaId ? Number(formData.wilayaId) : null,
       address: formData.address || null,
+      latitude: formData.latitude === "" || formData.latitude == null ? null : Number(formData.latitude),
+      longitude: formData.longitude === "" || formData.longitude == null ? null : Number(formData.longitude),
       category: formData.category || "عام",
       paymentTerms: formData.paymentTerms || null,
       openingBalance: signedOpeningBalance(formData.openingBalance, formData.openingBalanceDirection),
@@ -592,9 +621,14 @@ function Suppliers() {
             <SoftTypography variant="h4" fontWeight="bold">الموردين</SoftTypography>
             <SoftTypography variant="body2" color="text">إدارة بطاقات الموردين وربطهم مع شبكة الشركاء</SoftTypography>
           </SoftBox>
-          <SoftButton variant="gradient" color="info" startIcon={<AddIcon />} onClick={() => setAddDialog(true)}>
-            إضافة مورد
-          </SoftButton>
+          <SoftBox display="flex" gap={1}>
+            <SoftButton variant="outlined" color="dark" startIcon={<MapIcon />} onClick={() => setMapDialog(true)}>
+              عرض على الخريطة
+            </SoftButton>
+            <SoftButton variant="gradient" color="info" startIcon={<AddIcon />} onClick={() => setAddDialog(true)}>
+              إضافة مورد
+            </SoftButton>
+          </SoftBox>
         </SoftBox>
 
         {pageError && (
@@ -681,6 +715,27 @@ function Suppliers() {
         onClose={() => setEditSupplier(null)}
         onSave={(formData) => handleSaveSupplier(formData, editSupplier)}
       />
+
+      <Dialog open={mapDialog} onClose={() => setMapDialog(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          <SoftBox display="flex" alignItems="center" justifyContent="space-between">
+            <SoftTypography variant="h6" fontWeight="bold">مواقع الموردين على الخريطة</SoftTypography>
+            <IconButton onClick={() => setMapDialog(false)} size="small"><CloseIcon /></IconButton>
+          </SoftBox>
+        </DialogTitle>
+        <DialogContent sx={{ p: 2 }}>
+          <EntitiesMap
+            items={filtered.map((s) => ({
+              id: s.id,
+              name: s.name,
+              lat: s.latitude,
+              lng: s.longitude,
+              subtitle: s.phone || s.wilaya || "",
+            }))}
+            onSelect={(it) => { setMapDialog(false); setSelectedSupplier(filtered.find((s) => s.id === it.id) || null); }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Snackbar open={toast.open} autoHideDuration={4000}
         onClose={() => setToast((t) => ({ ...t, open: false }))}

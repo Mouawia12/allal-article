@@ -5,6 +5,7 @@ import com.allalarticle.backend.orders.entity.Order;
 import com.allalarticle.backend.reference.entity.Wilaya;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -74,6 +75,7 @@ public class RoadInvoice {
     private Long createdById;
 
     @OneToMany(mappedBy = "roadInvoice", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
     @Builder.Default
     private List<RoadInvoiceItem> items = new ArrayList<>();
 
@@ -83,6 +85,7 @@ public class RoadInvoice {
             joinColumns = @JoinColumn(name = "road_invoice_id"),
             inverseJoinColumns = @JoinColumn(name = "order_id")
     )
+    @BatchSize(size = 50)
     @Builder.Default
     private Set<Order> linkedOrders = new HashSet<>();
 

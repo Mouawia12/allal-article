@@ -12,6 +12,8 @@ public record CustomerRequest(
         @Size(max = 200) String email,
         Long wilayaId,
         String address,
+        Double latitude,
+        Double longitude,
         String shippingRoute,
         BigDecimal openingBalance,
         Long salespersonId,

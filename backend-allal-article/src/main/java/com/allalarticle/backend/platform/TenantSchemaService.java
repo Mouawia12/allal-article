@@ -1,9 +1,12 @@
 package com.allalarticle.backend.platform;
 
+import com.allalarticle.backend.common.exception.AppException;
+import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -101,7 +104,10 @@ public class TenantSchemaService {
             }
             log.debug("Executed tenant script: {}", classpathLocation);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to read tenant migration script: " + classpathLocation, e);
+            log.error("Failed to read tenant migration script: {}", classpathLocation, e);
+            throw new AppException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to read tenant migration script: " + classpathLocation,
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

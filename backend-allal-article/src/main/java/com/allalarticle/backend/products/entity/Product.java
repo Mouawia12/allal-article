@@ -2,6 +2,7 @@ package com.allalarticle.backend.products.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -11,6 +12,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "products")
+@BatchSize(size = 50) // batch-load lazy Product references (e.g. road-invoice items) to avoid N+1
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor @Builder
 public class Product {
