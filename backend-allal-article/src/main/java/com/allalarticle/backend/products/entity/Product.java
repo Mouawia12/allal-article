@@ -56,6 +56,13 @@ public class Product {
     @Builder.Default
     private String priceCurrency = "DZD";
 
+    /** Weighted average unit cost (CMP), recalculated on each purchase receipt. */
+    @Column(name = "cost_amount", precision = 14, scale = 4)
+    private BigDecimal costAmount;
+
+    @Column(name = "cost_updated_at")
+    private OffsetDateTime costUpdatedAt;
+
     @Column(name = "min_stock_qty", nullable = false, precision = 14, scale = 3)
     @Builder.Default
     private BigDecimal minStockQty = BigDecimal.ZERO;

@@ -21,6 +21,8 @@ public record ProductResponse(
         BigDecimal unitsPerPackage,
         BigDecimal currentPriceAmount,
         String priceCurrency,
+        BigDecimal costAmount,
+        OffsetDateTime costUpdatedAt,
         BigDecimal minStockQty,
         String description,
         String status,
@@ -49,6 +51,7 @@ public record ProductResponse(
                 unit != null ? unit.getSymbol(): null,
                 p.getBarcode(), p.isHasVariants(), p.getUnitsPerPackage(),
                 p.getCurrentPriceAmount(), p.getPriceCurrency(),
+                p.getCostAmount(), p.getCostUpdatedAt(),
                 p.getMinStockQty(), p.getDescription(), p.getStatus(), p.getCreatedAt(), p.getUpdatedAt(),
                 image,
                 primaryImageMediaId

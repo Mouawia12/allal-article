@@ -12,6 +12,7 @@ import com.allalarticle.backend.inventory.entity.StockMovement;
 import com.allalarticle.backend.inventory.entity.Warehouse;
 import com.allalarticle.backend.partnerships.PartnerDocumentSyncService;
 import com.allalarticle.backend.products.PriceListPricingService;
+import com.allalarticle.backend.products.ProductCostService;
 import com.allalarticle.backend.products.ProductRepository;
 import com.allalarticle.backend.products.entity.Product;
 import com.allalarticle.backend.purchases.dto.*;
@@ -56,6 +57,7 @@ public class PurchaseOrderService {
     private final JdbcTemplate jdbc;
     private final PartnerDocumentSyncService partnerDocumentSyncService;
     private final PriceListPricingService pricingService;
+    private final ProductCostService productCostService;
 
     @Transactional(readOnly = true)
     public PageResponse<PurchaseOrderResponse> list(String status, Long supplierId, Pageable pageable) {
@@ -173,6 +175,10 @@ public class PurchaseOrderService {
             item.setReceivedQty(received);
 
             if (received.compareTo(BigDecimal.ZERO) > 0) {
+                // Read the company-wide balance before this receipt lands — it is the weight the
+                // product's existing cost carries when averaged with the price just paid.
+                BigDecimal onHandBefore = stockRepo.totalOnHandByProductId(item.getProduct().getId());
+
                 var stock = stockRepo.findForUpdate(item.getProduct().getId(), warehouse.getId())
                         .orElseGet(() -> ProductStock.builder()
                                 .product(item.getProduct()).warehouse(warehouse).build());
@@ -193,6 +199,10 @@ public class PurchaseOrderService {
                         .sourceType("purchase_order")
                         .sourceId(po.getId())
                         .build());
+
+                productCostService.applyPurchaseReceipt(
+                        item.getProduct(), onHandBefore, received, item.getUnitPrice());
+                productRepo.save(item.getProduct());
             }
         }
 
