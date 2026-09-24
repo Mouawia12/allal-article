@@ -5,7 +5,8 @@ import com.allalarticle.backend.common.exception.ErrorCode;
 import com.allalarticle.backend.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +18,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -31,36 +35,11 @@ public class TenantSchemaService {
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
 
-    private static final String[] TENANT_SCRIPTS = {
-        "T01__roles_permissions.sql",
-        "T02__users.sql",
-        "T03__reference_data.sql",
-        "T04__customers.sql",
-        "T05__products.sql",
-        "T06__pricing.sql",
-        "T07__inventory.sql",
-        "T08__manufacturing.sql",
-        "T09__orders.sql",
-        "T10__returns.sql",
-        "T11__purchases.sql",
-        "T12__road_invoices.sql",
-        "T13__accounting.sql",
-        "T14__notifications.sql",
-        "T15__resource_locks.sql",
-        "T16__ai_audit.sql",
-        "T17__seed_roles_permissions.sql",
-        "T18__seed_wilayas.sql",
-        "T19__seed_reference_data.sql",
-        "T20__seed_chart_of_accounts.sql",
-        "T21__align_accounting_permissions.sql",
-        "T22__align_journal_reference_columns.sql",
-        "T23__align_accounting_defaults.sql",
-        "T24__align_purchase_permissions.sql",
-        "T25__align_purchase_order_item_timestamps.sql",
-        "T26__email_notifications.sql",
-        "T27__align_ai_settings_permissions.sql",
-        "T28__price_list_entity_defaults.sql"
-    };
+    /**
+     * Every T*.sql in the tenant migration folder runs, ordered by filename. Discovering them
+     * instead of listing them by hand means a newly added script can never be left unregistered.
+     */
+    private static final String TENANT_SCRIPT_PATTERN = "classpath*:db/migration/tenant/T*.sql";
 
     /**
      * Creates a new schema for the given tenant and runs all tenant migrations inside it.
@@ -79,8 +58,8 @@ public class TenantSchemaService {
         jdbcTemplate.execute("set search_path to \"" + schemaName + "\"");
 
         try {
-            for (String script : TENANT_SCRIPTS) {
-                executeSqlScript("db/migration/tenant/" + script, schemaName);
+            for (Resource script : resolveTenantScripts()) {
+                executeSqlScript(script);
             }
 
             seedOwnerUser(schemaName, ownerName, ownerEmail, ownerPassword);
@@ -91,22 +70,35 @@ public class TenantSchemaService {
         log.info("Tenant schema provisioned successfully: {}", schemaName);
     }
 
-    private void executeSqlScript(String classpathLocation, String schemaName) {
+    private Resource[] resolveTenantScripts() {
+        Resource[] scripts;
         try {
-            ClassPathResource resource = new ClassPathResource(classpathLocation);
-            if (!resource.exists()) {
-                log.warn("Tenant migration script not found: {}", classpathLocation);
-                return;
-            }
-            try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
-                String sql = FileCopyUtils.copyToString(reader);
-                jdbcTemplate.execute(sql);
-            }
-            log.debug("Executed tenant script: {}", classpathLocation);
+            scripts = new PathMatchingResourcePatternResolver().getResources(TENANT_SCRIPT_PATTERN);
         } catch (IOException e) {
-            log.error("Failed to read tenant migration script: {}", classpathLocation, e);
+            log.error("Failed to list tenant migration scripts", e);
             throw new AppException(ErrorCode.INTERNAL_ERROR,
-                    "Failed to read tenant migration script: " + classpathLocation,
+                    "Failed to list tenant migration scripts",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        if (scripts.length == 0) {
+            throw new AppException(ErrorCode.INTERNAL_ERROR,
+                    "No tenant migration scripts found on the classpath",
+                    HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        Arrays.sort(scripts, Comparator.comparing(r -> Objects.requireNonNull(r.getFilename())));
+        log.info("Tenant migration scripts to run: {}", scripts.length);
+        return scripts;
+    }
+
+    private void executeSqlScript(Resource resource) {
+        String name = resource.getFilename();
+        try (Reader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
+            jdbcTemplate.execute(FileCopyUtils.copyToString(reader));
+            log.debug("Executed tenant script: {}", name);
+        } catch (IOException e) {
+            log.error("Failed to read tenant migration script: {}", name, e);
+            throw new AppException(ErrorCode.INTERNAL_ERROR,
+                    "Failed to read tenant migration script: " + name,
                     HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
