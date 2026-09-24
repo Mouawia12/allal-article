@@ -38,6 +38,10 @@ public class Journal {
     @Column(name = "journal_date", nullable = false)
     private LocalDate journalDate;
 
+    /** Mirrors the journal book's type; the column is NOT NULL, so every entry must carry it. */
+    @Column(name = "journal_type", nullable = false, length = 30)
+    private String journalType;
+
     @Column(nullable = false, length = 30)
     @Builder.Default
     private String status = "draft";

@@ -66,6 +66,7 @@ public class JournalService {
         Journal journal = Journal.builder()
                 .journalNumber("TEMP")
                 .journalBook(book)
+                .journalType(book.getBookType())
                 .fiscalYear(fy)
                 .period(period)
                 .journalDate(req.journalDate())

@@ -37,6 +37,8 @@ public class NumberSequence {
 
     public String generateAndIncrement() {
         String num = String.format("%0" + padding + "d", nextNumber++);
-        return prefix + "-" + num;
+        // The seeded prefix already ends with its separator ("INV-2026-"); adding another
+        // produced numbers like INV-2026--00002.
+        return prefix + num;
     }
 }

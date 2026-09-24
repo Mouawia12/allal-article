@@ -53,6 +53,8 @@ public class AccountBalance {
     @Builder.Default
     private BigDecimal closingCredit = BigDecimal.ZERO;
 
+    /** The table calls this column last_recomputed_at; without the mapping Hibernate looks for updated_at. */
     @UpdateTimestamp
+    @Column(name = "last_recomputed_at")
     private OffsetDateTime updatedAt;
 }
