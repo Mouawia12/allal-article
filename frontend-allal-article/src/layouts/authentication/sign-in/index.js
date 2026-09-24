@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Switch from "@mui/material/Switch";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftInput from "components/SoftInput";
@@ -10,12 +14,20 @@ import curved9 from "assets/images/curved-images/curved-6.jpg";
 import { useAuth } from "context/AuthContext";
 import { getApiErrorMessage } from "utils/formErrors";
 
+// Soft UI forces `display: grid` on every input root, which would drop the adornment onto a
+// row of its own — flex keeps the toggle inline, at the trailing edge of the field.
+const passwordFieldSx = {
+  "&.MuiInputBase-root": { display: "flex !important" },
+  "& .MuiInputAdornment-root": { flexShrink: 0, height: "auto" },
+};
+
 function SignIn() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const [rememberMe, setRememberMe] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
   const [tenantId, setTenantId] = useState(localStorage.getItem("lastTenantId") || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -76,11 +88,27 @@ function SignIn() {
             </SoftTypography>
           </SoftBox>
           <SoftInput
-            type="password"
+            type={showPass ? "text" : "password"}
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            sx={passwordFieldSx}
+            endAdornment={
+              <InputAdornment position="end">
+                <IconButton
+                  onClick={() => setShowPass((p) => !p)}
+                  edge="end"
+                  size="small"
+                  tabIndex={-1}
+                  aria-label={showPass ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                >
+                  {showPass
+                    ? <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                    : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+                </IconButton>
+              </InputAdornment>
+            }
           />
         </SoftBox>
         {error && (

@@ -42,7 +42,9 @@ export function AuthProvider({ children }) {
 
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(userData));
+    // Replace the previous tenant outright — a leftover one would be sent on later requests
     if (tenantId) localStorage.setItem("tenantId", tenantId);
+    else localStorage.removeItem("tenantId");
 
     setUser(userData);
     return userData;
