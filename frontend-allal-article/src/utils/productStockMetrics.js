@@ -29,14 +29,21 @@ export function getUnconfirmedProductQty(orders = [], productId) {
     .reduce((sum, order) => sum + getProductOrderQty(order, productId), 0);
 }
 
+/** One warehouse row reduced to the three quantities the UI shows, whichever field names the API used. */
+export function normalizeStockLine(line = {}) {
+  const onHand = toNumber(line.onHandQty ?? line.onHand);
+  const reserved = toNumber(line.reservedQty ?? line.reserved);
+  const available = line.availableQty == null && line.available == null
+    ? onHand - reserved
+    : toNumber(line.availableQty ?? line.available);
+
+  return { onHand, reserved, available };
+}
+
 export function calculateProductStockMetrics(stockLines = [], orders = [], productId) {
   const totals = stockLines.reduce(
     (acc, line) => {
-      const onHand = toNumber(line.onHandQty ?? line.onHand);
-      const reserved = toNumber(line.reservedQty ?? line.reserved);
-      const available = line.availableQty == null && line.available == null
-        ? onHand - reserved
-        : toNumber(line.availableQty ?? line.available);
+      const { onHand, reserved, available } = normalizeStockLine(line);
 
       return {
         onHand: acc.onHand + onHand,

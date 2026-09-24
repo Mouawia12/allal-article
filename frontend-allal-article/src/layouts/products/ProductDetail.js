@@ -29,6 +29,7 @@ import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
+import WarehouseIcon from "@mui/icons-material/Warehouse";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -38,6 +39,7 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import useProductFavorites from "hooks/useProductFavorites";
+import StockByWarehouseDialog from "layouts/products/StockByWarehouseDialog";
 
 
 function formatPrice(value) {
@@ -89,6 +91,7 @@ function ProductDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [tab, setTab] = useState(0);
+  const [warehouseBreakdownOpen, setWarehouseBreakdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState(null);
   const [stockLines, setStockLines] = useState([]);
@@ -420,9 +423,20 @@ function ProductDetail() {
           <Grid item xs={12} lg={8}>
             {/* Stock Overview */}
             <Card sx={{ p: 3, mb: 3 }}>
-              <SoftTypography variant="h6" fontWeight="bold" mb={2}>
-                حالة المخزون
-              </SoftTypography>
+              <SoftBox display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+                <SoftTypography variant="h6" fontWeight="bold">
+                  حالة المخزون
+                </SoftTypography>
+                <SoftButton
+                  variant="outlined"
+                  color="info"
+                  size="small"
+                  onClick={() => setWarehouseBreakdownOpen(true)}
+                >
+                  <WarehouseIcon sx={{ fontSize: 18, mr: 0.75 }} />
+                  التوزيع على المستودعات
+                </SoftButton>
+              </SoftBox>
               <Grid container spacing={2} mb={3}>
                 <Grid item xs={6} sm={4} md={4}>
                   <StockMetric label="الكمية الفعلية"  value={stock.onHand}     unit={product.unit} color="#17c1e8" />
@@ -746,6 +760,12 @@ function ProductDetail() {
           </Grid>
         </Grid>
       </SoftBox>
+      <StockByWarehouseDialog
+        open={warehouseBreakdownOpen}
+        onClose={() => setWarehouseBreakdownOpen(false)}
+        product={product}
+        stockLines={stockLines}
+      />
       <Footer />
     </DashboardLayout>
   );
