@@ -607,11 +607,9 @@ export default function LandingPage() {
               transition:"border-color 0.2s",
             }} onClick={() => setDarkMode(p => !p)}>
               <LightModeIcon sx={{ fontSize:15, color: darkMode ? T.muted : BRAND.primary, transition:"color 0.3s" }} />
-              <Switch checked={darkMode} size="small" onChange={(e) => setDarkMode(e.target.checked)}
-                sx={{
-                  "& .MuiSwitch-thumb": { background: darkMode ? BRAND.primary : "#e2e8f0", transition:"background 0.3s" },
-                  "& .MuiSwitch-track": { background: darkMode ? `${BRAND.primary}55 !important` : "#cbd5e1 !important" },
-                }} />
+              <Switch checked={darkMode} size="small" className={darkMode ? "on-dark" : undefined}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setDarkMode(e.target.checked)} />
               <DarkModeIcon sx={{ fontSize:15, color: darkMode ? BRAND.primary : T.muted, transition:"color 0.3s" }} />
             </Box>
           </Tooltip>
@@ -929,11 +927,8 @@ export default function LandingPage() {
               boxShadow:`0 4px 16px rgba(0,0,0,0.07)`,
             }}>
               <Box sx={{ color:!yearly ? T.text : T.muted, fontWeight:!yearly ? 700 : 400, fontSize:"0.85rem", transition:"all 0.2s" }}>شهري</Box>
-              <Switch checked={yearly} onChange={(e) => setYearly(e.target.checked)}
-                sx={{
-                  "& .MuiSwitch-thumb": { background:BRAND.primary },
-                  "& .MuiSwitch-track": { background:`${BRAND.primary}55 !important` },
-                }} />
+              <Switch checked={yearly} className={darkMode ? "on-dark" : undefined}
+                onChange={(e) => setYearly(e.target.checked)} />
               <Box sx={{ display:"flex", alignItems:"center", gap:0.8 }}>
                 <Box sx={{ color:yearly ? T.text : T.muted, fontWeight:yearly ? 700 : 400, fontSize:"0.85rem", transition:"all 0.2s" }}>سنوي</Box>
                 {yearly && (

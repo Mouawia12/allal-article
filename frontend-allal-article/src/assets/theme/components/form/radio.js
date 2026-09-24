@@ -49,6 +49,17 @@ const radio = {
 
       "&.Mui-focusVisible": {
         border: `${borderWidth[2]} solid ${info.main} !important`,
+        boxShadow: `0 0 0 ${pxToRem(3)} ${info.main}40`,
+      },
+
+      // الوضع الليلي: إطار واضح وخلفية خفيفة بدل الإطار الرمادي الباهت
+      "html[data-dark] &, &.on-dark": {
+        borderColor: "rgba(255, 255, 255, 0.24)",
+        backgroundColor: "rgba(255, 255, 255, 0.05)",
+
+        "&.Mui-checked": {
+          borderColor: gradients.info.main,
+        },
       },
     },
 
@@ -57,10 +68,10 @@ const radio = {
 
       "&.Mui-checked": {
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' height='15px' width='15px'%3E%3Ccircle cx='50%' cy='50%' r='3' fill='%23fff' /%3E%3C/svg%3E"), ${linearGradient(
-          gradients.dark.main,
-          gradients.dark.state
+          gradients.info.main,
+          gradients.info.state
         )}`,
-        borderColor: gradients.dark.main,
+        borderColor: gradients.info.main,
       },
 
       "&:hover": {
@@ -73,10 +84,10 @@ const radio = {
 
       "&.Mui-checked": {
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' height='15px' width='15px'%3E%3Ccircle cx='50%' cy='50%' r='3' fill='%23fff' /%3E%3C/svg%3E"), ${linearGradient(
-          gradients.dark.main,
-          gradients.dark.state
+          gradients.info.main,
+          gradients.info.state
         )}`,
-        borderColor: gradients.dark.main,
+        borderColor: gradients.info.main,
       },
 
       "&:hover": {

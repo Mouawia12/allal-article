@@ -49,6 +49,17 @@ const checkbox = {
 
       "&.Mui-focusVisible": {
         border: `${borderWidth[2]} solid ${info.main} !important`,
+        boxShadow: `0 0 0 ${pxToRem(3)} ${info.main}40`,
+      },
+
+      // الوضع الليلي: إطار واضح وخلفية خفيفة بدل الإطار الرمادي الباهت
+      "html[data-dark] &, &.on-dark": {
+        borderColor: "rgba(255, 255, 255, 0.24)",
+        backgroundColor: "rgba(255, 255, 255, 0.05)",
+
+        "&.Mui-checked": {
+          borderColor: gradients.info.main,
+        },
       },
     },
 
@@ -57,10 +68,10 @@ const checkbox = {
 
       "&.Mui-checked": {
         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -1 22 22'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M6 10l3 3l6-6'/%3e%3c/svg%3e"), ${linearGradient(
-          gradients.dark.main,
-          gradients.dark.state
+          gradients.info.main,
+          gradients.info.state
         )}`,
-        borderColor: gradients.dark.main,
+        borderColor: gradients.info.main,
       },
 
       "&:hover": {
@@ -73,10 +84,10 @@ const checkbox = {
 
       "&.Mui-checked": {
         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 -1 22 22'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M6 10l3 3l6-6'/%3e%3c/svg%3e"), ${linearGradient(
-          gradients.dark.main,
-          gradients.dark.state
+          gradients.info.main,
+          gradients.info.state
         )}`,
-        borderColor: gradients.dark.main,
+        borderColor: gradients.info.main,
       },
 
       "&:hover": {

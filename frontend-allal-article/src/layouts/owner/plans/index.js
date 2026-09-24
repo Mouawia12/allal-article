@@ -226,7 +226,12 @@ function PlanCard({ plan, onEdit, onToggle, onToggleError }) {
                 checked={!!plan.is_active}
                 disabled={toggling}
                 onChange={handleToggle}
-                sx={{ "& .MuiSwitch-thumb": { background: color } }}
+                sx={{
+                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+                    backgroundImage: "none",
+                    backgroundColor: color,
+                  },
+                }}
               />
             </Tooltip>
           </Box>
