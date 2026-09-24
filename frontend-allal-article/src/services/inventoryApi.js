@@ -1,6 +1,7 @@
 import apiClient from "./apiClient";
 
 const WAREHOUSES_BASE = "/api/inventory/warehouses";
+const COUNTS_BASE = "/api/inventory/counts";
 
 export const inventoryApi = {
   // Warehouses
@@ -16,4 +17,13 @@ export const inventoryApi = {
   adjust: (data) => apiClient.post("/api/inventory/stock/adjust", data),
   transfer: (data) => apiClient.post("/api/inventory/stock/transfer", data),
   listMovements: (params) => apiClient.get("/api/inventory/movements", { params }),
+
+  // Stock counts (الجرد)
+  listCounts: (params) => apiClient.get(COUNTS_BASE, { params }),
+  getCount: (id) => apiClient.get(`${COUNTS_BASE}/${id}`),
+  openCount: (data) => apiClient.post(COUNTS_BASE, data),
+  saveCountEntries: (id, entries) => apiClient.post(`${COUNTS_BASE}/${id}/entries`, entries),
+  closeCount: (id) => apiClient.post(`${COUNTS_BASE}/${id}/close`),
+  approveCount: (id) => apiClient.post(`${COUNTS_BASE}/${id}/approve`),
+  cancelCount: (id) => apiClient.post(`${COUNTS_BASE}/${id}/cancel`),
 };

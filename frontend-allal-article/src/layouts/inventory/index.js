@@ -35,6 +35,7 @@ import MoveUpIcon from "@mui/icons-material/MoveUp";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+import StockCounts from "layouts/inventory/StockCounts";
 import SoftButton from "components/SoftButton";
 import SoftBadge from "components/SoftBadge";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -621,6 +622,7 @@ function Inventory() {
                 "أرصدة المستودعات",
                 "إدارة المستودعات",
                 "حركات المخزون",
+                "الجرد",
               ].map((label) => (
                 <Tab
                   key={label}
@@ -977,6 +979,8 @@ function Inventory() {
               </SoftBox>
             </SoftBox>
           )}
+
+          {viewTab === 3 && <StockCounts warehouses={warehouses} />}
         </Card>
       </SoftBox>
 
